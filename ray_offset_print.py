@@ -1,4 +1,4 @@
-"""Ray's Offset Print VFX — ComfyUI custom node.
+"""Ray's VFX: Offset Print — ComfyUI custom node.
 
 Image-space simulation of CMYK offset / halftone print processes. Per frame:
     1. Normalize input → BHWC float32 [0, 1]; permute to BCHW.

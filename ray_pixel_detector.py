@@ -1,4 +1,4 @@
-"""Ray's Pixel Art Pro — ComfyUI custom node for pixel-art conversion.
+"""Ray's VFX: Pixel Art — ComfyUI custom node for pixel-art conversion.
 
 Pipeline per image:
     1. Normalize input (BHWC float32 [0,1]; drop alpha; expand grayscale).

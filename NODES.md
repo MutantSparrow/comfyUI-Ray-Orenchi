@@ -4,7 +4,7 @@ All nodes live under the `Ray/*` category in the ComfyUI add-node menu.
 
 ---
 
-## 📺 Ray's CRT VFX (`RayCRT`)
+## Ray's VFX: CRT (`RayCRT`)
 
 **Purpose.** Image-space CRT display effect. Simulates phosphor mask (aperture / shadow / slot), scanline beam, halation + bloom, NTSC chroma bleed, barrel curvature, vignette, and reflection gloss. Multiple SOTA-inspired presets covering classic monitors and gaming consoles.
 
@@ -22,7 +22,7 @@ All nodes live under the `Ray/*` category in the ComfyUI add-node menu.
 
 ---
 
-## 🗞️ Ray's Offset Print VFX (`RayOffsetPrint`)
+## Ray's VFX: Offset Print (`RayOffsetPrint`)
 
 **Purpose.** Image-space CMYK / duotone offset print simulation. Per-plate halftone screen at SWOP angles, plate misregistration, dot gain, ink bleed, paper substrate (tint + grain + texture), optional sepia / vignette / posterize.
 
@@ -43,7 +43,7 @@ All nodes live under the `Ray/*` category in the ComfyUI add-node menu.
 
 ---
 
-## 🕹️ Ray's Pixel Art Pro (`RayPixelArtDetector`)
+## Ray's VFX: Pixel Art (`RayPixelArtDetector`)
 
 **Purpose.** Pixel-art conversion: downscale (manual or auto pixel-size detection), optional dithering, palette reduction (kmeans Lab / kmeans RGB / quantize / OkLab hue ramps), solid-background isolation, optional silhouette outline, plus a hue-sorted palette preview.
 
@@ -105,7 +105,7 @@ All nodes live under the `Ray/*` category in the ComfyUI add-node menu.
 
 ---
 
-## 💬 Ray's LMChat (`RayOllamaChat`)
+## Ray's LM: Ollama + Clip Chat (`RayOllamaChat`)
 
 **Purpose.** Inline chat node with two backends:
 - **Ollama** — talks to a local Ollama server; supports image and audio attachments.
@@ -140,23 +140,7 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 
 ---
 
-## 🌐 Ray's Mini Browser (`RayMiniBrowser`)
-
-**Purpose.** Embedded same-origin browser inside the node, served by the bundled aiohttp routes. Includes a DOM-element picker — clicked elements are rasterized to WebP and shipped back to the node, decoded, and stacked into a ComfyUI IMAGE batch (letterboxed to a common H/W).
-
-**Category:** `Ray/UI🌐`
-
-| Pin | Type | Notes |
-|-----|------|-------|
-| **Control** `url` | string | Initial URL. |
-| **Control** `pending_text` | string (multiline) | Picker-captured text (cold-start fallback after workflow reload). |
-| **Control** `pending_images_json` | string (multiline) | JSON list of base64 images (cold-start fallback). |
-| **Output** `selected_text` | STRING | Picker text. |
-| **Output** `selected_images` | IMAGE | Decoded picks, batched + letterboxed. |
-
----
-
-## 🔄 Ray's Prompt Iterator (`RayPromptIterator`)
+## Ray's LM: LM Prompt Iterator (`RayPromptIterator`)
 
 **Purpose.** Image-prompt judge + rewriter via Ollama. Given the original prompt and (optionally) the rendered image, returns a confidence score `[0, 1]` for how well the image matches the prompt and a revised prompt aimed at fixing visible mismatches. System prompt loaded from `iterator_sysprompt.txt` (overridable by editing that file).
 

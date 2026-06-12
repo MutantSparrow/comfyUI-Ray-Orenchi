@@ -1,11 +1,12 @@
 """Ray's Orenchi — single ComfyUI custom-node package consolidating all Ray nodes.
 
 Bundles:
-  • RayCRT                   — image-space CRT display effect (📺)
-  • RayPixelArtDetector      — pixel-art downscale + palette reduction (🕹️)
-  • RayKnob / RaySwitch      — analog-series UI widgets (🎛️ / 🔘)
-  • RayOllamaChat            — LM Chat node (Ollama / CLIP) (💬)
-  • RayMiniBrowser           — nested mini-browser with DOM picker (🌐)
+  • RayCRT                   — Ray's VFX: CRT
+  • RayOffsetPrint           — Ray's VFX: Offset Print
+  • RayPixelArtDetector      — Ray's VFX: Pixel Art
+  • RayKnob / RaySwitch      — analog-series UI widgets
+  • RayOllamaChat            — Ray's LM: Ollama + Clip Chat
+  • RayPromptIterator        — Ray's LM: LM Prompt Iterator
 
 Web assets live under ./web and are served at /extensions/comfyUI-Ray-Orenchi/.
 """
@@ -18,10 +19,8 @@ try:
     from .ray_knob import RayKnob
     from .ray_switch import RaySwitch
     from .ray_ollama_chat import RayOllamaChat
-    from .ray_minibrowser import RayMiniBrowser
     from .ray_prompt_iterator import RayPromptIterator
     from . import ollama_routes  # noqa: F401  registers aiohttp routes on import
-    from . import minibrowser_routes  # noqa: F401  registers aiohttp routes on import
 except ImportError:
     from ray_crt import RayCRT
     from ray_offset_print import RayOffsetPrint
@@ -29,14 +28,9 @@ except ImportError:
     from ray_knob import RayKnob
     from ray_switch import RaySwitch
     from ray_ollama_chat import RayOllamaChat
-    from ray_minibrowser import RayMiniBrowser
     from ray_prompt_iterator import RayPromptIterator
     try:
         import ollama_routes  # noqa: F401
-    except ImportError:
-        pass
-    try:
-        import minibrowser_routes  # noqa: F401
     except ImportError:
         pass
 
@@ -50,19 +44,17 @@ NODE_CLASS_MAPPINGS = {
     "RayKnob":             RayKnob,
     "RaySwitch":           RaySwitch,
     "RayOllamaChat":       RayOllamaChat,
-    "RayMiniBrowser":      RayMiniBrowser,
     "RayPromptIterator":   RayPromptIterator,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "RayCRT":              "📺 Ray's CRT VFX",
-    "RayOffsetPrint":      "🗞️ Ray's Offset Print VFX",
-    "RayPixelArtDetector": "🕹️ Ray's Pixel Art Pro",
+    "RayCRT":              "Ray's VFX: CRT",
+    "RayOffsetPrint":      "Ray's VFX: Offset Print",
+    "RayPixelArtDetector": "Ray's VFX: Pixel Art",
     "RayKnob":             "🎛️ Ray's Analog Series: Knob",
     "RaySwitch":           "🔘 Ray's Analog Series: Switch",
-    "RayOllamaChat":       "💬 Ray's LMChat",
-    "RayMiniBrowser":      "🌐 Ray's Mini Browser",
-    "RayPromptIterator":   "🔄 Ray's Prompt Iterator",
+    "RayOllamaChat":       "Ray's LM: Ollama + Clip Chat",
+    "RayPromptIterator":   "Ray's LM: LM Prompt Iterator",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]

@@ -1,4 +1,4 @@
-"""Ray's CRT Simulator — ComfyUI custom node.
+"""Ray's VFX: CRT — ComfyUI custom node.
 
 Image-space CRT display effect. Per frame:
     1. Normalize input → BHWC float32 [0, 1]; permute to BCHW.
