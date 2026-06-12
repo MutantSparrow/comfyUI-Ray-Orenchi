@@ -34,7 +34,7 @@ Restart ComfyUI. Nodes appear under the `Ray/*` categories.
 
 ### Optional runtime dependencies
 
-- **Ollama** — required for `Ray's LMChat` (Ollama mode) and `Ray's Prompt Iterator`. Install from [ollama.com](https://ollama.com) and pull a model (e.g. `ollama pull llama3.2`).
+- **Ollama** — required for `Ray's LMChat` (Ollama mode) and `Ray's Prompt Iterator`. Install from [ollama.com](https://ollama.com) and pull a model. Recommended: [`qwen3.6`](https://ollama.com/library/qwen3.6) — fast, vision-capable, plays well with the prompt iterator (`ollama pull qwen3.6`).
 - **CLIP** — `Ray's LMChat` (CLIP mode) reuses the text encoder of any ComfyUI-loaded CLIP model; nothing extra to install.
 
 ## Compatibility
