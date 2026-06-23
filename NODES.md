@@ -160,3 +160,22 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 | **Output** `new_prompt` | STRING | Revised prompt. |
 | **Output** `confidence` | FLOAT | Image-vs-prompt match score `[0, 1]`. |
 | **Output** `image` | IMAGE | Pass-through of the input image (so it stays on the wire). |
+
+---
+
+## Ray's Web: PromptDexter Scraper (`RayPromptDexter`)
+
+**Purpose.** Fetches a random prompt + matching image from [promptdexter.com](https://promptdexter.com/). Discovery is **sitemap-driven**, so picks reach deep content (not just homepage top row). Seed-deterministic — freeze the seed for reproducible output. Maintains a per-node 20-entry LRU cache so consecutive runs avoid recent repeats; with a frozen seed, the cache forces a deterministic skip to the next seed-shuffled candidate. When a prompt page has no associated image, the IMAGE output falls back to a 1×1 black tensor so downstream nodes never break.
+
+**Category:** `Ray/Web🌐`
+
+| Pin | Type | Notes |
+|-----|------|-------|
+| **Control** `seed` | int | `-1` for random (true OS randomness, ignores cache deterministically). Any `≥0` value is reproducible. |
+| **Control** `force_refresh_sitemap` | bool | Re-fetch `/sitemap.xml` on next exec. Sitemap is otherwise cached for the Python process lifetime. |
+| **Control** `clear_cache` | bool | Drop this node's 20-entry deque before selection. |
+| **Control** `category_filter` (optional) | string | Case-insensitive substring match against the URL slug. Empty disables. |
+| **Control** `timeout` (optional) | int 2–60 | HTTP timeout per request, in seconds. |
+| **Output** `prompt_single` | STRING | Whitespace-collapsed single-line prompt. |
+| **Output** `prompt_multiline` | STRING | Original prompt with newlines preserved. |
+| **Output** `image` | IMAGE | Matching image as BHWC float32 [0,1]. 1×1 black tensor if the page has no image or fetch fails. |
