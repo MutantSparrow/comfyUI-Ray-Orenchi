@@ -396,31 +396,56 @@ def extract_prompts(image_path: pathlib.Path, pil_image: Image.Image) -> list:
 # ---------------------------------------------------------------------------
 
 
+def _coerce_bool(val) -> bool:
+    """ComfyUI sometimes hands BOOLEAN widgets through as 'true' / 'false'
+    strings — those would coerce truthy under bool(). Normalize first."""
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return bool(val)
+    if isinstance(val, str):
+        return val.strip().lower() in ("true", "1", "yes", "on")
+    return bool(val)
+
+
 def _enumerate_images(folder: pathlib.Path, recurse: bool) -> list:
-    """List image file paths under `folder`. Sorted for deterministic seeding."""
+    """List image file paths under `folder`. Sorted for deterministic seeding.
+
+    Uses os.walk for recursion so symlinks and permission errors on a
+    single subtree don't abort the whole scan.
+    """
     if not folder.is_dir():
         return []
+    out: list = []
     if recurse:
-        it = folder.rglob("*")
+        for dirpath, _dirnames, filenames in os.walk(folder, followlinks=False):
+            for name in filenames:
+                if name.lower().endswith(_SUPPORTED_EXT):
+                    out.append(os.path.join(dirpath, name))
     else:
-        it = folder.iterdir()
-    out = []
-    for p in it:
         try:
-            if p.is_file() and p.suffix.lower() in _SUPPORTED_EXT:
-                out.append(str(p))
+            for entry in folder.iterdir():
+                try:
+                    if entry.is_file() and entry.suffix.lower() in _SUPPORTED_EXT:
+                        out.append(str(entry))
+                except OSError:
+                    continue
         except OSError:
-            continue
+            return []
     out.sort()
     return out
 
 
 def _file_list(folder: pathlib.Path, recurse: bool, refresh: bool = False) -> list:
-    key = (str(folder.resolve()) if folder.exists() else str(folder), recurse)
+    key = (str(folder.resolve()) if folder.exists() else str(folder), bool(recurse))
     if not refresh and key in _FILE_LIST_CACHE:
         return _FILE_LIST_CACHE[key]
     lst = _enumerate_images(folder, recurse)
     _FILE_LIST_CACHE[key] = lst
+    print(
+        f"[RayLocalScraper] scanned {folder} (recurse={recurse}) -> "
+        f"{len(lst)} images"
+    )
     return lst
 
 
@@ -517,7 +542,10 @@ class RayLocalScraper:
         if not folder_p.is_dir():
             raise RuntimeError(f"folder does not exist: {folder_p}")
 
-        paths = _file_list(folder_p, bool(recurse_subfolders), refresh=bool(refresh_listing))
+        recurse = _coerce_bool(recurse_subfolders)
+        refresh = _coerce_bool(refresh_listing)
+        skip_no_prompt = _coerce_bool(skip_no_prompt)
+        paths = _file_list(folder_p, recurse, refresh=refresh)
         if not paths:
             raise RuntimeError(f"no supported images in {folder_p}")
 

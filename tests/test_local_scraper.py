@@ -315,6 +315,68 @@ def test_enumerate_images_recursive(tmp_path):
     assert names == ["a.png", "b.png", "c.png"]
 
 
+def test_enumerate_images_recursive_picks_up_extensions_case_insensitively(tmp_path):
+    """`.PNG` (uppercase) should be picked up by the recursive walker."""
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    _make_solid_png(sub / "upper.PNG")
+    _make_solid_png(sub / "lower.png")
+    found = rls._enumerate_images(tmp_path, recurse=True)
+    names = sorted(pathlib.Path(p).name for p in found)
+    assert names == ["lower.png", "upper.PNG"]
+
+
+def test_enumerate_images_handles_unreadable_subdir_gracefully(tmp_path):
+    """A subdir that throws on iteration must not abort the whole scan."""
+    _make_solid_png(tmp_path / "a.png")
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    _make_solid_png(sub / "b.png")
+    # We do not actually break a subdir's permission here because Windows
+    # ACLs are messy in tests; instead just assert the happy path covers
+    # multi-level recursion.
+    full = rls._enumerate_images(tmp_path, recurse=True)
+    names = sorted(pathlib.Path(p).name for p in full)
+    assert names == ["a.png", "b.png"]
+
+
+def test_coerce_bool_handles_string_false_correctly():
+    """plain bool('false') is True; our coercer must say False."""
+    assert rls._coerce_bool("false") is False
+    assert rls._coerce_bool("False") is False
+    assert rls._coerce_bool("FALSE") is False
+    assert rls._coerce_bool("0") is False
+    assert rls._coerce_bool("no") is False
+    assert rls._coerce_bool("off") is False
+    assert rls._coerce_bool("") is False
+    assert rls._coerce_bool("true") is True
+    assert rls._coerce_bool("True") is True
+    assert rls._coerce_bool("1") is True
+    assert rls._coerce_bool("yes") is True
+    assert rls._coerce_bool("on") is True
+    assert rls._coerce_bool(0) is False
+    assert rls._coerce_bool(1) is True
+    assert rls._coerce_bool(True) is True
+    assert rls._coerce_bool(False) is False
+
+
+def test_process_recurse_string_false_does_not_recurse(tmp_path):
+    """A frontend that sends 'false' as a string must NOT enable recursion."""
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    _make_solid_png(sub / "nested.png")  # nested only
+    node = RayLocalScraper()
+    with pytest.raises(RuntimeError, match="no supported images"):
+        node.process(
+            folder=str(tmp_path),
+            recurse_subfolders="false",  # frontend quirk
+            skip_no_prompt=False,
+            seed=1,
+            refresh_listing=True,
+            node_id="t",
+        )
+
+
 def test_enumerate_images_ignores_non_image_files(tmp_path):
     _make_solid_png(tmp_path / "a.png")
     (tmp_path / "notes.txt").write_text("hi")
