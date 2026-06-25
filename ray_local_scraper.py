@@ -64,6 +64,44 @@ _COMFY_PROMPT_CLASS_HINTS = (
 )
 _COMFY_PROMPT_INPUT_FIELDS = ("text", "string", "positive", "prompt", "Text")
 
+# Class-name substrings that mark a node as the *target* (a text encoder
+# that we want to feed a prompt into). When such a node's text input is
+# wired rather than literal we walk backwards through the graph.
+_COMFY_ENCODER_HINTS = (
+    "CLIPTextEncode",
+    "BNK_CLIPTextEncodeAdvanced",
+    "CLIPTextEncodeFlux",
+    "CLIPTextEncodeSDXL",
+    "smZ CLIPTextEncode",
+    "AdvancedCLIPTextEncode",
+)
+
+# Class-name substrings that mark a node as a *source* of free-form
+# prompt text (Show Text, Text Multiline, String literals, primitive
+# nodes, concat / pipe nodes...). When we follow a link back, we try to
+# pull the literal text out of one of these.
+_COMFY_TEXT_SOURCE_HINTS = (
+    "Text Multiline",
+    "ShowText",
+    "Show Text",
+    "Show_text",
+    "ShowAnything",
+    "String Literal",
+    "StringLiteral",
+    "String Constant",
+    "PrimitiveNode",
+    "Text Concatenate",
+    "TextConcatenate",
+    "Text Concat",
+    "Text Combine",
+    "StringFunction",
+    "easy showAnything",
+    "easy textConcat",
+    "DPRandomGenerator",
+    "Text",
+)
+_COMFY_MAX_LINK_DEPTH = 8
+
 
 # ---------------------------------------------------------------------------
 # Prompt extractors
@@ -79,12 +117,115 @@ def _strip_a1111(blob: str) -> str:
     return parts[0].strip()
 
 
+def _is_link_ref(val) -> bool:
+    """ComfyUI wires inputs as [source_node_id, output_slot]."""
+    return (
+        isinstance(val, (list, tuple))
+        and len(val) == 2
+        and isinstance(val[0], (str, int))
+        and isinstance(val[1], int)
+    )
+
+
+def _resolve_text_from_node(
+    node_id, graph: dict, visited: set, depth: int = 0
+) -> str:
+    """Pull a literal prompt string out of a node, recursing through wired
+    text inputs (Show Text -> Text Multiline -> String Literal etc.).
+
+    Returns an empty string if no literal text can be found within the
+    depth cap, or if a cycle is detected.
+    """
+    if depth > _COMFY_MAX_LINK_DEPTH:
+        return ""
+    nid = str(node_id)
+    if nid in visited:
+        return ""
+    visited = visited | {nid}
+
+    node = graph.get(nid)
+    if not isinstance(node, dict):
+        return ""
+    inputs = node.get("inputs") or {}
+    if not isinstance(inputs, dict):
+        return ""
+
+    # First pass: any literal text in known prompt fields.
+    for field in _COMFY_PROMPT_INPUT_FIELDS:
+        val = inputs.get(field)
+        if isinstance(val, str):
+            stripped = val.strip()
+            if len(stripped) >= 4:
+                return stripped
+
+    # Second pass: collect EVERY literal string input (covers
+    # concat / pipe nodes whose fields are text_a, text_b, str_1...).
+    literal_pieces: list = []
+    for field, val in inputs.items():
+        if isinstance(val, str):
+            stripped = val.strip()
+            if len(stripped) >= 4:
+                literal_pieces.append((field, stripped))
+    if literal_pieces:
+        # Heuristically sort: keep declaration order, but join with spaces.
+        return " ".join(text for _f, text in literal_pieces)
+
+    # Third pass: follow wired links upstream.
+    for field, val in inputs.items():
+        if _is_link_ref(val):
+            upstream = _resolve_text_from_node(val[0], graph, visited, depth + 1)
+            if upstream:
+                return upstream
+
+    return ""
+
+
+def _resolve_encoder_text(node: dict, graph: dict) -> str:
+    """For a single text-encoder node, return its prompt text.
+
+    If the `text`/`positive`/`prompt` input is a literal string, return
+    it directly. If it's a wired link, walk back through ShowText /
+    TextMultiline / StringLiteral / concat nodes until a literal is
+    found.
+    """
+    inputs = node.get("inputs") or {}
+    if not isinstance(inputs, dict):
+        return ""
+    # Try every field name we know an encoder might use, in priority order.
+    for field in _COMFY_PROMPT_INPUT_FIELDS:
+        if field not in inputs:
+            continue
+        val = inputs[field]
+        if isinstance(val, str):
+            stripped = val.strip()
+            if len(stripped) >= 4:
+                return stripped
+        elif _is_link_ref(val):
+            text = _resolve_text_from_node(val[0], graph, visited=set(), depth=0)
+            if text:
+                return text
+    return ""
+
+
+def _node_matches(class_type: str, hints: tuple) -> bool:
+    return any(hint in class_type for hint in hints)
+
+
 def _extract_prompts_from_comfy_graph(graph_obj) -> list:
-    """Walk a ComfyUI prompt graph dict and return *all* plausible prompts.
+    """Walk a ComfyUI prompt graph and return *all* plausible prompts.
 
     `graph_obj` is the value of either the `prompt` chunk (a node dict
-    keyed by node id) or a workflow object with `prompt` / `nodes` keys.
-    Returns a list ordered by class_type priority (best first).
+    keyed by node id) or a workflow object with a nested `prompt` key.
+    Two strategies in order:
+
+    1. Find every text-encoder node (CLIPTextEncode and friends), pull
+       the prompt out of its text input — literal or wired. This is the
+       most accurate: it directly answers "what prompt fed the model?"
+
+    2. If no encoders found, fall back to harvesting literal text from
+       any node whose class_type smells like a text source — for graphs
+       that ship without their encoders (rare, but happens with
+       split-workflow uploads).
     """
     if isinstance(graph_obj, str):
         try:
@@ -94,24 +235,49 @@ def _extract_prompts_from_comfy_graph(graph_obj) -> list:
     if not isinstance(graph_obj, dict):
         return []
 
-    # Two shapes: {"prompt": {...}, "workflow": {...}} or {"<nid>": {...}}.
     if "prompt" in graph_obj and isinstance(graph_obj["prompt"], dict):
         graph_obj = graph_obj["prompt"]
 
-    candidates: list = []  # (priority, length, text)
-    for _nid, node in graph_obj.items():
-        if not isinstance(node, dict):
+    # Build a sane node map. Skip top-level keys whose value isn't a node.
+    graph: dict = {}
+    for nid, node in graph_obj.items():
+        if isinstance(node, dict) and "class_type" in node:
+            graph[str(nid)] = node
+
+    # --- Strategy 1: every text encoder contributes its resolved prompt.
+    encoder_prompts: list = []
+    for nid, node in graph.items():
+        ct = node.get("class_type") or ""
+        if not _node_matches(ct, _COMFY_ENCODER_HINTS):
             continue
+        text = _resolve_encoder_text(node, graph)
+        if text:
+            encoder_prompts.append(text)
+
+    if encoder_prompts:
+        seen = set()
+        out: list = []
+        for t in encoder_prompts:
+            if t not in seen:
+                seen.add(t)
+                out.append(t)
+        return out
+
+    # --- Strategy 2: harvest literal text from known source nodes.
+    candidates: list = []  # (priority, length, text)
+    all_hints = _COMFY_PROMPT_CLASS_HINTS
+    for _nid, node in graph.items():
         ct = node.get("class_type") or ""
         inputs = node.get("inputs") or {}
         if not isinstance(inputs, dict):
             continue
         priority = next(
-            (i for i, hint in enumerate(_COMFY_PROMPT_CLASS_HINTS) if hint in ct),
-            999,
+            (i for i, hint in enumerate(all_hints) if hint in ct), 999
         )
-        if priority == 999:
+        if priority == 999 and not _node_matches(ct, _COMFY_TEXT_SOURCE_HINTS):
             continue
+        if priority == 999:
+            priority = len(all_hints)  # text-source fallback
         for field in _COMFY_PROMPT_INPUT_FIELDS:
             val = inputs.get(field)
             if isinstance(val, str):
@@ -120,7 +286,6 @@ def _extract_prompts_from_comfy_graph(graph_obj) -> list:
                     candidates.append((priority, len(stripped), stripped))
                     break
 
-    # De-duplicate while preserving order and sorting by priority/length.
     candidates.sort(key=lambda c: (c[0], -c[1]))
     seen = set()
     out: list = []

@@ -148,6 +148,133 @@ def test_extract_prompts_sidecar_txt(tmp_path):
     assert prompts == ["prompt from sidecar file"]
 
 
+def test_extract_prompt_follows_wired_text_multiline(tmp_path):
+    """CLIPTextEncode.text wired into a Text Multiline source node."""
+    graph = {
+        "1": {
+            "class_type": "Text Multiline",
+            "inputs": {"text": "the actual positive prompt from a text widget"},
+        },
+        "2": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": ["1", 0]},
+        },
+    }
+    p = tmp_path / "wired.png"
+    _make_solid_png(p, info={"prompt": json.dumps(graph)})
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    assert "the actual positive prompt from a text widget" in prompts
+
+
+def test_extract_prompt_follows_wired_show_text(tmp_path):
+    """CLIPTextEncode <- ShowText <- String Literal chain."""
+    graph = {
+        "1": {
+            "class_type": "String Literal",
+            "inputs": {"string": "literal at the tail of the chain"},
+        },
+        "2": {
+            "class_type": "ShowText|pysssss",
+            "inputs": {"text": ["1", 0]},
+        },
+        "3": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": ["2", 0]},
+        },
+    }
+    p = tmp_path / "chain.png"
+    _make_solid_png(p, info={"prompt": json.dumps(graph)})
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    assert "literal at the tail of the chain" in prompts
+
+
+def test_extract_prompt_joins_concat_inputs(tmp_path):
+    """Text Concatenate with two literal text inputs should join them."""
+    graph = {
+        "1": {
+            "class_type": "Text Concatenate",
+            "inputs": {
+                "text_a": "first piece of the prompt",
+                "text_b": "second piece of the prompt",
+            },
+        },
+        "2": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": ["1", 0]},
+        },
+    }
+    p = tmp_path / "concat.png"
+    _make_solid_png(p, info={"prompt": json.dumps(graph)})
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    assert prompts, "should have at least one prompt"
+    # Both pieces must be present in the resolved prompt.
+    combined = " ".join(prompts)
+    assert "first piece of the prompt" in combined
+    assert "second piece of the prompt" in combined
+
+
+def test_extract_prompt_handles_cycle_without_hanging(tmp_path):
+    """If two nodes wire into each other, walker must bail, not loop."""
+    graph = {
+        "1": {"class_type": "ShowText",
+              "inputs": {"text": ["2", 0]}},
+        "2": {"class_type": "ShowText",
+              "inputs": {"text": ["1", 0]}},
+        "3": {"class_type": "CLIPTextEncode",
+              "inputs": {"text": ["1", 0]}},
+    }
+    p = tmp_path / "cycle.png"
+    _make_solid_png(p, info={"prompt": json.dumps(graph)})
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    # No literal text on either node; cycle should be handled, returning
+    # an empty prompt list (or at least not crashing).
+    assert prompts == []
+
+
+def test_extract_prompt_multi_encoder_wired(tmp_path):
+    """Two CLIPTextEncode nodes each wired to different source nodes — both
+    prompts should come back."""
+    graph = {
+        "1": {"class_type": "Text Multiline",
+              "inputs": {"text": "positive from encoder one"}},
+        "2": {"class_type": "Text Multiline",
+              "inputs": {"text": "positive from encoder two"}},
+        "3": {"class_type": "CLIPTextEncode",
+              "inputs": {"text": ["1", 0]}},
+        "4": {"class_type": "CLIPTextEncode",
+              "inputs": {"text": ["2", 0]}},
+    }
+    p = tmp_path / "multi_wired.png"
+    _make_solid_png(p, info={"prompt": json.dumps(graph)})
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    assert "positive from encoder one" in prompts
+    assert "positive from encoder two" in prompts
+
+
+def test_extract_prompt_literal_wins_over_walk(tmp_path):
+    """When the encoder has a literal text input, we should use it even
+    if other nodes exist."""
+    graph = {
+        "1": {"class_type": "Text Multiline",
+              "inputs": {"text": "stray text that should not be picked"}},
+        "2": {"class_type": "CLIPTextEncode",
+              "inputs": {"text": "the literal we want"}},
+    }
+    p = tmp_path / "literal_wins.png"
+    _make_solid_png(p, info={"prompt": json.dumps(graph)})
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    assert "the literal we want" in prompts
+    # The stray text must not be returned: encoder-text strategy yields
+    # one prompt only when it succeeds.
+    assert "stray text that should not be picked" not in prompts
+
+
 def test_extract_prompts_deduplicates_identical(tmp_path):
     p = tmp_path / "dup.png"
     # parameters AND prompt chunk both contain the same text.

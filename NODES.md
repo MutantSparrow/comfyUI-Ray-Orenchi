@@ -219,6 +219,8 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 4. JPEG / WEBP EXIF `UserComment` (37510).
 5. `<image>.txt` sidecar file in the same directory.
 
+For ComfyUI graphs, the extractor first locates every text-encoder node (`CLIPTextEncode` / `CLIPTextEncodeFlux` / `CLIPTextEncodeSDXL` / `BNK_CLIPTextEncodeAdvanced` etc.). Each encoder contributes one prompt: if its `text` input is a literal string the literal is used; if it's wired to another node, the link is followed back through `ShowText` → `Text Multiline` → `String Literal` → `Text Concatenate` → primitive nodes (up to 8 hops, cycles detected) until a literal is found. Multiple text inputs on a concat-style node are joined with spaces.
+
 If the image carries multiple positive prompts (e.g. a ComfyUI workflow with several `CLIPTextEncode` nodes), they are batched together in `prompt_multiline` separated by `\n---\n`. `prompt_single` is the first prompt collapsed to a single line. If no prompt at all is found, both prompt outputs are empty strings — unless `skip_no_prompt` is enabled, in which case the node walks the LRU-shuffled pool until it finds an image that does have one.
 
 **Category:** `Ray/Local📁`
