@@ -12,6 +12,7 @@ A small pack of ComfyUI custom nodes: image VFX, pixel-art tooling, analog-style
 | Ray's LM: Ollama + Clip Chat | Chat node — Ollama backend or CLIP text-encoder backend, image + audio attachments |
 | Ray's LM: LM Prompt Iterator | Score image-vs-prompt match and propose a revised prompt via Ollama |
 | Ray's Web: PromptDexter Scraper | Random prompt + image scraped from [promptdexter.com](https://promptdexter.com/). Sitemap-driven discovery, seed-deterministic, dynamic category dropdown, click-to-refresh sitemap. |
+| Ray's Web: CivitAI Gallery Scraper | Random prompt + image from [civitai.com](https://civitai.com/) via the public REST API. Blue (SFW) / Red (NSFW) toggle, base-model + period + sort filters, only items with prompts kept. Optional `CIVITAI_API_TOKEN` env var. |
 
 See [Node Documentation](NODES.md) for inputs / controls / outputs per node.
 

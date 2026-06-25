@@ -8,6 +8,7 @@ Bundles:
   • RayOllamaChat            — Ray's LM: Ollama + Clip Chat
   • RayPromptIterator        — Ray's LM: LM Prompt Iterator
   • RayPromptDexter          — Ray's Web: PromptDexter Scraper
+  • RayCivitAI               — Ray's Web: CivitAI Gallery Scraper
 
 Web assets live under ./web and are served at /extensions/comfyUI-Ray-Orenchi/.
 """
@@ -22,8 +23,10 @@ try:
     from .ray_ollama_chat import RayOllamaChat
     from .ray_prompt_iterator import RayPromptIterator
     from .ray_promptdexter import RayPromptDexter
+    from .ray_civitai import RayCivitAI
     from . import ollama_routes  # noqa: F401  registers aiohttp routes on import
     from . import promptdexter_routes  # noqa: F401
+    from . import civitai_routes  # noqa: F401
 except ImportError:
     from ray_crt import RayCRT
     from ray_offset_print import RayOffsetPrint
@@ -33,12 +36,17 @@ except ImportError:
     from ray_ollama_chat import RayOllamaChat
     from ray_prompt_iterator import RayPromptIterator
     from ray_promptdexter import RayPromptDexter
+    from ray_civitai import RayCivitAI
     try:
         import ollama_routes  # noqa: F401
     except ImportError:
         pass
     try:
         import promptdexter_routes  # noqa: F401
+    except ImportError:
+        pass
+    try:
+        import civitai_routes  # noqa: F401
     except ImportError:
         pass
 
@@ -54,6 +62,7 @@ NODE_CLASS_MAPPINGS = {
     "RayOllamaChat":       RayOllamaChat,
     "RayPromptIterator":   RayPromptIterator,
     "RayPromptDexter":     RayPromptDexter,
+    "RayCivitAI":          RayCivitAI,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -65,6 +74,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayOllamaChat":       "Ray's LM: Ollama + Clip Chat",
     "RayPromptIterator":   "Ray's LM: LM Prompt Iterator",
     "RayPromptDexter":     "Ray's Web: PromptDexter Scraper",
+    "RayCivitAI":          "Ray's Web: CivitAI Gallery Scraper",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]

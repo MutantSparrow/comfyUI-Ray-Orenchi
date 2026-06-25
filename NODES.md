@@ -179,3 +179,29 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 | **Output** `prompt_single` | STRING | Whitespace-collapsed single-line prompt. |
 | **Output** `prompt_multiline` | STRING | Original prompt with newlines preserved. |
 | **Output** `image` | IMAGE | Matching image as BHWC float32 [0,1]. 1×1 black tensor if the page has no image or fetch fails. |
+
+---
+
+## Ray's Web: CivitAI Gallery Scraper (`RayCivitAI`)
+
+**Purpose.** Fetches a random gallery image + its prompt from [civitai.com](https://civitai.com/) via the public REST API (`GET /api/v1/images`). Only images whose `meta.prompt` field is populated are kept — items posted without generation metadata are skipped automatically. Seed-deterministic, per-node 20-entry LRU to avoid consecutive repeats, page cache keyed by (mode, period, sort, base_model). 1×1 black tensor fallback if an image fails to download.
+
+**Access strategy.** REST API (not scraping, not MCP). Public endpoint, no key required for read access. Higher-tier content unlocks if `CIVITAI_API_TOKEN` is set as an environment variable — never hard-coded in the node. The legacy `nsfw` filter is bypassed in favour of `browsingLevel` (bitmask: PG=1, PG13=2, R=4, X=8, XXX=16), which the API documents as taking precedence.
+
+**Category:** `Ray/Web🌐`
+
+| Pin | Type | Notes |
+|-----|------|-------|
+| **Control** `seed` | int | `-1` for random (true OS randomness). Any `≥0` value is reproducible. |
+| **Control** `mode` | dropdown | `Blue (SFW)` → `browsingLevel=1` (PG only). `Red (NSFW)` → `browsingLevel=28` (R \| X \| XXX). JS extension tints the node header to match. |
+| **Control** `base_model` | dropdown | `Any` or a specific base model (`SDXL 1.0`, `Pony`, `Illustrious`, `Flux.1 D`, `SD 3.5`, etc.). Passed to the API as `baseModels`. |
+| **Control** `period` | dropdown | `AllTime` / `Year` / `Month` / `Week` / `Day` — window for metric-based sorts. |
+| **Control** `sort` | dropdown | `Random` / `Most Reactions` / `Most Comments` / `Newest`. |
+| **Control** `clear_cache` | bool | Drop this node's 20-entry deque before selection. |
+| **Button** `🔄 clear cache` | — | Click to clear the process-wide page cache; next workflow run repages from the API. Triggered on click, not on workflow run. |
+| **Control** `timeout` (optional) | int 2–60 | HTTP timeout per request, in seconds. |
+| **Output** `prompt_single` | STRING | Whitespace-collapsed single-line prompt. |
+| **Output** `prompt_multiline` | STRING | Original prompt with newlines preserved. |
+| **Output** `image` | IMAGE | Gallery image as BHWC float32 [0,1]. 1×1 black tensor on fetch failure. |
+
+**API token.** Optional. Export `CIVITAI_API_TOKEN` in the environment ComfyUI runs under to lift account-tier content restrictions. The token is read at request time; nothing about it is persisted by the node.
