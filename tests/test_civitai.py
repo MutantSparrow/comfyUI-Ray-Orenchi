@@ -49,21 +49,21 @@ def _page(items, next_cursor=None):
 # --- mode → browsingLevel mapping ---------------------------------------
 
 
-def test_mode_blue_maps_to_pg_bitmask():
-    assert rc._mode_to_browsing_level(rc.MODE_BLUE) == 1
+def test_mode_blue_maps_to_pg_plus_pg13_bitmask():
+    assert rc._mode_to_browsing_level(rc.MODE_BLUE) == 1 | 2 == 3
 
 
-def test_mode_red_maps_to_r_x_xxx_bitmask():
-    assert rc._mode_to_browsing_level(rc.MODE_RED) == 4 | 8 | 16 == 28
+def test_mode_red_maps_to_full_bitmask():
+    assert rc._mode_to_browsing_level(rc.MODE_RED) == 1 | 2 | 4 | 8 | 16 == 31
 
 
 # --- query builder -------------------------------------------------------
 
 
 def test_query_includes_required_params():
-    q = rc._build_query(1, "Week", "Random", "Any", None, 50)
+    q = rc._build_query(3, "Week", "Random", "Any", None, 50)
     assert "limit=50" in q
-    assert "browsingLevel=1" in q
+    assert "browsingLevel=3" in q
     assert "period=Week" in q
     assert "sort=Random" in q
     assert "withMeta=true" in q
@@ -73,8 +73,8 @@ def test_query_includes_required_params():
 
 
 def test_query_adds_base_model_when_not_any():
-    q = rc._build_query(28, "Week", "Random", "Pony", "abc", 100)
-    assert "browsingLevel=28" in q
+    q = rc._build_query(31, "Week", "Random", "Pony", "abc", 100)
+    assert "browsingLevel=31" in q
     assert "baseModels=Pony" in q
     assert "cursor=abc" in q
 
@@ -207,7 +207,7 @@ def test_load_pool_pages_until_no_cursor():
 
 
 def test_load_pool_uses_red_bitmask_for_red_mode():
-    """Red mode must pass browsingLevel=28 in a single call path (no nsfw fallback)."""
+    """Red mode must pass browsingLevel=31 in a single call path (no nsfw fallback)."""
     seen = []
 
     def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout, username=""):
