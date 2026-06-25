@@ -13,6 +13,7 @@ A small pack of ComfyUI custom nodes: image VFX, pixel-art tooling, analog-style
 | Ray's LM: LM Prompt Iterator | Score image-vs-prompt match and propose a revised prompt via Ollama |
 | Ray's Web: PromptDexter Scraper | Random prompt + image scraped from [promptdexter.com](https://promptdexter.com/). Sitemap-driven discovery, seed-deterministic, dynamic category dropdown, click-to-refresh sitemap. |
 | Ray's Web: CivitAI Gallery Scraper | Random prompt + image from [civitai.com](https://civitai.com/) via the public REST API. Blue (SFW) / Red (NSFW) toggle, base-model + period + sort filters, optional CivitAI-username filter, only items with prompts kept. Optional token via `civitai.secret` file in the node-pack folder (gitignored). |
+| Ray's Local: Folder Image Scraper | Random image + extracted prompt from a local folder. Reads A1111 `parameters`, ComfyUI `prompt` / `workflow` chunks, JPEG/WEBP EXIF UserComment, and `<image>.txt` sidecars. Recurse-subfolders toggle, skip-if-no-prompt toggle, optional `image_path` output, multi-prompt batching with `\n---\n` separator. |
 
 See [Node Documentation](NODES.md) for inputs / controls / outputs per node.
 

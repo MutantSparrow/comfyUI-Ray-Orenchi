@@ -9,6 +9,7 @@ Bundles:
   • RayPromptIterator        — Ray's LM: LM Prompt Iterator
   • RayPromptDexter          — Ray's Web: PromptDexter Scraper
   • RayCivitAI               — Ray's Web: CivitAI Gallery Scraper
+  • RayLocalScraper          — Ray's Local: Folder Image Scraper
 
 Web assets live under ./web and are served at /extensions/comfyUI-Ray-Orenchi/.
 """
@@ -24,6 +25,7 @@ try:
     from .ray_prompt_iterator import RayPromptIterator
     from .ray_promptdexter import RayPromptDexter
     from .ray_civitai import RayCivitAI
+    from .ray_local_scraper import RayLocalScraper
     from . import ollama_routes  # noqa: F401  registers aiohttp routes on import
     from . import promptdexter_routes  # noqa: F401
     from . import civitai_routes  # noqa: F401
@@ -37,6 +39,7 @@ except ImportError:
     from ray_prompt_iterator import RayPromptIterator
     from ray_promptdexter import RayPromptDexter
     from ray_civitai import RayCivitAI
+    from ray_local_scraper import RayLocalScraper
     try:
         import ollama_routes  # noqa: F401
     except ImportError:
@@ -63,6 +66,7 @@ NODE_CLASS_MAPPINGS = {
     "RayPromptIterator":   RayPromptIterator,
     "RayPromptDexter":     RayPromptDexter,
     "RayCivitAI":          RayCivitAI,
+    "RayLocalScraper":     RayLocalScraper,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -75,6 +79,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayPromptIterator":   "Ray's LM: LM Prompt Iterator",
     "RayPromptDexter":     "Ray's Web: PromptDexter Scraper",
     "RayCivitAI":          "Ray's Web: CivitAI Gallery Scraper",
+    "RayLocalScraper":     "Ray's Local: Folder Image Scraper",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
