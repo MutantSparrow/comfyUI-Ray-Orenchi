@@ -13,9 +13,10 @@ parameter; values: PG=1, PG13=2, R=4, X=8, XXX=16.
 Only images with a usable `meta.prompt` field are kept; ones without are
 skipped. Per-node 20-entry LRU avoids consecutive repeats. Seed-deterministic.
 
-API token (optional) is read from the env var `CIVITAI_API_TOKEN`. The
-public endpoint works without a token; setting one unlocks higher-tier
-content access tied to the account.
+API token (optional) is read from `civitai.secret` placed next to this
+file inside the node-pack directory. The public endpoint works without a
+token; supplying one unlocks higher-tier content access tied to the
+account. The secret file is gitignored — never commit it.
 
 Outputs: (STRING prompt_single, STRING prompt_multiline, IMAGE image).
 """
@@ -23,7 +24,7 @@ Outputs: (STRING prompt_single, STRING prompt_multiline, IMAGE image).
 from __future__ import annotations
 
 import io
-import os
+import pathlib
 import random
 import re
 import time
@@ -51,7 +52,8 @@ _USER_AGENT = (
     "comfyUI-Ray-Orenchi/CivitAINode "
     "(+https://github.com/Thingamajic/comfyUI-Ray-Orenchi)"
 )
-_TOKEN_ENV = "CIVITAI_API_TOKEN"
+_PACK_DIR = pathlib.Path(__file__).resolve().parent
+_TOKEN_FILE = _PACK_DIR / "civitai.secret"
 
 MODE_BLUE = "Blue (SFW)"
 MODE_RED = "Red (NSFW)"
@@ -87,8 +89,21 @@ _MAX_PAGES_PER_MODE = 6
 _PAGE_LIMIT = 100
 
 
+def _read_token() -> str:
+    try:
+        if _TOKEN_FILE.is_file():
+            return _TOKEN_FILE.read_text(encoding="utf-8").strip()
+    except OSError as e:
+        print(f"[RayCivitAI] could not read {_TOKEN_FILE.name}: {e}")
+    return ""
+
+
+def has_token() -> bool:
+    return bool(_read_token())
+
+
 def _auth_header() -> dict:
-    tok = os.environ.get(_TOKEN_ENV, "").strip()
+    tok = _read_token()
     return {"Authorization": f"Bearer {tok}"} if tok else {}
 
 

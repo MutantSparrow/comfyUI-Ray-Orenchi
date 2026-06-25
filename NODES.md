@@ -186,7 +186,7 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 
 **Purpose.** Fetches a random gallery image + its prompt from [civitai.com](https://civitai.com/) via the public REST API (`GET /api/v1/images`). Only images whose `meta.prompt` field is populated are kept — items posted without generation metadata are skipped automatically. Seed-deterministic, per-node 20-entry LRU to avoid consecutive repeats, page cache keyed by (mode, period, sort, base_model). 1×1 black tensor fallback if an image fails to download.
 
-**Access strategy.** REST API (not scraping, not MCP). Public endpoint, no key required for read access. Higher-tier content unlocks if `CIVITAI_API_TOKEN` is set as an environment variable — never hard-coded in the node. The legacy `nsfw` filter is bypassed in favour of `browsingLevel` (bitmask: PG=1, PG13=2, R=4, X=8, XXX=16), which the API documents as taking precedence.
+**Access strategy.** REST API (not scraping, not MCP). Public endpoint, no key required for read access. Higher-tier content unlocks if a token file is present at `civitai.secret` inside the node-pack directory — never hard-coded. The legacy `nsfw` filter is bypassed in favour of `browsingLevel` (bitmask: PG=1, PG13=2, R=4, X=8, XXX=16), which the API documents as taking precedence.
 
 **Category:** `Ray/Web🌐`
 
@@ -204,4 +204,4 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 | **Output** `prompt_multiline` | STRING | Original prompt with newlines preserved. |
 | **Output** `image` | IMAGE | Gallery image as BHWC float32 [0,1]. 1×1 black tensor on fetch failure. |
 
-**API token.** Optional. Export `CIVITAI_API_TOKEN` in the environment ComfyUI runs under to lift account-tier content restrictions. The token is read at request time; nothing about it is persisted by the node.
+**API token.** Optional. Create `civitai.secret` inside the `comfyUI-Ray-Orenchi/` node-pack directory and paste the token as its only contents (trailing whitespace/newlines are trimmed). The token is read fresh on each request — no caching, no persistence beyond the file itself. `civitai.secret` and `*.secret` are listed in `.gitignore`; do not commit them.

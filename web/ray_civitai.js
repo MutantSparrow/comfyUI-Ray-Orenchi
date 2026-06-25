@@ -81,7 +81,8 @@ async function bootstrap(node) {
 
     const opts = await fetchOptions();
     if (opts && opts.has_token === false) {
-        statusEl.textContent = "no CIVITAI_API_TOKEN — public access only";
+        const f = opts.token_file || "civitai.secret";
+        statusEl.textContent = `no ${f} — public access only`;
     }
 
     const modeW = getWidget(node, "mode");

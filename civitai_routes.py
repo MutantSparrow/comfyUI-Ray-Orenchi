@@ -23,7 +23,8 @@ if PromptServer is not None:
             "modes": list(rc.MODES),
             "periods": list(rc.PERIODS),
             "sorts": list(rc.SORTS),
-            "has_token": bool(__import__("os").environ.get(rc._TOKEN_ENV, "").strip()),
+            "has_token": rc.has_token(),
+            "token_file": rc._TOKEN_FILE.name,
         })
 
     @PromptServer.instance.routes.post("/ray_civitai/refresh")

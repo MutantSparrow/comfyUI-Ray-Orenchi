@@ -229,34 +229,63 @@ def test_process_deterministic_same_seed_same_pick():
     assert out1[0] == out2[0]
 
 
-# --- token via env -------------------------------------------------------
+# --- token via local secret file ----------------------------------------
 
 
-def test_auth_header_present_when_env_set(monkeypatch):
-    monkeypatch.setenv(rc._TOKEN_ENV, "secret-token")
+@pytest.fixture
+def tmp_token_file(tmp_path, monkeypatch):
+    """Redirect _TOKEN_FILE to a tmp path for isolated test files."""
+    p = tmp_path / "civitai.secret"
+    monkeypatch.setattr(rc, "_TOKEN_FILE", p)
+    return p
+
+
+def test_auth_header_present_when_secret_file_has_token(tmp_token_file):
+    tmp_token_file.write_text("secret-token\n", encoding="utf-8")
     h = rc._headers()
     assert h.get("Authorization") == "Bearer secret-token"
+    assert rc.has_token() is True
 
 
-def test_auth_header_absent_when_env_unset(monkeypatch):
-    monkeypatch.delenv(rc._TOKEN_ENV, raising=False)
+def test_auth_header_absent_when_secret_file_missing(tmp_token_file):
+    assert not tmp_token_file.exists()
     h = rc._headers()
     assert "Authorization" not in h
+    assert rc.has_token() is False
 
 
-def test_auth_header_absent_when_env_blank(monkeypatch):
-    monkeypatch.setenv(rc._TOKEN_ENV, "   ")
+def test_auth_header_absent_when_secret_file_blank(tmp_token_file):
+    tmp_token_file.write_text("   \n   ", encoding="utf-8")
     h = rc._headers()
     assert "Authorization" not in h
+    assert rc.has_token() is False
+
+
+def test_token_file_lives_in_pack_dir():
+    """Default token path must live alongside ray_civitai.py."""
+    import pathlib
+    expected = pathlib.Path(rc.__file__).resolve().parent / "civitai.secret"
+    assert rc._TOKEN_FILE == expected
 
 
 def test_no_hardcoded_token_in_source():
     """Guard against accidental commit of a real-looking token."""
     import pathlib
     src = pathlib.Path(rc.__file__).read_text(encoding="utf-8")
-    # 32-hex tokens
     import re
     assert not re.search(r"[A-Fa-f0-9]{32}", src), "looks like a hex token in source"
+
+
+def test_secret_file_not_tracked_by_git():
+    """If a real civitai.secret exists in the repo, .gitignore must hide it."""
+    import pathlib
+    import subprocess
+    pack_dir = pathlib.Path(rc.__file__).resolve().parent
+    gitignore = pack_dir / ".gitignore"
+    assert gitignore.exists(), ".gitignore missing"
+    text = gitignore.read_text(encoding="utf-8")
+    assert "civitai.secret" in text or "*.secret" in text, \
+        "civitai.secret must be in .gitignore"
 
 
 # --- clear_cache helper --------------------------------------------------

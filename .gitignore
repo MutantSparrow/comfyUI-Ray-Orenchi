@@ -25,3 +25,7 @@ desktop.ini
 *.log
 *.tmp
 .claude/
+
+# Secrets — never commit token/key files
+*.secret
+civitai.secret
