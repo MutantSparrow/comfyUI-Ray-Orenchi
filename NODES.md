@@ -205,3 +205,34 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 | **Output** `image` | IMAGE | Gallery image as BHWC float32 [0,1]. 1×1 black tensor on fetch failure. |
 
 **API token.** Optional. Create `civitai.secret` inside the `comfyUI-Ray-Orenchi/` node-pack directory and paste the token as its only contents (trailing whitespace/newlines are trimmed). The token is read fresh on each request — no caching, no persistence beyond the file itself. `civitai.secret` and `*.secret` are listed in `.gitignore`; do not commit them.
+
+---
+
+## Ray's Local: Folder Image Scraper (`RayLocalScraper`)
+
+**Purpose.** Picks a random image from a local folder and extracts any generation prompt found in its metadata. Functional sibling to the PromptDexter and CivitAI scrapers, but read off disk instead of HTTP. Seed-deterministic; per-node 20-entry LRU avoids consecutive repeats; folder listing cached until `refresh_listing` is set or the cache is cleared.
+
+**Prompt sources, in priority order:**
+1. PNG `parameters` text chunk (Automatic1111 / Forge).
+2. PNG `prompt` text chunk (ComfyUI's serialized prompt graph, JSON).
+3. PNG `workflow` text chunk (ComfyUI workflow JSON, alternative key).
+4. JPEG / WEBP EXIF `UserComment` (37510).
+5. `<image>.txt` sidecar file in the same directory.
+
+If the image carries multiple positive prompts (e.g. a ComfyUI workflow with several `CLIPTextEncode` nodes), they are batched together in `prompt_multiline` separated by `\n---\n`. `prompt_single` is the first prompt collapsed to a single line. If no prompt at all is found, both prompt outputs are empty strings — unless `skip_no_prompt` is enabled, in which case the node walks the LRU-shuffled pool until it finds an image that does have one.
+
+**Category:** `Ray/Local📁`
+
+| Pin | Type | Notes |
+|-----|------|-------|
+| **Control** `folder` | string | Absolute path to a folder of images. Required; raises if blank or missing. |
+| **Control** `recurse_subfolders` | bool | When on, walks every subdirectory under `folder`. Off by default. |
+| **Control** `skip_no_prompt` | bool | When on, skip images whose metadata yields no prompt and pick the next one from the seed-shuffled pool (capped at 50 attempts). When off, the node will happily return the chosen image with empty prompt strings. |
+| **Control** `seed` | int | `-1` for OS-random (non-deterministic). Any `≥0` value is reproducible. |
+| **Control** `refresh_listing` (optional) | bool | Force a re-scan of the folder before picking. Off by default so repeated runs are cheap. |
+| **Output** `prompt_single` | STRING | First prompt, whitespace-collapsed. Empty when no prompt was found. |
+| **Output** `prompt_multiline` | STRING | Full prompt(s); multiple prompts are joined by `\n---\n`. Empty when no prompt was found. |
+| **Output** `image` | IMAGE | Image as BHWC float32 [0,1]. |
+| **Output** `image_path` | STRING | Absolute path of the chosen file. |
+
+Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.tif`.
