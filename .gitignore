@@ -24,3 +24,4 @@ desktop.ini
 # Local
 *.log
 *.tmp
+.claude/
