@@ -194,11 +194,11 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 |-----|------|-------|
 | **Control** `seed` | int | `-1` for random (true OS randomness). Any `≥0` value is reproducible. |
 | **Control** `mode` | dropdown | `Blue (SFW)` → `browsingLevel=1` (PG only). `Red (NSFW)` → `browsingLevel=28` (R \| X \| XXX). JS extension tints the node header to match. |
-| **Control** `base_model` | dropdown | `Any` or a specific base model (`SDXL 1.0`, `Pony`, `Illustrious`, `Flux.1 D`, `SD 3.5`, etc.). Passed to the API as `baseModels`. |
+| **Control** `base_model` | dropdown | `Any` or a specific base model (`SDXL 1.0`, `Pony`, `Illustrious`, `Flux.1 D`, `Flux.2 Klein 9B`, `Chroma`, `Qwen`, `Krea 2`, `Z-Image Turbo`, `Wan Video`, etc.). Passed to the API as `baseModels`. List is sampled live from the gallery — CivitAI surfaces new architectures as uploaders tag them, so the list is refreshed periodically. |
 | **Control** `period` | dropdown | `AllTime` / `Year` / `Month` / `Week` / `Day` — window for metric-based sorts. |
 | **Control** `sort` | dropdown | `Random` / `Most Reactions` / `Most Comments` / `Newest`. |
-| **Control** `clear_cache` | bool | Drop this node's 20-entry deque before selection. |
-| **Button** `🔄 clear cache` | — | Click to clear the process-wide page cache; next workflow run repages from the API. Triggered on click, not on workflow run. |
+| **Control** `username` | string | Optional. Restrict the pool to images posted by a specific CivitAI user (e.g. `VISITOR01`). Leave blank for any user. Passed to the API as `username`. |
+| **Button** `🔄 clear cache` | — | Click to clear both the process-wide page cache and this node's 20-entry recent-pick deque; next workflow run repages from the API. Triggered on click, not on workflow run. |
 | **Control** `timeout` (optional) | int 2–60 | HTTP timeout per request, in seconds. |
 | **Output** `prompt_single` | STRING | Whitespace-collapsed single-line prompt. |
 | **Output** `prompt_multiline` | STRING | Original prompt with newlines preserved. |
