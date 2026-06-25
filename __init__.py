@@ -23,6 +23,7 @@ try:
     from .ray_prompt_iterator import RayPromptIterator
     from .ray_promptdexter import RayPromptDexter
     from . import ollama_routes  # noqa: F401  registers aiohttp routes on import
+    from . import promptdexter_routes  # noqa: F401
 except ImportError:
     from ray_crt import RayCRT
     from ray_offset_print import RayOffsetPrint
@@ -34,6 +35,10 @@ except ImportError:
     from ray_promptdexter import RayPromptDexter
     try:
         import ollama_routes  # noqa: F401
+    except ImportError:
+        pass
+    try:
+        import promptdexter_routes  # noqa: F401
     except ImportError:
         pass
 

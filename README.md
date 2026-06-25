@@ -1,6 +1,6 @@
 # comfyUI-Ray-Orenchi
 
-A small pack of ComfyUI custom nodes: image VFX, pixel-art tooling, analog-style UI widgets, an Ollama / CLIP chat node, a prompt iterator, and a node-embedded mini-browser.
+A small pack of ComfyUI custom nodes: image VFX, pixel-art tooling, analog-style UI widgets, an Ollama / CLIP chat node, a prompt iterator, and a web prompt scraper.
 
 | Node | Purpose |
 |------|---------|
@@ -11,6 +11,7 @@ A small pack of ComfyUI custom nodes: image VFX, pixel-art tooling, analog-style
 | 🔘 Ray's Analog Series: Switch | Boolean toggle widget |
 | Ray's LM: Ollama + Clip Chat | Chat node — Ollama backend or CLIP text-encoder backend, image + audio attachments |
 | Ray's LM: LM Prompt Iterator | Score image-vs-prompt match and propose a revised prompt via Ollama |
+| Ray's Web: PromptDexter Scraper | Random prompt + image scraped from [promptdexter.com](https://promptdexter.com/). Sitemap-driven discovery, seed-deterministic, dynamic category dropdown, click-to-refresh sitemap. |
 
 See [Node Documentation](NODES.md) for inputs / controls / outputs per node.
 

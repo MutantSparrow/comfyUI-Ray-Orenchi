@@ -13,9 +13,13 @@ from ray_promptdexter import RayPromptDexter
 @pytest.fixture(autouse=True)
 def reset_globals():
     rpd._SITEMAP_CACHE = None
+    rpd._CATEGORIES_CACHE = None
+    rpd._CATEGORY_URLS_CACHE.clear()
     rpd._RECENT_BY_NODE.clear()
     yield
     rpd._SITEMAP_CACHE = None
+    rpd._CATEGORIES_CACHE = None
+    rpd._CATEGORY_URLS_CACHE.clear()
     rpd._RECENT_BY_NODE.clear()
 
 
@@ -37,6 +41,7 @@ SIMPLE_URLSET = b"""<?xml version="1.0" encoding="UTF-8"?>
   <url><loc>https://promptdexter.com/prompt/alpha-one</loc></url>
   <url><loc>https://promptdexter.com/prompt/beta-two</loc></url>
   <url><loc>https://promptdexter.com/prompts/people</loc></url>
+  <url><loc>https://promptdexter.com/prompts/anime</loc></url>
   <url><loc>https://promptdexter.com/prompt/</loc></url>
   <url><loc>https://promptdexter.com/prompt/gamma-three</loc></url>
 </urlset>
@@ -53,6 +58,7 @@ CHILD_1 = b"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://promptdexter.com/prompt/a</loc></url>
   <url><loc>https://promptdexter.com/prompt/b</loc></url>
+  <url><loc>https://promptdexter.com/prompts/cats</loc></url>
 </urlset>
 """
 
@@ -60,6 +66,7 @@ CHILD_2 = b"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://promptdexter.com/prompt/b</loc></url>
   <url><loc>https://promptdexter.com/prompt/c</loc></url>
+  <url><loc>https://promptdexter.com/prompts/dogs</loc></url>
 </urlset>
 """
 
@@ -74,6 +81,19 @@ def test_sitemap_filters_to_prompt_paths():
     ]
 
 
+def test_sitemap_extracts_categories():
+    with patch.object(rpd, "_http_get", return_value=_mock_response(content_bytes=SIMPLE_URLSET)):
+        rpd._load_sitemap(force_refresh=True, timeout=10)
+    cats = rpd.get_categories(force_refresh=False, timeout=10)
+    assert cats == ["anime", "people"]
+
+
+def test_get_categories_loads_when_empty():
+    with patch.object(rpd, "_http_get", return_value=_mock_response(content_bytes=SIMPLE_URLSET)):
+        cats = rpd.get_categories(force_refresh=False, timeout=10)
+    assert "people" in cats and "anime" in cats
+
+
 def test_sitemap_index_recurses_and_dedupes():
     responses = {
         rpd._SITEMAP_URL: _mock_response(content_bytes=SITEMAP_INDEX),
@@ -86,11 +106,13 @@ def test_sitemap_index_recurses_and_dedupes():
 
     with patch.object(rpd, "_http_get", side_effect=fake_get):
         urls = rpd._load_sitemap(force_refresh=True, timeout=10)
+        cats = rpd.get_categories(force_refresh=False, timeout=10)
     assert urls == [
         "https://promptdexter.com/prompt/a",
         "https://promptdexter.com/prompt/b",
         "https://promptdexter.com/prompt/c",
     ]
+    assert cats == ["cats", "dogs"]
 
 
 def test_sitemap_empty_pool_raises():
@@ -102,6 +124,39 @@ def test_sitemap_empty_pool_raises():
     with patch.object(rpd, "_http_get", return_value=_mock_response(content_bytes=empty)):
         with pytest.raises(RuntimeError, match="no /prompt URLs"):
             rpd._load_sitemap(force_refresh=True, timeout=10)
+
+
+# --- category page scrape --------------------------------------------------
+
+
+CATEGORY_HTML = """<!doctype html><html><body>
+<a href="/prompt/anime-one">one</a>
+<a href="/prompt/anime-two">two</a>
+<a href="/prompt/anime-one">duplicate</a>
+<a href="/about">other</a>
+</body></html>"""
+
+
+def test_category_page_urls_scrapes_and_dedupes():
+    with patch.object(rpd, "_http_get", return_value=_mock_response(text=CATEGORY_HTML)):
+        urls = rpd._category_page_urls("anime", timeout=10)
+    assert urls == [
+        "https://promptdexter.com/prompt/anime-one",
+        "https://promptdexter.com/prompt/anime-two",
+    ]
+
+
+def test_category_page_urls_cached():
+    calls = []
+
+    def fake_get(url, timeout, retries=1):
+        calls.append(url)
+        return _mock_response(text=CATEGORY_HTML)
+
+    with patch.object(rpd, "_http_get", side_effect=fake_get):
+        rpd._category_page_urls("anime", timeout=10)
+        rpd._category_page_urls("anime", timeout=10)
+    assert len(calls) == 1
 
 
 # --- prompt page parser ----------------------------------------------------
@@ -185,16 +240,15 @@ URL_POOL = [
 ]
 
 
-def _stub_node(seed_value, node_id):
+def _stub_node(seed_value, node_id, category=rpd.ANY_CATEGORY):
     node = RayPromptDexter()
     rpd._SITEMAP_CACHE = list(URL_POOL)
     with patch.object(rpd, "_fetch_prompt_page", return_value=("multi line\nbody", None)), \
          patch.object(rpd, "_fetch_image_tensor", return_value=torch.zeros((1, 1, 1, 3))):
         return node.process(
             seed=seed_value,
-            force_refresh_sitemap=False,
+            category=category,
             clear_cache=False,
-            category_filter="",
             timeout=10,
             node_id=node_id,
         )
@@ -220,6 +274,31 @@ def test_same_seed_skips_to_next_candidate():
     assert after_two[0] != after_two[1]
 
 
+# --- category filtering through process() ----------------------------------
+
+
+def test_process_with_category_uses_category_page():
+    rpd._SITEMAP_CACHE = list(URL_POOL)
+    rpd._CATEGORIES_CACHE = ["anime"]
+    page_urls = [
+        "https://promptdexter.com/prompt/anime-x",
+        "https://promptdexter.com/prompt/anime-y",
+    ]
+    node = RayPromptDexter()
+    with patch.object(rpd, "_category_page_urls", return_value=page_urls), \
+         patch.object(rpd, "_fetch_prompt_page", return_value=("body", None)), \
+         patch.object(rpd, "_fetch_image_tensor", return_value=torch.zeros((1, 1, 1, 3))):
+        node.process(
+            seed=1,
+            category="anime",
+            clear_cache=False,
+            timeout=10,
+            node_id="cat_test",
+        )
+    chosen = list(rpd._RECENT_BY_NODE["cat_test"])[0]
+    assert chosen in page_urls
+
+
 # --- cache eviction --------------------------------------------------------
 
 
@@ -233,9 +312,8 @@ def test_cache_evicts_at_20():
         for i in range(25):
             node.process(
                 seed=-1,
-                force_refresh_sitemap=False,
+                category=rpd.ANY_CATEGORY,
                 clear_cache=False,
-                category_filter="",
                 timeout=10,
                 node_id="cache_test",
             )

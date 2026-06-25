@@ -172,9 +172,9 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 | Pin | Type | Notes |
 |-----|------|-------|
 | **Control** `seed` | int | `-1` for random (true OS randomness, ignores cache deterministically). Any `≥0` value is reproducible. |
-| **Control** `force_refresh_sitemap` | bool | Re-fetch `/sitemap.xml` on next exec. Sitemap is otherwise cached for the Python process lifetime. |
+| **Control** `category` | dropdown | `(any)` or any category slug discovered from the sitemap (e.g. `anime`, `people`, `cyberpunk`). Selecting a slug restricts picks to that category page's listed prompts. |
 | **Control** `clear_cache` | bool | Drop this node's 20-entry deque before selection. |
-| **Control** `category_filter` (optional) | string | Case-insensitive substring match against the URL slug. Empty disables. |
+| **Button** `🔄 refresh sitemap` | — | Click to re-fetch `/sitemap.xml` and reload the category list now. Triggered on click, not on workflow run. Sitemap is otherwise cached for the Python process lifetime. |
 | **Control** `timeout` (optional) | int 2–60 | HTTP timeout per request, in seconds. |
 | **Output** `prompt_single` | STRING | Whitespace-collapsed single-line prompt. |
 | **Output** `prompt_multiline` | STRING | Original prompt with newlines preserved. |

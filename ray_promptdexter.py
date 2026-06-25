@@ -49,7 +49,11 @@ _HEADERS = {
     "Accept": "text/html,application/xml,application/xhtml+xml,*/*",
 }
 
+ANY_CATEGORY = "(any)"
+
 _SITEMAP_CACHE: Optional[list] = None
+_CATEGORIES_CACHE: Optional[list] = None
+_CATEGORY_URLS_CACHE: dict = {}
 _RECENT_BY_NODE: dict = {}
 
 _CACHE_MAX = 20
@@ -81,9 +85,29 @@ def _parse_sitemap_xml(content: bytes) -> Tuple[str, list]:
     return tag, locs
 
 
+def _partition_urls(all_urls: list) -> Tuple[list, list]:
+    """Split sitemap URLs into (prompt_urls, category_slugs)."""
+    prompt_urls = []
+    category_slugs = []
+    for u in all_urls:
+        try:
+            path = urllib.parse.urlsplit(u).path or ""
+        except Exception:
+            continue
+        if path.startswith("/prompt/") and path != "/prompt/":
+            prompt_urls.append(u)
+        elif path.startswith("/prompts/"):
+            slug = path[len("/prompts/"):].strip("/")
+            if slug:
+                category_slugs.append(slug)
+    prompt_urls = list(dict.fromkeys(prompt_urls))
+    category_slugs = sorted(set(category_slugs))
+    return prompt_urls, category_slugs
+
+
 def _load_sitemap(force_refresh: bool, timeout: int) -> list:
-    """Return cached pool of prompt URLs. Recurses into sitemapindex one level."""
-    global _SITEMAP_CACHE
+    """Return cached pool of prompt URLs. Also populates _CATEGORIES_CACHE."""
+    global _SITEMAP_CACHE, _CATEGORIES_CACHE, _CATEGORY_URLS_CACHE
     if _SITEMAP_CACHE is not None and not force_refresh:
         return _SITEMAP_CACHE
 
@@ -107,16 +131,7 @@ def _load_sitemap(force_refresh: bool, timeout: int) -> list:
             f"Unexpected sitemap root <{root_tag}> at {_SITEMAP_URL}"
         )
 
-    prompt_urls = []
-    for u in all_urls:
-        try:
-            path = urllib.parse.urlsplit(u).path or ""
-        except Exception:
-            continue
-        if path.startswith("/prompt/") and path != "/prompt/":
-            prompt_urls.append(u)
-
-    prompt_urls = list(dict.fromkeys(prompt_urls))
+    prompt_urls, category_slugs = _partition_urls(all_urls)
     if not prompt_urls:
         raise RuntimeError(
             "PromptDexter sitemap returned no /prompt URLs — site structure "
@@ -124,7 +139,35 @@ def _load_sitemap(force_refresh: bool, timeout: int) -> list:
         )
 
     _SITEMAP_CACHE = prompt_urls
+    _CATEGORIES_CACHE = category_slugs
+    if force_refresh:
+        _CATEGORY_URLS_CACHE.clear()
     return _SITEMAP_CACHE
+
+
+def get_categories(force_refresh: bool = False, timeout: int = 10) -> list:
+    """Return cached category slugs. Loads sitemap if needed."""
+    if _CATEGORIES_CACHE is None or force_refresh:
+        _load_sitemap(force_refresh, timeout)
+    return list(_CATEGORIES_CACHE or [])
+
+
+def _category_page_urls(slug: str, timeout: int) -> list:
+    """Scrape /prompts/{slug} HTML for /prompt/... links. Cached per slug."""
+    if slug in _CATEGORY_URLS_CACHE:
+        return _CATEGORY_URLS_CACHE[slug]
+    page_url = f"{_SITE_BASE}/prompts/{slug}"
+    resp = _http_get(page_url, timeout=timeout, retries=1)
+    found = re.findall(r'/prompt/[a-z0-9][a-z0-9\-]*', resp.text)
+    seen = []
+    seen_set = set()
+    for path in found:
+        full = urllib.parse.urljoin(_SITE_BASE, path)
+        if full not in seen_set:
+            seen_set.add(full)
+            seen.append(full)
+    _CATEGORY_URLS_CACHE[slug] = seen
+    return seen
 
 
 def _normalize_text(s: Optional[str]) -> str:
@@ -249,14 +292,18 @@ class RayPromptDexter:
 
     @classmethod
     def INPUT_TYPES(cls):
+        try:
+            cats = get_categories(force_refresh=False, timeout=10)
+        except Exception:
+            cats = []
+        category_choices = [ANY_CATEGORY] + cats
         return {
             "required": {
                 "seed": ("INT", {"default": -1, "min": -1, "max": 2**31 - 1}),
-                "force_refresh_sitemap": ("BOOLEAN", {"default": False}),
+                "category": (category_choices, {"default": ANY_CATEGORY}),
                 "clear_cache": ("BOOLEAN", {"default": False}),
             },
             "optional": {
-                "category_filter": ("STRING", {"default": ""}),
                 "timeout": ("INT", {"default": 10, "min": 2, "max": 60, "step": 1}),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
@@ -274,9 +321,8 @@ class RayPromptDexter:
     def process(
         self,
         seed,
-        force_refresh_sitemap,
+        category,
         clear_cache,
-        category_filter="",
         timeout=10,
         node_id=None,
     ):
@@ -285,14 +331,18 @@ class RayPromptDexter:
         if clear_cache:
             _RECENT_BY_NODE.pop(node_key, None)
 
-        urls = _load_sitemap(bool(force_refresh_sitemap), int(timeout))
+        urls = _load_sitemap(False, int(timeout))
 
-        cf = (category_filter or "").strip().lower()
-        if cf:
-            urls = [u for u in urls if cf in u.lower()]
+        cat = (category or "").strip()
+        if cat and cat != ANY_CATEGORY:
+            page_urls = _category_page_urls(cat, int(timeout))
+            if page_urls:
+                urls = page_urls
+            else:
+                urls = [u for u in urls if f"/{cat}" in u.lower() or cat in u.lower()]
             if not urls:
                 raise RuntimeError(
-                    f"category_filter '{category_filter}' matched no /prompt URLs"
+                    f"category '{category}' matched no /prompt URLs"
                 )
 
         seed_int = int(seed)
