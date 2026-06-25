@@ -402,7 +402,7 @@ def test_file_list_caches_by_folder_and_recurse(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_process_returns_four_outputs(tmp_path):
+def test_process_returns_four_list_outputs(tmp_path):
     p = tmp_path / "a.png"
     _make_solid_png(p, info={
         "parameters": "a clean prompt\nNegative prompt: x\nSteps: 20"
@@ -417,10 +417,20 @@ def test_process_returns_four_outputs(tmp_path):
         node_id="t",
     )
     single, multi, image, path_out = out
-    assert single == "a clean prompt"
-    assert multi == "a clean prompt"
-    assert image.shape[-1] == 3
-    assert pathlib.Path(path_out) == p
+    # All four outputs must be lists (OUTPUT_IS_LIST = True for each).
+    assert isinstance(single, list) and len(single) == 1
+    assert isinstance(multi, list) and len(multi) == 1
+    assert isinstance(image, list) and len(image) == 1
+    assert isinstance(path_out, list) and len(path_out) == 1
+    assert single[0] == "a clean prompt"
+    assert multi[0] == "a clean prompt"
+    assert image[0].shape[-1] == 3
+    assert pathlib.Path(path_out[0]) == p
+
+
+def test_node_declares_output_is_list_for_every_output():
+    assert RayLocalScraper.OUTPUT_IS_LIST == (True, True, True, True)
+    assert len(RayLocalScraper.OUTPUT_IS_LIST) == len(RayLocalScraper.RETURN_TYPES)
 
 
 def test_process_returns_empty_prompt_when_no_metadata(tmp_path):
@@ -435,9 +445,10 @@ def test_process_returns_empty_prompt_when_no_metadata(tmp_path):
         refresh_listing=True,
         node_id="t",
     )
-    assert single == ""
-    assert multi == ""
-    assert pathlib.Path(path_out) == p
+    assert single == [""]
+    assert multi == [""]
+    assert len(image) == 1
+    assert pathlib.Path(path_out[0]) == p
 
 
 def test_process_skip_no_prompt_finds_the_one_with_prompt(tmp_path):
@@ -461,8 +472,8 @@ def test_process_skip_no_prompt_finds_the_one_with_prompt(tmp_path):
         refresh_listing=True,
         node_id="t",
     )
-    assert single == "the lucky prompt"
-    assert pathlib.Path(path_out) == target
+    assert single == ["the lucky prompt"]
+    assert pathlib.Path(path_out[0]) == target
 
 
 def test_process_skip_no_prompt_raises_when_none_match(tmp_path):
@@ -496,8 +507,8 @@ def test_process_recurse_subfolders_finds_nested_image(tmp_path):
         refresh_listing=True,
         node_id="t",
     )
-    assert pathlib.Path(path_out) == target
-    assert single == "nested prompt"
+    assert pathlib.Path(path_out[0]) == target
+    assert single == ["nested prompt"]
 
 
 def test_process_recurse_off_does_not_find_nested(tmp_path):
@@ -516,7 +527,9 @@ def test_process_recurse_off_does_not_find_nested(tmp_path):
         )
 
 
-def test_process_multi_prompt_batched_into_multiline(tmp_path):
+def test_process_multi_prompt_emits_parallel_list_outputs(tmp_path):
+    """Image with N positive prompts -> every output is a list of length N,
+    with image + path broadcast across each entry."""
     p = tmp_path / "multi.png"
     _make_solid_png(p, info={"prompt": _comfy_multi_prompt_graph()})
     node = RayLocalScraper()
@@ -528,15 +541,43 @@ def test_process_multi_prompt_batched_into_multiline(tmp_path):
         refresh_listing=True,
         node_id="t",
     )
-    assert "\n---\n" in multi
-    # single is the first prompt collapsed to one line.
-    assert single in (
-        "first positive prompt about a fox",
-        "second positive prompt about a hawk",
-    )
-    # All prompts should appear in the batched output.
+    # All four outputs must be lists with the same length.
+    assert isinstance(single, list)
+    assert isinstance(multi, list)
+    assert isinstance(image, list)
+    assert isinstance(path_out, list)
+    assert len(single) == len(multi) == len(image) == len(path_out)
+    assert len(single) >= 2
+
+    # Each prompt appears exactly once in both prompt outputs.
+    assert "first positive prompt about a fox" in single
+    assert "second positive prompt about a hawk" in single
     assert "first positive prompt about a fox" in multi
     assert "second positive prompt about a hawk" in multi
+
+    # Image and path are repeated (broadcast) across every prompt entry.
+    assert all(pathlib.Path(x) == p for x in path_out)
+    assert all(t.shape == image[0].shape for t in image)
+
+
+def test_process_single_prompt_still_returns_lists_of_length_one(tmp_path):
+    """Sanity: even when a single prompt is found, outputs are still lists."""
+    p = tmp_path / "one.png"
+    _make_solid_png(p, info={
+        "parameters": "lone prompt\nNegative prompt: x\nSteps: 1"
+    })
+    node = RayLocalScraper()
+    single, multi, image, path_out = node.process(
+        folder=str(tmp_path),
+        recurse_subfolders=False,
+        skip_no_prompt=False,
+        seed=1,
+        refresh_listing=True,
+        node_id="t",
+    )
+    assert single == ["lone prompt"]
+    assert multi == ["lone prompt"]
+    assert len(image) == 1 and len(path_out) == 1
 
 
 def test_process_raises_when_folder_missing(tmp_path):
@@ -575,8 +616,9 @@ def test_process_image_path_is_absolute_string(tmp_path):
         refresh_listing=True,
         node_id="t",
     )
-    assert isinstance(path_out, str)
-    assert pathlib.Path(path_out).is_absolute()
+    assert isinstance(path_out, list) and len(path_out) == 1
+    assert isinstance(path_out[0], str)
+    assert pathlib.Path(path_out[0]).is_absolute()
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +647,7 @@ def test_process_same_seed_picks_same_file(tmp_path):
     out2 = node.process(folder=str(tmp_path), recurse_subfolders=False,
                         skip_no_prompt=False, seed=42, refresh_listing=True,
                         node_id="B")
-    assert out1[3] == out2[3]
+    assert out1[3][0] == out2[3][0]
 
 
 def test_clear_cache_resets_state(tmp_path):

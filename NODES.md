@@ -221,7 +221,7 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 
 For ComfyUI graphs, the extractor first locates every text-encoder node (`CLIPTextEncode` / `CLIPTextEncodeFlux` / `CLIPTextEncodeSDXL` / `BNK_CLIPTextEncodeAdvanced` etc.). Each encoder contributes one prompt: if its `text` input is a literal string the literal is used; if it's wired to another node, the link is followed back through `ShowText` → `Text Multiline` → `String Literal` → `Text Concatenate` → primitive nodes (up to 8 hops, cycles detected) until a literal is found. Multiple text inputs on a concat-style node are joined with spaces.
 
-If the image carries multiple positive prompts (e.g. a ComfyUI workflow with several `CLIPTextEncode` nodes), they are batched together in `prompt_multiline` separated by `\n---\n`. `prompt_single` is the first prompt collapsed to a single line. If no prompt at all is found, both prompt outputs are empty strings — unless `skip_no_prompt` is enabled, in which case the node walks the LRU-shuffled pool until it finds an image that does have one.
+If the image carries multiple positive prompts (e.g. a ComfyUI workflow with several `CLIPTextEncode` nodes), every output is emitted as a ComfyUI **list** — one entry per prompt — so downstream nodes will iterate the workflow once per prompt. The `image` and `image_path` outputs are broadcast (repeated) across each prompt entry so each iteration sees a matching `(prompt, image, path)` triple. Single-prompt images still return lists of length 1; if no prompt is found and `skip_no_prompt` is off, the output is a single-entry list with an empty string in both prompt slots.
 
 **Category:** `Ray/Local📁`
 
@@ -232,9 +232,9 @@ If the image carries multiple positive prompts (e.g. a ComfyUI workflow with sev
 | **Control** `skip_no_prompt` | bool | When on, skip images whose metadata yields no prompt and pick the next one from the seed-shuffled pool (capped at 50 attempts). When off, the node will happily return the chosen image with empty prompt strings. |
 | **Control** `seed` | int | `-1` for OS-random (non-deterministic). Any `≥0` value is reproducible. |
 | **Control** `refresh_listing` (optional) | bool | Force a re-scan of the folder before picking. Off by default so repeated runs are cheap. |
-| **Output** `prompt_single` | STRING | First prompt, whitespace-collapsed. Empty when no prompt was found. |
-| **Output** `prompt_multiline` | STRING | Full prompt(s); multiple prompts are joined by `\n---\n`. Empty when no prompt was found. |
-| **Output** `image` | IMAGE | Image as BHWC float32 [0,1]. |
-| **Output** `image_path` | STRING | Absolute path of the chosen file. |
+| **Output** `prompt_single` | STRING (list) | One entry per prompt found, each whitespace-collapsed to a single line. Empty-string entry when no prompt was extracted. |
+| **Output** `prompt_multiline` | STRING (list) | One entry per prompt found, newlines preserved. Empty-string entry when no prompt was extracted. |
+| **Output** `image` | IMAGE (list) | Image tensor (BHWC float32 [0,1]), repeated across every prompt entry. |
+| **Output** `image_path` | STRING (list) | Absolute path of the chosen file, repeated across every prompt entry. |
 
 Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.tif`.
