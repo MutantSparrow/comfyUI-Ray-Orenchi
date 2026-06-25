@@ -14,15 +14,16 @@ Prompt extraction sources, in priority order:
   6. Sidecar `<image>.txt` in the same directory.
 
 When multiple positive prompts are found inside a single image (e.g. a
-ComfyUI workflow with several CLIPTextEncode nodes), they are batched
-into the multiline output separated by `\\n---\\n`. The single-line
-output is the first prompt collapsed to one line.
+ComfyUI workflow with several CLIPTextEncode nodes), every output is
+emitted as a ComfyUI list — one entry per prompt — so downstream nodes
+iterate over each prompt independently. The image and path entries are
+broadcast (repeated) across every prompt in the batch.
 
-Outputs:
-  STRING prompt_single     — first prompt, whitespace-collapsed.
-  STRING prompt_multiline  — full prompt text, multi-prompt batched.
-  IMAGE  image             — BHWC float32 [0,1] tensor of the image.
-  STRING image_path        — absolute path of the source file.
+Outputs (all OUTPUT_IS_LIST = True):
+  STRING prompt_single     — each prompt collapsed to one line.
+  STRING prompt_multiline  — each prompt with its newlines preserved.
+  IMAGE  image             — BHWC float32 [0,1] tensor (same tensor reused).
+  STRING image_path        — absolute path of the source file (repeated).
 """
 
 from __future__ import annotations
@@ -518,6 +519,11 @@ class RayLocalScraper:
 
     RETURN_TYPES = ("STRING", "STRING", "IMAGE", "STRING")
     RETURN_NAMES = ("prompt_single", "prompt_multiline", "image", "image_path")
+    # ComfyUI batches list outputs: when an image carries multiple prompts,
+    # each output is emitted as a parallel list so the workflow can iterate
+    # over every prompt. The image/path entries are repeated per prompt so
+    # downstream nodes see (prompt_i, image, path) tuples.
+    OUTPUT_IS_LIST = (True, True, True, True)
     FUNCTION = "process"
     CATEGORY = "Ray/Local📁"
 
@@ -609,15 +615,23 @@ class RayLocalScraper:
 
         recent.append(chosen_path)
 
-        if chosen_prompts:
-            prompt_multiline = "\n---\n".join(chosen_prompts)
-            prompt_single = re.sub(r"\s+", " ", chosen_prompts[0]).strip()
-        else:
-            prompt_multiline = ""
-            prompt_single = ""
-
         image_tensor = _pil_to_tensor(pil_image)
         if image_tensor is None:
             image_tensor = _black_tensor()
+        path_str = os.fspath(chosen_path)
 
-        return (prompt_single, prompt_multiline, image_tensor, os.fspath(chosen_path))
+        if not chosen_prompts:
+            # No prompt found — emit a single empty entry so downstream
+            # nodes still see a list of length 1 (matching the image + path).
+            return ([""], [""], [image_tensor], [path_str])
+
+        prompt_multiline_list = list(chosen_prompts)
+        prompt_single_list = [
+            re.sub(r"\s+", " ", p).strip() for p in chosen_prompts
+        ]
+        # Parallel-broadcast the image + path across every prompt.
+        n = len(chosen_prompts)
+        image_list = [image_tensor] * n
+        path_list = [path_str] * n
+
+        return (prompt_single_list, prompt_multiline_list, image_list, path_list)
