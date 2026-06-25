@@ -66,6 +66,9 @@ PERIODS = ["AllTime", "Year", "Month", "Week", "Day"]
 SORTS = ["Random", "Most Reactions", "Most Comments", "Newest"]
 
 BASE_MODELS_DEFAULT = "Any"
+# Sampled live from /api/v1/images across periods; CivitAI returns whatever
+# uploaders tag their work with, so new architectures keep appearing —
+# refresh periodically.
 BASE_MODELS = [
     BASE_MODELS_DEFAULT,
     "SD 1.5",
@@ -73,11 +76,24 @@ BASE_MODELS = [
     "Pony",
     "Illustrious",
     "NoobAI",
+    "Anima",
     "Flux.1 D",
     "Flux.1 S",
+    "Flux.2 Klein 9B",
     "SD 3.5",
-    "Wan Video",
+    "Chroma",
     "HiDream",
+    "Krea 2",
+    "Qwen",
+    "OpenAI",
+    "Nano Banana",
+    "Grok",
+    "Seedream",
+    "Z-Image Base",
+    "Z-Image Turbo",
+    "Wan Video",
+    "Wan Video 14B t2v",
+    "LTXV 2.3",
 ]
 
 _PAGE_CACHE: dict = {}
@@ -146,6 +162,7 @@ def _build_query(
     base_model: str,
     cursor: Optional[str],
     limit: int,
+    username: str = "",
 ) -> str:
     params = {
         "limit": str(limit),
@@ -158,6 +175,8 @@ def _build_query(
         params["cursor"] = cursor
     if base_model and base_model != BASE_MODELS_DEFAULT:
         params["baseModels"] = base_model
+    if username:
+        params["username"] = username
     return urllib.parse.urlencode(params)
 
 
@@ -168,8 +187,11 @@ def _fetch_page(
     base_model: str,
     cursor: Optional[str],
     timeout: int,
+    username: str = "",
 ) -> Tuple[list, Optional[str]]:
-    qs = _build_query(browsing_level, period, sort, base_model, cursor, _PAGE_LIMIT)
+    qs = _build_query(
+        browsing_level, period, sort, base_model, cursor, _PAGE_LIMIT, username
+    )
     url = f"{_IMAGES_URL}?{qs}"
     resp = _http_get(url, timeout=timeout, retries=1)
     try:
@@ -205,10 +227,11 @@ def _load_pool(
     sort: str,
     base_model: str,
     timeout: int,
+    username: str = "",
     force_refresh: bool = False,
 ) -> list:
     """Page through the API building a pool of prompted images. Cached by key."""
-    key = (mode, period, sort, base_model)
+    key = (mode, period, sort, base_model, username)
     if not force_refresh and key in _PAGE_CACHE:
         return _PAGE_CACHE[key]
 
@@ -219,7 +242,7 @@ def _load_pool(
     cursor: Optional[str] = None
     for _ in range(_MAX_PAGES_PER_MODE):
         items, next_cursor = _fetch_page(
-            browsing_level, period, sort, base_model, cursor, timeout
+            browsing_level, period, sort, base_model, cursor, timeout, username
         )
         kept = _filter_with_prompt(items)
         for k in kept:
@@ -232,9 +255,10 @@ def _load_pool(
         cursor = next_cursor
 
     if not pool:
+        user_part = f", username={username}" if username else ""
         raise RuntimeError(
             f"CivitAI returned no images with prompts for mode={mode}, "
-            f"period={period}, sort={sort}, baseModel={base_model}"
+            f"period={period}, sort={sort}, baseModel={base_model}{user_part}"
         )
 
     _PAGE_CACHE[key] = pool
@@ -285,6 +309,7 @@ def _build_outputs(prompt_multiline: str, image_url: Optional[str], timeout: int
 
 def clear_cache():
     _PAGE_CACHE.clear()
+    _RECENT_BY_NODE.clear()
 
 
 class RayCivitAI:
@@ -299,7 +324,8 @@ class RayCivitAI:
                 "base_model": (BASE_MODELS, {"default": BASE_MODELS_DEFAULT}),
                 "period": (PERIODS, {"default": "Week"}),
                 "sort": (SORTS, {"default": "Random"}),
-                "clear_cache": ("BOOLEAN", {"default": False}),
+                "username": ("STRING", {"default": "", "multiline": False,
+                                         "placeholder": "civitai username (optional)"}),
             },
             "optional": {
                 "timeout": ("INT", {"default": 15, "min": 2, "max": 60, "step": 1}),
@@ -323,14 +349,12 @@ class RayCivitAI:
         base_model,
         period,
         sort,
-        clear_cache,
+        username="",
         timeout=15,
         node_id=None,
     ):
         node_key = str(node_id) if node_id is not None else "_default"
-
-        if clear_cache:
-            _RECENT_BY_NODE.pop(node_key, None)
+        username = (username or "").strip()
 
         pool = _load_pool(
             mode=mode,
@@ -338,6 +362,7 @@ class RayCivitAI:
             sort=sort,
             base_model=base_model,
             timeout=int(timeout),
+            username=username,
         )
 
         seed_int = int(seed)

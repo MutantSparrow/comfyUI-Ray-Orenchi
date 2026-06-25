@@ -69,6 +69,7 @@ def test_query_includes_required_params():
     assert "withMeta=true" in q
     assert "baseModels" not in q
     assert "nsfw=" not in q
+    assert "username" not in q
 
 
 def test_query_adds_base_model_when_not_any():
@@ -76,6 +77,16 @@ def test_query_adds_base_model_when_not_any():
     assert "browsingLevel=28" in q
     assert "baseModels=Pony" in q
     assert "cursor=abc" in q
+
+
+def test_query_adds_username_when_set():
+    q = rc._build_query(1, "Week", "Random", "Any", None, 100, username="VISITOR01")
+    assert "username=VISITOR01" in q
+
+
+def test_query_omits_username_when_blank():
+    q = rc._build_query(1, "Week", "Random", "Any", None, 100, username="")
+    assert "username=" not in q
 
 
 # --- prompt filtering ----------------------------------------------------
@@ -112,7 +123,7 @@ def test_load_pool_pages_until_no_cursor():
     ]
     call_idx = {"i": 0}
 
-    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout):
+    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout, username=""):
         i = call_idx["i"]
         page, next_c = pages[i]
         call_idx["i"] += 1
@@ -128,7 +139,7 @@ def test_load_pool_uses_red_bitmask_for_red_mode():
     """Red mode must pass browsingLevel=28 in a single call path (no nsfw fallback)."""
     seen = []
 
-    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout):
+    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout, username=""):
         seen.append(browsing_level)
         return ([_item(1)], None)
 
@@ -146,7 +157,7 @@ def test_load_pool_raises_when_empty():
 def test_load_pool_cached_by_key():
     fetched = []
 
-    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout):
+    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout, username=""):
         fetched.append((browsing_level, period, sort, base_model))
         return ([_item(1)], None)
 
@@ -154,6 +165,33 @@ def test_load_pool_cached_by_key():
         rc._load_pool(rc.MODE_BLUE, "Week", "Random", "Any", timeout=10)
         rc._load_pool(rc.MODE_BLUE, "Week", "Random", "Any", timeout=10)
     assert len(fetched) == 1
+
+
+def test_load_pool_username_in_cache_key():
+    """Different usernames must NOT collide in the cache."""
+    fetched = []
+
+    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout, username=""):
+        fetched.append(username)
+        return ([_item(1)], None)
+
+    with patch.object(rc, "_fetch_page", side_effect=fake_fetch):
+        rc._load_pool(rc.MODE_BLUE, "Week", "Random", "Any", timeout=10, username="alice")
+        rc._load_pool(rc.MODE_BLUE, "Week", "Random", "Any", timeout=10, username="bob")
+        rc._load_pool(rc.MODE_BLUE, "Week", "Random", "Any", timeout=10, username="alice")
+    assert fetched == ["alice", "bob"]
+
+
+def test_load_pool_passes_username_through():
+    seen = []
+
+    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout, username=""):
+        seen.append(username)
+        return ([_item(1)], None)
+
+    with patch.object(rc, "_fetch_page", side_effect=fake_fetch):
+        rc._load_pool(rc.MODE_BLUE, "Week", "Random", "Any", timeout=10, username="VISITOR01")
+    assert seen == ["VISITOR01"]
 
 
 # --- selection -----------------------------------------------------------
@@ -184,7 +222,7 @@ def test_process_returns_three_outputs():
     pool_pages = [([_item(7, prompt="A rocket\nlaunching")], None)]
     call_idx = {"i": 0}
 
-    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout):
+    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout, username=""):
         i = call_idx["i"]
         items, nxt = pool_pages[i]
         call_idx["i"] += 1
@@ -199,7 +237,7 @@ def test_process_returns_three_outputs():
             base_model=rc.BASE_MODELS_DEFAULT,
             period="Week",
             sort="Random",
-            clear_cache=False,
+            username="",
             timeout=10,
             node_id="t1",
         )
@@ -211,7 +249,7 @@ def test_process_returns_three_outputs():
 
 
 def test_process_deterministic_same_seed_same_pick():
-    rc._PAGE_CACHE[(rc.MODE_BLUE, "Week", "Random", "Any")] = [
+    rc._PAGE_CACHE[(rc.MODE_BLUE, "Week", "Random", "Any", "")] = [
         {"id": i, "url": f"http://x/{i}.jpg", "prompt": f"prompt {i}",
          "nsfwLevel": "None", "baseModel": "SDXL 1.0", "username": "u"}
         for i in range(5)
@@ -220,13 +258,31 @@ def test_process_deterministic_same_seed_same_pick():
     with patch.object(rc, "_fetch_image_tensor", return_value=torch.zeros((1, 1, 1, 3))):
         out1 = node.process(seed=99, mode=rc.MODE_BLUE,
                             base_model=rc.BASE_MODELS_DEFAULT, period="Week",
-                            sort="Random", clear_cache=False, timeout=10,
+                            sort="Random", username="", timeout=10,
                             node_id="A")
         out2 = node.process(seed=99, mode=rc.MODE_BLUE,
                             base_model=rc.BASE_MODELS_DEFAULT, period="Week",
-                            sort="Random", clear_cache=False, timeout=10,
+                            sort="Random", username="", timeout=10,
                             node_id="B")
     assert out1[0] == out2[0]
+
+
+def test_process_passes_username_to_pool():
+    captured = {}
+
+    def fake_load_pool(**kwargs):
+        captured.update(kwargs)
+        return [{"id": 1, "url": "http://x/1.jpg", "prompt": "p", "nsfwLevel": "None",
+                 "baseModel": "SDXL 1.0", "username": "VISITOR01"}]
+
+    node = RayCivitAI()
+    with patch.object(rc, "_load_pool", side_effect=fake_load_pool), \
+         patch.object(rc, "_fetch_image_tensor", return_value=torch.zeros((1, 1, 1, 3))):
+        node.process(seed=1, mode=rc.MODE_BLUE,
+                     base_model=rc.BASE_MODELS_DEFAULT, period="Week",
+                     sort="Random", username="  VISITOR01  ", timeout=10,
+                     node_id="t")
+    assert captured.get("username") == "VISITOR01"
 
 
 # --- token via local secret file ----------------------------------------
@@ -293,5 +349,7 @@ def test_secret_file_not_tracked_by_git():
 
 def test_clear_cache_drops_all():
     rc._PAGE_CACHE[("k",)] = [{"id": 1}]
+    rc._RECENT_BY_NODE["n1"] = deque([1, 2], maxlen=20)
     rc.clear_cache()
     assert rc._PAGE_CACHE == {}
+    assert rc._RECENT_BY_NODE == {}
