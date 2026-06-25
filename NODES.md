@@ -184,7 +184,7 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 
 ## Ray's Web: CivitAI Gallery Scraper (`RayCivitAI`)
 
-**Purpose.** Fetches a random gallery image + its prompt from [civitai.com](https://civitai.com/) via the public REST API (`GET /api/v1/images`). Only images whose `meta.prompt` field is populated are kept — items posted without generation metadata are skipped automatically. Seed-deterministic, per-node 20-entry LRU to avoid consecutive repeats, page cache keyed by (mode, period, sort, base_model). 1×1 black tensor fallback if an image fails to download.
+**Purpose.** Fetches a random gallery image + its prompt from [civitai.com](https://civitai.com/) via the public REST API (`GET /api/v1/images`). Items with a usable prompt are kept — either the direct `meta.prompt` field, or, when missing, the text salvaged from a ComfyUI workflow blob embedded in `meta.comfy` (CLIPTextEncode / Text Multiline nodes etc.). Items with no extractable prompt are skipped. Seed-deterministic, per-node 20-entry LRU to avoid consecutive repeats, page cache keyed by (mode, period, sort, base_model, username). 1×1 black tensor fallback if an image fails to download.
 
 **Access strategy.** REST API (not scraping, not MCP). Public endpoint, no key required for read access. Higher-tier content unlocks if a token file is present at `civitai.secret` inside the node-pack directory — never hard-coded. The legacy `nsfw` filter is bypassed in favour of `browsingLevel` (bitmask: PG=1, PG13=2, R=4, X=8, XXX=16), which the API documents as taking precedence.
 
@@ -197,7 +197,7 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 | **Control** `base_model` | dropdown | `Any` or a specific base model (`SDXL 1.0`, `Pony`, `Illustrious`, `Flux.1 D`, `Flux.2 Klein 9B`, `Chroma`, `Qwen`, `Krea 2`, `Z-Image Turbo`, `Wan Video`, etc.). Passed to the API as `baseModels`. List is sampled live from the gallery — CivitAI surfaces new architectures as uploaders tag them, so the list is refreshed periodically. |
 | **Control** `period` | dropdown | `AllTime` / `Year` / `Month` / `Week` / `Day` — window for metric-based sorts. |
 | **Control** `sort` | dropdown | `Random` / `Most Reactions` / `Most Comments` / `Newest`. |
-| **Control** `username` | string | Optional. Restrict the pool to images posted by a specific CivitAI user (e.g. `VISITOR01`). Leave blank for any user. Passed to the API as `username`. |
+| **Control** `username` | string | Optional. Restrict the pool to images posted by a specific CivitAI user (e.g. `VISITOR01`). Leave blank for any user. Passed to the API as `username`. When set, `period` is automatically overridden to `AllTime` so small per-user archives don't drop to zero hits inside a `Week`/`Day` window. |
 | **Button** `🔄 clear cache` | — | Click to clear both the process-wide page cache and this node's 20-entry recent-pick deque; next workflow run repages from the API. Triggered on click, not on workflow run. |
 | **Control** `timeout` (optional) | int 2–60 | HTTP timeout per request, in seconds. |
 | **Output** `prompt_single` | STRING | Whitespace-collapsed single-line prompt. |

@@ -24,6 +24,7 @@ Outputs: (STRING prompt_single, STRING prompt_multiline, IMAGE image).
 from __future__ import annotations
 
 import io
+import json
 import pathlib
 import random
 import re
@@ -203,11 +204,91 @@ def _fetch_page(
     return items, next_cursor
 
 
+# Node class_type heuristics for extracting a prompt out of a ComfyUI
+# workflow JSON. Order matters — explicit "positive" wins over generic
+# text-multiline nodes.
+_COMFY_PROMPT_CLASS_HINTS = (
+    "CLIPTextEncode",
+    "BNK_CLIPTextEncodeAdvanced",
+    "CLIPTextEncodeFlux",
+    "CLIPTextEncodeSDXL",
+    "Text Multiline",
+    "Text Concatenate",
+    "ShowText",
+    "String Literal",
+)
+
+
+def _extract_prompt_from_comfy(meta: dict) -> str:
+    """Salvage the positive prompt from a ComfyUI workflow blob.
+
+    Civitai sometimes ships full workflows in `meta.comfy` (JSON string) and
+    leaves `meta.prompt` empty — typical for uploads from ComfyUI's native
+    image-saver. Walk `prompt` node graph, pull the longest plausibly-textual
+    `inputs.text` (or `string`/`positive`/`prompt`) from a node whose
+    class_type smells like a text encoder / text widget.
+    """
+    raw = meta.get("comfy")
+    if not raw:
+        return ""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return ""
+    if not isinstance(raw, dict):
+        return ""
+    prompt_graph = raw.get("prompt") or {}
+    if not isinstance(prompt_graph, dict):
+        return ""
+
+    candidates: list = []  # list of (priority, length, text)
+    for _nid, node in prompt_graph.items():
+        if not isinstance(node, dict):
+            continue
+        ct = node.get("class_type") or ""
+        inputs = node.get("inputs") or {}
+        if not isinstance(inputs, dict):
+            continue
+        # Score by class_type match position; "CLIPTextEncode" first.
+        priority = next(
+            (i for i, hint in enumerate(_COMFY_PROMPT_CLASS_HINTS) if hint in ct),
+            999,
+        )
+        if priority == 999:
+            continue
+        # Try several common input field names.
+        for field in ("text", "string", "positive", "prompt", "Text"):
+            val = inputs.get(field)
+            if isinstance(val, str):
+                stripped = val.strip()
+                if len(stripped) >= 12:
+                    candidates.append((priority, len(stripped), stripped))
+    if not candidates:
+        return ""
+    # Lowest priority value (best class match) first; ties broken by length.
+    candidates.sort(key=lambda c: (c[0], -c[1]))
+    return candidates[0][2]
+
+
+def _extract_prompt(item: dict) -> str:
+    """Return the best available prompt string for a civitai image item.
+
+    Tries `meta.prompt` first, then falls back to a ComfyUI workflow blob.
+    """
+    meta = item.get("meta") or {}
+    if not isinstance(meta, dict):
+        return ""
+    direct = (meta.get("prompt") or "").strip()
+    if direct:
+        return direct
+    return _extract_prompt_from_comfy(meta)
+
+
 def _filter_with_prompt(items: list) -> list:
     out = []
     for it in items:
-        meta = it.get("meta") or {}
-        prompt = (meta.get("prompt") or "").strip()
+        prompt = _extract_prompt(it)
         url = it.get("url") or ""
         if prompt and url:
             out.append({
@@ -230,7 +311,19 @@ def _load_pool(
     username: str = "",
     force_refresh: bool = False,
 ) -> list:
-    """Page through the API building a pool of prompted images. Cached by key."""
+    """Page through the API building a pool of prompted images. Cached by key.
+
+    When `username` is set we force `period=AllTime`: per-user feeds rarely
+    have enough recent activity to fill a `Week`/`Day` window, and the API
+    returns zero results in that case instead of the full author archive.
+    """
+    if username and period != "AllTime":
+        print(
+            f"[RayCivitAI] username={username!r} set — overriding period "
+            f"{period!r} -> 'AllTime' (per-user feeds need full history)."
+        )
+        period = "AllTime"
+
     key = (mode, period, sort, base_model, username)
     if not force_refresh and key in _PAGE_CACHE:
         return _PAGE_CACHE[key]

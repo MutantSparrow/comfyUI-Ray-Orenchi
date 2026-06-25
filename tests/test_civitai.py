@@ -112,6 +112,77 @@ def test_filter_drops_items_with_missing_url():
     assert [k["id"] for k in kept] == [2]
 
 
+# --- comfy-workflow prompt salvage --------------------------------------
+
+
+def _comfy_meta_with_text(text: str, class_type: str = "CLIPTextEncode") -> dict:
+    """Build a meta dict whose comfy field embeds a workflow with a prompt."""
+    workflow = {
+        "prompt": {
+            "1": {"class_type": class_type, "inputs": {"text": text}},
+        }
+    }
+    import json as _j
+    return {"prompt": "", "comfy": _j.dumps(workflow)}
+
+
+def test_extract_prompt_falls_back_to_comfy_workflow():
+    item = {
+        "id": 1,
+        "url": "http://x/1.jpg",
+        "meta": _comfy_meta_with_text("a long detailed prompt about a fox"),
+    }
+    assert rc._extract_prompt(item) == "a long detailed prompt about a fox"
+
+
+def test_extract_prompt_prefers_clip_text_encode_over_text_multiline():
+    workflow = {
+        "prompt": {
+            "1": {"class_type": "Text Multiline", "inputs": {"text": "noise xxxxxxxxxxxxxx"}},
+            "2": {"class_type": "CLIPTextEncode",
+                  "inputs": {"text": "real positive prompt"}},
+        }
+    }
+    import json as _j
+    item = {"id": 1, "url": "http://x/1.jpg",
+            "meta": {"prompt": "", "comfy": _j.dumps(workflow)}}
+    assert rc._extract_prompt(item) == "real positive prompt"
+
+
+def test_extract_prompt_meta_prompt_still_wins_when_present():
+    workflow = {
+        "prompt": {
+            "1": {"class_type": "CLIPTextEncode", "inputs": {"text": "workflow text"}},
+        }
+    }
+    import json as _j
+    item = {"id": 1, "url": "http://x/1.jpg",
+            "meta": {"prompt": "primary direct prompt",
+                     "comfy": _j.dumps(workflow)}}
+    assert rc._extract_prompt(item) == "primary direct prompt"
+
+
+def test_extract_prompt_returns_empty_when_no_signal():
+    item = {"id": 1, "url": "http://x/1.jpg", "meta": {"prompt": "", "comfy": ""}}
+    assert rc._extract_prompt(item) == ""
+
+
+def test_extract_prompt_handles_unparseable_comfy_blob():
+    item = {"id": 1, "url": "http://x/1.jpg",
+            "meta": {"prompt": "", "comfy": "{not json"}}
+    assert rc._extract_prompt(item) == ""
+
+
+def test_filter_keeps_items_via_comfy_workflow_when_meta_prompt_empty():
+    items = [
+        {"id": 9, "url": "http://x/9.jpg",
+         "meta": _comfy_meta_with_text("salvaged from workflow")},
+    ]
+    kept = rc._filter_with_prompt(items)
+    assert len(kept) == 1
+    assert kept[0]["prompt"] == "salvaged from workflow"
+
+
 # --- pagination & caching ------------------------------------------------
 
 
@@ -190,8 +261,34 @@ def test_load_pool_passes_username_through():
         return ([_item(1)], None)
 
     with patch.object(rc, "_fetch_page", side_effect=fake_fetch):
-        rc._load_pool(rc.MODE_BLUE, "Week", "Random", "Any", timeout=10, username="VISITOR01")
+        rc._load_pool(rc.MODE_BLUE, "AllTime", "Random", "Any", timeout=10, username="VISITOR01")
     assert seen == ["VISITOR01"]
+
+
+def test_load_pool_forces_alltime_when_username_set():
+    """Per-user feeds rarely fit Week/Day; we override to AllTime so a small
+    archive doesn't come back as 0 hits."""
+    seen_periods = []
+
+    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout, username=""):
+        seen_periods.append(period)
+        return ([_item(1)], None)
+
+    with patch.object(rc, "_fetch_page", side_effect=fake_fetch):
+        rc._load_pool(rc.MODE_BLUE, "Week", "Random", "Any", timeout=10, username="VISITOR01")
+    assert seen_periods == ["AllTime"]
+
+
+def test_load_pool_keeps_period_when_no_username():
+    seen_periods = []
+
+    def fake_fetch(browsing_level, period, sort, base_model, cursor, timeout, username=""):
+        seen_periods.append(period)
+        return ([_item(1)], None)
+
+    with patch.object(rc, "_fetch_page", side_effect=fake_fetch):
+        rc._load_pool(rc.MODE_BLUE, "Week", "Random", "Any", timeout=10, username="")
+    assert seen_periods == ["Week"]
 
 
 # --- selection -----------------------------------------------------------
