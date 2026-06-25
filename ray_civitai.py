@@ -4,8 +4,8 @@ Fetches a random gallery image + its prompt from civitai.com.
 Uses the public REST API (`GET /api/v1/images`) — no scraping required.
 
 Mode toggle:
-  • Blue (SFW)  → browsingLevel=1   (PG only)
-  • Red  (NSFW) → browsingLevel=28  (R | X | XXX)
+  • Blue (SFW)  → browsingLevel=3   (PG | PG13)
+  • Red  (NSFW) → browsingLevel=31  (all levels: PG | PG13 | R | X | XXX)
 
 The `browsingLevel` bitmask takes precedence over the legacy `nsfw`
 parameter; values: PG=1, PG13=2, R=4, X=8, XXX=16.
@@ -60,8 +60,8 @@ MODE_BLUE = "Blue (SFW)"
 MODE_RED = "Red (NSFW)"
 MODES = [MODE_BLUE, MODE_RED]
 
-BROWSING_LEVEL_BLUE = 1            # PG
-BROWSING_LEVEL_RED = 4 | 8 | 16    # R | X | XXX = 28
+BROWSING_LEVEL_BLUE = 1 | 2              # PG | PG13           = 3
+BROWSING_LEVEL_RED = 1 | 2 | 4 | 8 | 16  # PG | PG13 | R | X | XXX = 31 (all)
 
 PERIODS = ["AllTime", "Year", "Month", "Week", "Day"]
 SORTS = ["Random", "Most Reactions", "Most Comments", "Newest"]

@@ -186,14 +186,14 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 
 **Purpose.** Fetches a random gallery image + its prompt from [civitai.com](https://civitai.com/) via the public REST API (`GET /api/v1/images`). Items with a usable prompt are kept — either the direct `meta.prompt` field, or, when missing, the text salvaged from a ComfyUI workflow blob embedded in `meta.comfy` (CLIPTextEncode / Text Multiline nodes etc.). Items with no extractable prompt are skipped. Seed-deterministic, per-node 20-entry LRU to avoid consecutive repeats, page cache keyed by (mode, period, sort, base_model, username). 1×1 black tensor fallback if an image fails to download.
 
-**Access strategy.** REST API (not scraping, not MCP). Public endpoint, no key required for read access. Higher-tier content unlocks if a token file is present at `civitai.secret` inside the node-pack directory — never hard-coded. The legacy `nsfw` filter is bypassed in favour of `browsingLevel` (bitmask: PG=1, PG13=2, R=4, X=8, XXX=16), which the API documents as taking precedence.
+**Access strategy.** REST API (not scraping, not MCP). Public endpoint, no key required for read access. Higher-tier content unlocks if a token file is present at `civitai.secret` inside the node-pack directory — never hard-coded. The legacy `nsfw` filter is bypassed in favour of `browsingLevel` (bitmask: PG=1, PG13=2, R=4, X=8, XXX=16), which the API documents as taking precedence. Blue = `PG | PG13` = `3`; Red = all levels OR'd = `31`.
 
 **Category:** `Ray/Web🌐`
 
 | Pin | Type | Notes |
 |-----|------|-------|
 | **Control** `seed` | int | `-1` for random (true OS randomness). Any `≥0` value is reproducible. |
-| **Control** `mode` | dropdown | `Blue (SFW)` → `browsingLevel=1` (PG only). `Red (NSFW)` → `browsingLevel=28` (R \| X \| XXX). JS extension tints the node header to match. |
+| **Control** `mode` | dropdown | `Blue (SFW)` → `browsingLevel=3` (PG \| PG13). `Red (NSFW)` → `browsingLevel=31` (all levels). JS extension tints the node header to match. |
 | **Control** `base_model` | dropdown | `Any` or a specific base model (`SDXL 1.0`, `Pony`, `Illustrious`, `Flux.1 D`, `Flux.2 Klein 9B`, `Chroma`, `Qwen`, `Krea 2`, `Z-Image Turbo`, `Wan Video`, etc.). Passed to the API as `baseModels`. List is sampled live from the gallery — CivitAI surfaces new architectures as uploaders tag them, so the list is refreshed periodically. |
 | **Control** `period` | dropdown | `AllTime` / `Year` / `Month` / `Week` / `Day` — window for metric-based sorts. |
 | **Control** `sort` | dropdown | `Random` / `Most Reactions` / `Most Comments` / `Newest`. |
