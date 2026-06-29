@@ -697,7 +697,7 @@ class RayLocalScraper:
     # downstream nodes see (prompt_i, image, path) tuples.
     OUTPUT_IS_LIST = (True, True, True, True)
     FUNCTION = "process"
-    CATEGORY = "Ray/Local📁"
+    CATEGORY = "Ray/Prompts📝"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):

@@ -869,7 +869,7 @@ class RayFilmStock:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("image",)
     FUNCTION = "process"
-    CATEGORY = "Ray/Film📷"
+    CATEGORY = "Ray/VFX✨"
 
     @classmethod
     def VALIDATE_INPUTS(cls, asset_file=None, **kwargs):

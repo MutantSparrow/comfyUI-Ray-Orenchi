@@ -842,7 +842,7 @@ class RayPixelArtDetector:
     RETURN_TYPES = ("IMAGE", "IMAGE")
     RETURN_NAMES = ("pixel_art", "palette_preview")
     FUNCTION = "process"
-    CATEGORY = "Ray/PixelArt🕹️"
+    CATEGORY = "Ray/VFX✨"
 
     # --- Public entry point --------------------------------------------------
 

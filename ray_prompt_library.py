@@ -411,7 +411,7 @@ class RayPromptLibrary:
     RETURN_NAMES = ("prompt_single", "prompt_multiline", "image", "image_path")
     OUTPUT_IS_LIST = (True, True, True, True)
     FUNCTION = "process"
-    CATEGORY = "Ray/LLM💬"
+    CATEGORY = "Ray/Prompts📝"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):

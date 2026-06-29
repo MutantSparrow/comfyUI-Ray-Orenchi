@@ -882,7 +882,7 @@ class RayOffsetPrint:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("print_image",)
     FUNCTION = "process"
-    CATEGORY = "Ray/CRT📺"
+    CATEGORY = "Ray/VFX✨"
 
     def process(
         self,

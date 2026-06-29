@@ -516,7 +516,7 @@ class RayMetaInspect:
         "raw_metadata_json", "image",
     )
     FUNCTION = "process"
-    CATEGORY = "Ray/Local📁"
+    CATEGORY = "Ray/Prompts📝"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
