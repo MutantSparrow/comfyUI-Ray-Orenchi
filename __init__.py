@@ -40,6 +40,7 @@ try:
     from . import promptdexter_routes  # noqa: F401
     from . import civitai_routes  # noqa: F401
     from . import prompt_library_routes  # noqa: F401
+    from . import film_stock_routes  # noqa: F401
 except ImportError:
     from ray_crt import RayCRT
     from ray_offset_print import RayOffsetPrint
@@ -70,6 +71,10 @@ except ImportError:
         pass
     try:
         import prompt_library_routes  # noqa: F401
+    except ImportError:
+        pass
+    try:
+        import film_stock_routes  # noqa: F401
     except ImportError:
         pass
 
