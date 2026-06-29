@@ -24,7 +24,8 @@ def test_input_types_declares_required():
     it = rfs.RayFilmStock.INPUT_TYPES()
     assert "image" in it["required"]
     assert "preset" in it["required"]
-    assert "lut_path" in it["optional"]
+    for k in ("lut_folder", "lut_file", "xmp_folder", "xmp_file"):
+        assert k in it["optional"], f"missing optional widget: {k}"
 
 
 def test_stock_names_includes_all_families():
@@ -173,7 +174,7 @@ def test_apply_identity_lut_is_close_to_input():
     assert torch.allclose(out, img, atol=0.05)
 
 
-def test_lut_path_in_node(tmp_path):
+def test_lut_folder_dropdown_in_node(tmp_path):
     p = tmp_path / "id.cube"
     p.write_text(_identity_cube_text(4))
     img = _flat(16, 16, 0.5)
@@ -181,7 +182,124 @@ def test_lut_path_in_node(tmp_path):
     (out,) = node.process(
         image=img, preset="Custom",
         intensity=1.0, grain_amount=0.0, halation_amount=0.0,
-        expose_stops=0.0, seed=0, lut_path=str(p),
+        expose_stops=0.0, seed=0,
+        lut_folder=str(tmp_path), lut_file="id.cube",
     )
-    # Identity LUT keeps mid-gray roughly mid-gray after the pipeline
     assert 0.3 < out.mean().item() < 0.7
+
+
+# ----- XMP sidecar parsing -------------------------------------------------
+
+
+def _xmp_doc(**crs):
+    parts = []
+    for k, v in crs.items():
+        parts.append(f' crs:{k}="{v}"')
+    return (
+        '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>'
+        '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
+        '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+        '<rdf:Description xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"'
+        + "".join(parts) +
+        '/></rdf:RDF></x:xmpmeta><?xpacket end="w"?>'
+    )
+
+
+def test_parse_xmp_attribute_form():
+    text = _xmp_doc(Exposure2012="0.50", Contrast2012="25", Saturation="-15")
+    s = rfs.parse_xmp_settings(text)
+    assert s["Exposure2012"] == 0.50
+    assert s["Contrast2012"] == 25.0
+    assert s["Saturation"] == -15.0
+
+
+def test_parse_xmp_element_form():
+    text = (
+        '<x:xmpmeta xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/">'
+        "<crs:Exposure2012>1.25</crs:Exposure2012>"
+        "<crs:Highlights2012>-50</crs:Highlights2012>"
+        "</x:xmpmeta>"
+    )
+    s = rfs.parse_xmp_settings(text)
+    assert s["Exposure2012"] == 1.25
+    assert s["Highlights2012"] == -50.0
+
+
+def test_parse_xmp_handles_missing():
+    s = rfs.parse_xmp_settings("not an xmp file at all")
+    assert s == {}
+
+
+def test_xmp_exposure_brightens_image(tmp_path):
+    img = _flat(16, 16, 0.3)
+    node = rfs.RayFilmStock()
+    xmp = tmp_path / "develop.xmp"
+    xmp.write_text(_xmp_doc(Exposure2012="2.0"))
+    (out,) = node.process(
+        image=img, preset="Custom",
+        intensity=1.0, grain_amount=0.0, halation_amount=0.0,
+        expose_stops=0.0, seed=0,
+        xmp_folder=str(tmp_path), xmp_file="develop.xmp",
+    )
+    assert out.mean().item() > img.mean().item() + 0.1
+
+
+def test_xmp_saturation_pulls_chroma(tmp_path):
+    img = _flat(16, 16, 0.5).clone()
+    img[..., 0] = 0.8
+    img[..., 2] = 0.2
+    node = rfs.RayFilmStock()
+    xmp_desat = tmp_path / "desat.xmp"
+    xmp_desat.write_text(_xmp_doc(Saturation="-100"))
+    (desat,) = node.process(
+        image=img, preset="Custom",
+        intensity=1.0, grain_amount=0.0, halation_amount=0.0,
+        expose_stops=0.0, seed=0,
+        xmp_folder=str(tmp_path), xmp_file="desat.xmp",
+    )
+    avg = desat.mean(dim=(0, 1, 2))
+    spread = float(avg.max() - avg.min())
+    assert spread < 0.10
+
+
+def test_xmp_vignette_darkens_corners(tmp_path):
+    img = _flat(64, 64, 0.6)
+    node = rfs.RayFilmStock()
+    xmp = tmp_path / "vig.xmp"
+    xmp.write_text(_xmp_doc(
+        PostCropVignetteAmount="-80",
+        PostCropVignetteMidpoint="0",
+        PostCropVignetteFeather="0",
+    ))
+    (out,) = node.process(
+        image=img, preset="Custom",
+        intensity=1.0, grain_amount=0.0, halation_amount=0.0,
+        expose_stops=0.0, seed=0,
+        xmp_folder=str(tmp_path), xmp_file="vig.xmp",
+    )
+    center = out[:, 28:36, 28:36].mean().item()
+    corner = out[:, :8, :8].mean().item()
+    assert corner < center - 0.05
+
+
+def test_list_files_finds_lut_and_xmp(tmp_path):
+    (tmp_path / "a.cube").write_text(_identity_cube_text(2))
+    (tmp_path / "b.cube").write_text(_identity_cube_text(2))
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "nested.cube").write_text(_identity_cube_text(2))
+    (tmp_path / "ignored.txt").write_text("nope")
+    files = rfs.list_files(str(tmp_path), rfs._LUT_EXTS)
+    assert "a.cube" in files
+    assert "b.cube" in files
+    assert "sub/nested.cube" in files
+    assert "ignored.txt" not in files
+
+
+def test_list_files_empty_when_folder_missing():
+    assert rfs.list_files("S:/nonexistent_definitely", rfs._LUT_EXTS) == []
+    assert rfs.list_files("", rfs._LUT_EXTS) == []
+
+
+def test_resolve_chosen_handles_none():
+    assert rfs._resolve_chosen("", "(none)") is None
+    assert rfs._resolve_chosen("", "") is None

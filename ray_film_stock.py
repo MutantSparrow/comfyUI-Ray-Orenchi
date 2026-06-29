@@ -3,14 +3,24 @@
 Per-frame:
   1. Normalize input → BHWC float32 [0,1].
   2. sRGB → linear.
-  3. Exposure (±stops) in linear.
-  4. Per-channel tone curve (S-curve, shadow/midtone/highlight per stock).
+  3. Exposure (±stops) in linear — preset + widget + XMP folded.
+  4. Per-channel tone curve (S-curve, shadow/midtone/highlight per stock + XMP).
   5. Halation: red-channel blur added back to highlights (CineStill signature).
-  6. Saturation pull (slide/cinema/B&W) in linear.
-  7. Grain in linear (gaussian, mass+size per stock + global multiplier).
+  6. Saturation pull (slide/cinema/B&W + XMP) in linear.
+  7. Grain in linear (gaussian, mass+size per stock + XMP + global multiplier).
   8. Linear → sRGB.
   9. (Optional) `.cube` LUT applied after sRGB (industry convention).
- 10. Intensity-mix vs untouched input.
+ 10. (Optional) XMP-driven post-crop vignette.
+ 11. Intensity-mix vs untouched input.
+
+Optional inputs:
+  • `lut_path`  — `.cube` 3D LUT applied after the analytical curves.
+  • `xmp_path`  — Photoshop Camera Raw / Lightroom XMP sidecar. Reads the
+                  `crs:*` namespace (Exposure2012, Contrast2012, Highlights2012,
+                  Shadows2012, Temperature, Tint, Vibrance, Saturation,
+                  GrainAmount/Size, PostCropVignetteAmount/Midpoint, etc.) and
+                  folds those develop settings into the pipeline as deltas on
+                  top of the chosen film stock.
 
 Tensor convention preserved (BHWC float32 [0,1]). Same input/output shape.
 """
@@ -180,6 +190,105 @@ STOCKS = {
     ),
 }
 STOCK_NAMES = list(STOCKS.keys())
+
+
+# ---------------------------------------------------------------------------
+# XMP sidecar parsing (Adobe Camera Raw / Lightroom)
+# ---------------------------------------------------------------------------
+
+
+# Adobe stores raw-develop settings under the `crs:` namespace. Some keys live
+# as XML attributes on rdf:Description, others as child elements. Sliders are
+# stringified floats; deprecated 2003 versions of Exposure/Contrast/etc. live
+# alongside the 2012 versions — prefer the newer one when both present.
+_CRS_KEYS = (
+    "Exposure2012", "Exposure",
+    "Contrast2012", "Contrast",
+    "Highlights2012", "Highlights",
+    "Shadows2012", "Shadows",
+    "Whites2012", "Whites",
+    "Blacks2012", "Blacks",
+    "Temperature", "Tint",
+    "Saturation", "Vibrance",
+    "Clarity2012", "Clarity",
+    "GrainAmount", "GrainSize",
+    "PostCropVignetteAmount", "PostCropVignetteMidpoint",
+    "PostCropVignetteFeather", "PostCropVignetteRoundness",
+    "PostCropVignetteStyle",
+    "WhiteBalance",
+)
+
+
+def parse_xmp_settings(text: str) -> dict:
+    """Extract Adobe Camera Raw / Lightroom develop settings from an XMP file.
+
+    Returns a flat {key: float} dict containing every recognized `crs:` slider.
+    Missing keys are simply absent. Tolerates both attribute-style
+    (`crs:Exposure2012="0.50"`) and element-style (`<crs:Exposure2012>0.50</crs:Exposure2012>`)
+    representations — Lightroom mixes them across versions.
+    """
+    out: dict = {}
+    if not isinstance(text, str):
+        return out
+    for key in _CRS_KEYS:
+        # Attribute form: crs:Key="value"
+        m = re.search(
+            rf'crs:{re.escape(key)}\s*=\s*"([^"]*)"', text
+        )
+        # Element form: <crs:Key>value</crs:Key>
+        if not m:
+            m = re.search(
+                rf"<crs:{re.escape(key)}>\s*([^<]+?)\s*</crs:{re.escape(key)}>",
+                text,
+            )
+        if not m:
+            continue
+        raw = m.group(1).strip()
+        try:
+            out[key] = float(raw)
+        except ValueError:
+            out[key] = raw  # keep string for non-numeric fields (WhiteBalance)
+    return out
+
+
+def _xmp_pick(settings: dict, *keys, default: float = 0.0) -> float:
+    """Return the first numeric value present among `keys` (priority order)."""
+    for k in keys:
+        v = settings.get(k)
+        if isinstance(v, (int, float)):
+            return float(v)
+    return default
+
+
+def _kelvin_to_rgb_mul(temp_k: float) -> Tuple[float, float, float]:
+    """Approximate per-channel multipliers for a target color temperature.
+
+    `temp_k` is the *target* (camera-side WB) on a typical 2000K..50000K scale.
+    Reference is daylight ~6500K (multipliers = 1,1,1). Below 6500 = warmer
+    output (boost R); above = cooler (boost B). The math here is a simplified
+    Planckian curve fit good to ~5% over 3000..10000K — enough for stylistic
+    grading, not colorimetric.
+    """
+    t = max(1000.0, min(40000.0, float(temp_k))) / 100.0
+    # Tanner Helland's piecewise approximation
+    if t <= 66.0:
+        r = 255.0
+        g = 99.4708025861 * math.log(t) - 161.1195681661
+    else:
+        r = 329.698727446 * ((t - 60.0) ** -0.1332047592)
+        g = 288.1221695283 * ((t - 60.0) ** -0.0755148492)
+    if t >= 66.0:
+        b = 255.0
+    elif t <= 19.0:
+        b = 0.0
+    else:
+        b = 138.5177312231 * math.log(t - 10.0) - 305.0447927307
+    r = max(0.0, min(255.0, r)) / 255.0
+    g = max(0.0, min(255.0, g)) / 255.0
+    b = max(0.0, min(255.0, b)) / 255.0
+    # Normalize so daylight (~6500K) returns ~(1,1,1)
+    daylight = (1.0, 0.97, 0.92)
+    return (r / daylight[0], g / daylight[1], b / daylight[2])
 
 
 # ---------------------------------------------------------------------------
@@ -397,6 +506,30 @@ def _add_grain(
 # ---------------------------------------------------------------------------
 
 
+def _post_crop_vignette(
+    rgb_bhwc: torch.Tensor,
+    amount: float,
+    midpoint: float,
+    feather: float,
+) -> torch.Tensor:
+    """Lightroom-style post-crop vignette. `amount` ∈ [-100,100] LR units."""
+    if abs(amount) < 1e-3:
+        return rgb_bhwc
+    B, H, W, _ = rgb_bhwc.shape
+    # Normalized centered radial coordinates
+    ys = torch.linspace(-1.0, 1.0, H, device=rgb_bhwc.device, dtype=rgb_bhwc.dtype).view(1, H, 1)
+    xs = torch.linspace(-1.0, 1.0, W, device=rgb_bhwc.device, dtype=rgb_bhwc.dtype).view(1, 1, W)
+    radius = torch.sqrt(xs * xs + ys * ys)
+    # midpoint LR slider 0..100 → start radius 0.5..1.0
+    start = 0.5 + (max(0.0, min(100.0, midpoint)) / 100.0) * 0.5
+    # feather LR slider 0..100 → falloff width 0.05..1.0
+    width = 0.05 + (max(0.0, min(100.0, feather)) / 100.0) * 0.95
+    mask = ((radius - start) / width).clamp(0.0, 1.0)
+    factor = 1.0 - mask * (amount / 100.0)
+    factor = factor.clamp(0.0, 2.0).unsqueeze(-1)
+    return (rgb_bhwc * factor).clamp(0.0, 1.0)
+
+
 def apply_film_stock(
     image: torch.Tensor,
     stock: FilmStockParams,
@@ -405,27 +538,60 @@ def apply_film_stock(
     halation_amount_mult: float,
     expose_stops: float,
     lut: Optional[dict] = None,
+    xmp_settings: Optional[dict] = None,
     seed: Optional[int] = None,
 ) -> torch.Tensor:
     image = normalize_image(image)
     original = image
     device, dtype = image.device, image.dtype
 
+    xmp = xmp_settings or {}
+
     lin = srgb_to_linear(image)
 
-    # 1. Exposure
-    if abs(expose_stops) > 1e-6:
-        lin = lin * (2.0 ** float(expose_stops))
+    # 1. Exposure (preset stops + widget stops + XMP Exposure2012 stops)
+    xmp_exposure = _xmp_pick(xmp, "Exposure2012", "Exposure")
+    total_stops = float(expose_stops) + xmp_exposure
+    if abs(total_stops) > 1e-6:
+        lin = lin * (2.0 ** total_stops)
 
-    # 2. Per-channel cast
+    # 2. Per-channel cast (stock cast + XMP WB via Kelvin temperature)
     cast = torch.tensor(stock.cast_rgb, device=device, dtype=dtype).view(1, 1, 1, 3)
     lin = (lin + cast).clamp_min(0.0)
+    xmp_temp = xmp.get("Temperature")
+    xmp_tint = xmp.get("Tint")
+    if isinstance(xmp_temp, (int, float)):
+        r_mul, g_mul, b_mul = _kelvin_to_rgb_mul(xmp_temp)
+        wb = torch.tensor([r_mul, g_mul, b_mul], device=device, dtype=dtype).view(1, 1, 1, 3)
+        lin = lin * wb
+    if isinstance(xmp_tint, (int, float)):
+        # Tint slider ranges ~-150..+150. Positive = magenta (boost R+B), neg = green (boost G).
+        t = max(-150.0, min(150.0, float(xmp_tint))) / 150.0
+        tint_mul = torch.tensor(
+            [1.0 + t * 0.10, 1.0 - t * 0.10, 1.0 + t * 0.05],
+            device=device, dtype=dtype,
+        ).view(1, 1, 1, 3)
+        lin = lin * tint_mul
 
-    # 3. Black lift
-    lin = lin + stock.black_lift
+    # 3. Black lift (+XMP Shadows/Blacks)
+    xmp_shadows = _xmp_pick(xmp, "Shadows2012", "Shadows") / 100.0
+    xmp_blacks = _xmp_pick(xmp, "Blacks2012", "Blacks") / 100.0
+    lin = lin + stock.black_lift + xmp_blacks * 0.05
+    if abs(xmp_shadows) > 1e-3:
+        # Boost shadows: gamma-bend the lower region
+        shadow_gamma = max(0.4, 1.0 - xmp_shadows * 0.4)
+        lin = torch.where(lin < 0.3, lin.clamp_min(0.0) ** shadow_gamma, lin)
 
-    # 4. S-curve + highlight roll, per channel
-    lin = _scurve(lin, strength=stock.contrast, highlight_roll=stock.highlight_roll)
+    # 4. S-curve + highlight roll (preset contrast × XMP contrast multiplier)
+    xmp_contrast = _xmp_pick(xmp, "Contrast2012", "Contrast") / 100.0
+    contrast_eff = stock.contrast * (1.0 + xmp_contrast * 0.5)
+    xmp_highlights = _xmp_pick(xmp, "Highlights2012", "Highlights") / 100.0
+    # Negative XMP highlights = recover highlights = more roll-off
+    roll_eff = max(0.0, stock.highlight_roll + (-xmp_highlights) * 0.4)
+    xmp_whites = _xmp_pick(xmp, "Whites2012", "Whites") / 100.0
+    if abs(xmp_whites) > 1e-3:
+        lin = lin * (1.0 + xmp_whites * 0.15)
+    lin = _scurve(lin, strength=contrast_eff, highlight_roll=roll_eff)
 
     # 5. Halation in linear (BCHW)
     lin_bchw = lin.permute(0, 3, 1, 2).contiguous()
@@ -437,21 +603,34 @@ def apply_film_stock(
     )
     lin = lin_bchw.permute(0, 2, 3, 1).contiguous()
 
-    # 6. Saturation
-    lin = _saturate(lin, stock.saturation)
+    # 6. Saturation (preset × XMP Saturation; XMP Vibrance pulls less-saturated pixels harder)
+    xmp_sat = _xmp_pick(xmp, "Saturation") / 100.0
+    sat_eff = stock.saturation * (1.0 + xmp_sat)
+    lin = _saturate(lin, sat_eff)
+    xmp_vibrance = _xmp_pick(xmp, "Vibrance") / 100.0
+    if abs(xmp_vibrance) > 1e-3:
+        luma = 0.2126 * lin[..., 0:1] + 0.7152 * lin[..., 1:2] + 0.0722 * lin[..., 2:3]
+        chroma = (lin - luma).abs().max(dim=-1, keepdim=True).values
+        # Boost pixels with low chroma more (classic vibrance feel)
+        boost = (1.0 - chroma.clamp(0.0, 1.0)) * xmp_vibrance
+        lin = luma + (lin - luma) * (1.0 + boost)
 
-    # 7. Grain
+    # 7. Grain (preset + XMP GrainAmount slider folds in on top)
     generator = None
     if seed is not None and seed >= 0:
         try:
             generator = torch.Generator(device=device).manual_seed(int(seed))
         except (RuntimeError, TypeError):
             generator = None
+    xmp_grain_amount = _xmp_pick(xmp, "GrainAmount") / 100.0
+    xmp_grain_size = _xmp_pick(xmp, "GrainSize") / 100.0
+    grain_mass_eff = stock.grain_mass * max(0.0, grain_amount_mult) + xmp_grain_amount * 0.04
+    grain_size_eff = stock.grain_size + xmp_grain_size * 0.8
     lin = _add_grain(
         lin,
-        mass=stock.grain_mass * max(0.0, grain_amount_mult),
+        mass=grain_mass_eff,
         chroma_ratio=stock.grain_chroma,
-        size=stock.grain_size,
+        size=grain_size_eff,
         generator=generator,
     )
 
@@ -462,7 +641,14 @@ def apply_film_stock(
     if lut is not None:
         rgb = apply_cube_lut(rgb, lut)
 
-    # 10. Intensity mix
+    # 10. Post-crop vignette (XMP-driven, applied after LUT)
+    xmp_vig_amount = _xmp_pick(xmp, "PostCropVignetteAmount")
+    xmp_vig_mid = _xmp_pick(xmp, "PostCropVignetteMidpoint", default=50.0)
+    xmp_vig_feather = _xmp_pick(xmp, "PostCropVignetteFeather", default=50.0)
+    if abs(xmp_vig_amount) > 1e-3:
+        rgb = _post_crop_vignette(rgb, xmp_vig_amount, xmp_vig_mid, xmp_vig_feather)
+
+    # 11. Intensity mix
     intensity = max(0.0, min(1.0, float(intensity)))
     if intensity < 1.0:
         rgb = original * (1.0 - intensity) + rgb * intensity
@@ -475,8 +661,63 @@ def apply_film_stock(
 # ---------------------------------------------------------------------------
 
 
+_LUT_EXTS = (".cube", ".3dl")
+_XMP_EXTS = (".xmp",)
+
+
+def list_files(folder: str, exts: Tuple[str, ...]) -> list:
+    """Enumerate files under `folder` matching any extension in `exts`.
+
+    Recurses one level so a user can drop a folder containing subdirs of
+    presets and still see everything. Returns names *relative* to the folder
+    so the dropdown stays readable.
+    """
+    out: list = []
+    if not folder:
+        return out
+    base = pathlib.Path(folder).expanduser()
+    if not base.is_dir():
+        return out
+    lower = tuple(e.lower() for e in exts)
+    try:
+        for p in base.rglob("*"):
+            try:
+                if p.is_file() and p.suffix.lower() in lower:
+                    rel = p.relative_to(base).as_posix()
+                    out.append(rel)
+            except OSError:
+                continue
+    except OSError:
+        return out
+    out.sort()
+    return out
+
+
+def _resolve_chosen(folder: str, choice: str) -> Optional[pathlib.Path]:
+    """Resolve a (folder, dropdown-choice) pair to a concrete path.
+
+    `choice == "(none)"` means the dropdown is intentionally empty.
+    `choice` can also be an absolute path the user typed directly.
+    """
+    c = (choice or "").strip()
+    if not c or c == "(none)":
+        return None
+    p = pathlib.Path(c).expanduser()
+    if p.is_absolute() and p.is_file():
+        return p
+    if folder:
+        base = pathlib.Path(folder).expanduser()
+        candidate = base / c
+        if candidate.is_file():
+            return candidate
+    if p.is_file():
+        return p
+    return None
+
+
 class RayFilmStock:
-    """Film stock emulation with analytical curves and optional .cube LUT."""
+    """Film stock emulation with analytical curves, optional .cube LUT, and
+    optional Photoshop / Lightroom XMP develop-setting overlay."""
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -499,9 +740,21 @@ class RayFilmStock:
                 "seed": ("INT", {"default": -1, "min": -1, "max": 2**31 - 1}),
             },
             "optional": {
-                "lut_path": ("STRING", {
+                "lut_folder": ("STRING", {
                     "default": "", "multiline": False,
-                    "placeholder": "optional .cube LUT path (overrides curves)",
+                    "placeholder": "folder containing .cube/.3dl LUTs",
+                }),
+                "lut_file": ("STRING", {
+                    "default": "(none)", "multiline": False,
+                    "placeholder": "pick a LUT from the folder above",
+                }),
+                "xmp_folder": ("STRING", {
+                    "default": "", "multiline": False,
+                    "placeholder": "folder containing .xmp sidecars",
+                }),
+                "xmp_file": ("STRING", {
+                    "default": "(none)", "multiline": False,
+                    "placeholder": "pick an XMP from the folder above",
                 }),
             },
         }
@@ -520,17 +773,27 @@ class RayFilmStock:
         halation_amount,
         expose_stops,
         seed,
-        lut_path="",
+        lut_folder="",
+        lut_file="(none)",
+        xmp_folder="",
+        xmp_file="(none)",
     ):
         stock = STOCKS.get(preset)
         if stock is None:
             raise ValueError(f"unknown preset: {preset!r}")
+
         lut = None
-        if lut_path and lut_path.strip():
-            p = pathlib.Path(lut_path.strip()).expanduser()
-            if not p.is_file():
-                raise FileNotFoundError(f"LUT not found: {p}")
-            lut = parse_cube_lut(p.read_text(encoding="utf-8", errors="replace"))
+        lut_path = _resolve_chosen(lut_folder, lut_file)
+        if lut_path is not None:
+            lut = parse_cube_lut(lut_path.read_text(encoding="utf-8", errors="replace"))
+
+        xmp_settings = None
+        xmp_path = _resolve_chosen(xmp_folder, xmp_file)
+        if xmp_path is not None:
+            xmp_settings = parse_xmp_settings(
+                xmp_path.read_text(encoding="utf-8", errors="replace")
+            )
+
         out = apply_film_stock(
             image=image,
             stock=stock,
@@ -539,6 +802,7 @@ class RayFilmStock:
             halation_amount_mult=halation_amount,
             expose_stops=expose_stops,
             lut=lut,
+            xmp_settings=xmp_settings,
             seed=int(seed),
         )
         return (out,)
