@@ -48,7 +48,8 @@ function applyMode(node, mode) {
     }
     if (typeof node.computeSize === "function") {
         const sz = node.computeSize();
-        node.size[1] = sz[1];
+        if (Array.isArray(node.size)) node.size[1] = sz[1];
+        node.setSize?.([Array.isArray(node.size) ? node.size[0] : sz[0], sz[1]]);
     }
     node.setDirtyCanvas?.(true, true);
 }

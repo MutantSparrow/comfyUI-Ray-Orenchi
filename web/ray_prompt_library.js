@@ -48,7 +48,9 @@ function applyMode(node, mode) {
     }
     applyModeStyling(node, mode);
     if (typeof node.computeSize === "function") {
-        node.size[1] = node.computeSize()[1];
+        const sz = node.computeSize();
+        if (Array.isArray(node.size)) node.size[1] = sz[1];
+        node.setSize?.([Array.isArray(node.size) ? node.size[0] : sz[0], sz[1]]);
     }
     node.setDirtyCanvas?.(true, true);
 }
