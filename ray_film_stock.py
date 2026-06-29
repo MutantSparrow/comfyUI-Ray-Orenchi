@@ -663,15 +663,72 @@ def apply_film_stock(
 
 _LUT_EXTS = (".cube", ".3dl")
 _XMP_EXTS = (".xmp",)
+_ALL_EXTS = _LUT_EXTS + _XMP_EXTS
+
+NONE_CHOICE = "(none)"
 
 
-def list_files(folder: str, exts: Tuple[str, ...]) -> list:
-    """Enumerate files under `folder` matching any extension in `exts`.
+def _kind_for(ext: str) -> Optional[str]:
+    e = ext.lower()
+    if e in _LUT_EXTS:
+        return "lut"
+    if e in _XMP_EXTS:
+        return "xmp"
+    return None
 
-    Recurses one level so a user can drop a folder containing subdirs of
-    presets and still see everything. Returns names *relative* to the folder
-    so the dropdown stays readable.
+
+def list_assets(folder: str) -> list:
+    """Enumerate `.cube`/`.3dl`/`.xmp` under `folder` recursively, organized by
+    path and type.
+
+    Returns a sorted list of display strings. When the folder contains *both*
+    LUT and XMP files, entries are prefixed with `[LUT]` / `[XMP]` so the
+    dropdown can group by type. When only one kind exists, the prefix is
+    dropped to keep entries short. Subfolder paths are preserved in the entry
+    so the user navigates by path (e.g. `[LUT] cinema/portra.cube`).
+
+    The display strings are reversible via `_resolve_chosen` — they encode
+    enough to find the file again on the server side.
     """
+    out: list = []
+    if not folder:
+        return out
+    base = pathlib.Path(folder).expanduser()
+    if not base.is_dir():
+        return out
+
+    luts: list = []
+    xmps: list = []
+    try:
+        for p in base.rglob("*"):
+            try:
+                if not p.is_file():
+                    continue
+                kind = _kind_for(p.suffix)
+                if kind is None:
+                    continue
+                rel = p.relative_to(base).as_posix()
+                (luts if kind == "lut" else xmps).append(rel)
+            except OSError:
+                continue
+    except OSError:
+        return out
+
+    luts.sort()
+    xmps.sort()
+    mixed = bool(luts) and bool(xmps)
+    if mixed:
+        out.extend(f"[LUT] {r}" for r in luts)
+        out.extend(f"[XMP] {r}" for r in xmps)
+    else:
+        out.extend(luts)
+        out.extend(xmps)
+    return out
+
+
+# Back-compat shim — kept so external callers / older tests still work.
+def list_files(folder: str, exts: Tuple[str, ...]) -> list:
+    """Legacy: list files matching `exts`. New code should call `list_assets`."""
     out: list = []
     if not folder:
         return out
@@ -683,8 +740,7 @@ def list_files(folder: str, exts: Tuple[str, ...]) -> list:
         for p in base.rglob("*"):
             try:
                 if p.is_file() and p.suffix.lower() in lower:
-                    rel = p.relative_to(base).as_posix()
-                    out.append(rel)
+                    out.append(p.relative_to(base).as_posix())
             except OSError:
                 continue
     except OSError:
@@ -693,15 +749,30 @@ def list_files(folder: str, exts: Tuple[str, ...]) -> list:
     return out
 
 
-def _resolve_chosen(folder: str, choice: str) -> Optional[pathlib.Path]:
-    """Resolve a (folder, dropdown-choice) pair to a concrete path.
+def _strip_kind_tag(choice: str) -> str:
+    """Remove a leading `[LUT] ` / `[XMP] ` tag if present."""
+    c = (choice or "").strip()
+    if c.startswith("[LUT] "):
+        return c[len("[LUT] "):]
+    if c.startswith("[XMP] "):
+        return c[len("[XMP] "):]
+    return c
 
-    `choice == "(none)"` means the dropdown is intentionally empty.
-    `choice` can also be an absolute path the user typed directly.
+
+def _resolve_chosen(folder: str, choice: str) -> Optional[pathlib.Path]:
+    """Resolve a (folder, dropdown-choice) pair to a concrete file path.
+
+    Accepts:
+      - `(none)` or empty → None
+      - A tagged entry like `[LUT] cinema/portra.cube` → strips tag, resolves under folder
+      - An untagged relative path → resolves under folder
+      - An absolute path the user typed directly
+    Returns None when nothing usable matches.
     """
     c = (choice or "").strip()
-    if not c or c == "(none)":
+    if not c or c == NONE_CHOICE:
         return None
+    c = _strip_kind_tag(c)
     p = pathlib.Path(c).expanduser()
     if p.is_absolute() and p.is_file():
         return p
@@ -740,21 +811,13 @@ class RayFilmStock:
                 "seed": ("INT", {"default": -1, "min": -1, "max": 2**31 - 1}),
             },
             "optional": {
-                "lut_folder": ("STRING", {
+                "assets_folder": ("STRING", {
                     "default": "", "multiline": False,
-                    "placeholder": "folder containing .cube/.3dl LUTs",
+                    "placeholder": "folder with .cube / .3dl / .xmp (recursed)",
                 }),
-                "lut_file": ("STRING", {
-                    "default": "(none)", "multiline": False,
-                    "placeholder": "pick a LUT from the folder above",
-                }),
-                "xmp_folder": ("STRING", {
-                    "default": "", "multiline": False,
-                    "placeholder": "folder containing .xmp sidecars",
-                }),
-                "xmp_file": ("STRING", {
-                    "default": "(none)", "multiline": False,
-                    "placeholder": "pick an XMP from the folder above",
+                "asset_file": ("STRING", {
+                    "default": NONE_CHOICE, "multiline": False,
+                    "placeholder": "pick a LUT or XMP from the folder",
                 }),
             },
         }
@@ -773,26 +836,27 @@ class RayFilmStock:
         halation_amount,
         expose_stops,
         seed,
-        lut_folder="",
-        lut_file="(none)",
-        xmp_folder="",
-        xmp_file="(none)",
+        assets_folder="",
+        asset_file=NONE_CHOICE,
     ):
         stock = STOCKS.get(preset)
         if stock is None:
             raise ValueError(f"unknown preset: {preset!r}")
 
         lut = None
-        lut_path = _resolve_chosen(lut_folder, lut_file)
-        if lut_path is not None:
-            lut = parse_cube_lut(lut_path.read_text(encoding="utf-8", errors="replace"))
-
         xmp_settings = None
-        xmp_path = _resolve_chosen(xmp_folder, xmp_file)
-        if xmp_path is not None:
-            xmp_settings = parse_xmp_settings(
-                xmp_path.read_text(encoding="utf-8", errors="replace")
-            )
+        chosen_path = _resolve_chosen(assets_folder, asset_file)
+        if chosen_path is not None:
+            kind = _kind_for(chosen_path.suffix)
+            text = chosen_path.read_text(encoding="utf-8", errors="replace")
+            if kind == "lut":
+                lut = parse_cube_lut(text)
+            elif kind == "xmp":
+                xmp_settings = parse_xmp_settings(text)
+            else:
+                raise ValueError(
+                    f"asset_file extension not recognized: {chosen_path.suffix!r}"
+                )
 
         out = apply_film_stock(
             image=image,
