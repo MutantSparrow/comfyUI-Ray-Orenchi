@@ -188,6 +188,16 @@ STOCKS = {
         grain_mass=0.010, grain_chroma=0.3, grain_size=0.5,
         halation_amount=0.0, halation_sigma=2.0, halation_tint=(1.0, 0.55, 0.40),
     ),
+    # `None` is a true bypass — no curves, grain, halation, cast, or saturation.
+    # Use it when you want a LUT or XMP to be the *sole* color treatment and
+    # not have the analytical stock layer on top.
+    "None": FilmStockParams(
+        "None", "passthrough", 100,
+        black_lift=0.0, contrast=1.0, highlight_roll=0.0,
+        cast_rgb=(0.0, 0.0, 0.0), saturation=1.0,
+        grain_mass=0.0, grain_chroma=0.0, grain_size=0.0,
+        halation_amount=0.0, halation_sigma=0.0, halation_tint=(1.0, 1.0, 1.0),
+    ),
 }
 STOCK_NAMES = list(STOCKS.keys())
 
@@ -353,8 +363,21 @@ def parse_cube_lut(text: str) -> dict:
 def apply_cube_lut(img_bhwc: torch.Tensor, lut: dict) -> torch.Tensor:
     """Trilinear-interpolate a 3D LUT over `img_bhwc` (BHWC float32 [0,1]).
 
-    Uses torch.nn.functional.grid_sample on the LUT cube treated as a 3D
-    volume. Output is clamped to [0,1].
+    Axis bookkeeping (load-bearing — easy to swap by accident):
+
+    `.cube` spec: data lines iterate with R fastest, then G, then B. Our
+    `parse_cube_lut` reads them with `view(n, n, n, 3)` and Python's last-axis-
+    fastest order, so the table is indexed as `data[b][g][r][channel]`.
+
+    For F.grid_sample with a 5-D volume `(N, C, D, H, W)`:
+      - axis D corresponds to the FIRST table index (B)
+      - axis H corresponds to the SECOND table index (G)
+      - axis W corresponds to the THIRD table index (R)
+    Grid coords are `(x, y, z)` mapped to `(W, H, D)`, i.e. `(R, G, B)`.
+
+    Therefore the grid built from the (R,G,B) input image is `norm` directly,
+    NOT `norm[..., [2,1,0]]` — the previous swap inverted the cube and
+    produced color shifts proportional to how non-symmetric the LUT was.
     """
     if not isinstance(lut, dict) or "data" not in lut:
         raise ValueError("invalid LUT")
@@ -363,26 +386,17 @@ def apply_cube_lut(img_bhwc: torch.Tensor, lut: dict) -> torch.Tensor:
     dmax = torch.tensor(lut["domain_max"], dtype=img_bhwc.dtype, device=img_bhwc.device)
     cube = lut["data"].to(device=img_bhwc.device, dtype=img_bhwc.dtype)
 
-    # Normalize input to [0,1] within domain
     norm = ((img_bhwc - dmin) / (dmax - dmin).clamp_min(1e-8)).clamp(0.0, 1.0)
-    B, H, W, _ = norm.shape
+    B = norm.shape[0]
 
-    # grid_sample's 3D grid axes are (D=R, H=G, W=B) but conventional .cube
-    # iteration in spec is "B fastest, then G, then R" — meaning data[r,g,b,:]
-    # holds the LUT entry at coords (r,g,b). We treat the cube as volume
-    # indexed in [D,H,W] = [R,G,B].
-    # grid_sample expects volume shape (N, C, D, H, W) and grid (N, Dout, Hout, Wout, 3)
-    # with last-dim = (x,y,z) in [-1, 1] mapping to (W, H, D).
-    # Therefore for color (r,g,b), grid xyz = (b, g, r) mapped to [-1,1].
-    vol = cube.permute(3, 0, 1, 2).unsqueeze(0)  # (1, 3, N, N, N) — (C,D,H,W)
+    # cube: (B_dim, G_dim, R_dim, channel) → permute to (channel, D=B, H=G, W=R)
+    vol = cube.permute(3, 0, 1, 2).unsqueeze(0)
     vol = vol.expand(B, -1, -1, -1, -1)
-    # Build grid of shape (B, 1, H, W, 3) so output is (B, 3, 1, H, W) → squeeze.
-    grid = norm[..., [2, 1, 0]] * 2.0 - 1.0  # (B,H,W,3) → xyz=(b,g,r)
-    grid = grid.unsqueeze(1)  # (B,1,H,W,3)
+    # grid xyz = (R, G, B) — matches W, H, D respectively. No axis swap.
+    grid = (norm * 2.0 - 1.0).unsqueeze(1)  # (B, 1, H, W, 3)
     sampled = F.grid_sample(
         vol, grid, mode="bilinear", padding_mode="border", align_corners=True
     )
-    # sampled: (B, 3, 1, H, W) → (B, H, W, 3)
     sampled = sampled.squeeze(2).permute(0, 2, 3, 1)
     return sampled.clamp(0.0, 1.0)
 
@@ -560,37 +574,60 @@ def apply_film_stock(
     lin = (lin + cast).clamp_min(0.0)
     xmp_temp = xmp.get("Temperature")
     xmp_tint = xmp.get("Tint")
+    # XMP Temperature is the *as-shot* target on the scene. We treat the LR
+    # default of ~5500 as neutral and apply a normalized push so the slider
+    # behaves perceptually like LR's mild WB tilt — NOT a full Planckian
+    # remap (which would re-tint a fully-developed image dramatically).
     if isinstance(xmp_temp, (int, float)):
         r_mul, g_mul, b_mul = _kelvin_to_rgb_mul(xmp_temp)
+        # Pull each channel ~30% of the way from neutral so the cast is
+        # noticeable without overpowering the analytical stock layer.
+        blend = 0.30
+        r_mul = 1.0 + (r_mul - 1.0) * blend
+        g_mul = 1.0 + (g_mul - 1.0) * blend
+        b_mul = 1.0 + (b_mul - 1.0) * blend
         wb = torch.tensor([r_mul, g_mul, b_mul], device=device, dtype=dtype).view(1, 1, 1, 3)
         lin = lin * wb
     if isinstance(xmp_tint, (int, float)):
         # Tint slider ranges ~-150..+150. Positive = magenta (boost R+B), neg = green (boost G).
+        # Keep deltas small — full slider ≈ ±4% per channel.
         t = max(-150.0, min(150.0, float(xmp_tint))) / 150.0
         tint_mul = torch.tensor(
-            [1.0 + t * 0.10, 1.0 - t * 0.10, 1.0 + t * 0.05],
+            [1.0 + t * 0.04, 1.0 - t * 0.04, 1.0 + t * 0.02],
             device=device, dtype=dtype,
         ).view(1, 1, 1, 3)
         lin = lin * tint_mul
 
     # 3. Black lift (+XMP Shadows/Blacks)
+    # LR Blacks slider is -100..+100; we treat it as a *shadow-only* lift so
+    # +100 doesn't simply brighten the entire image.
     xmp_shadows = _xmp_pick(xmp, "Shadows2012", "Shadows") / 100.0
     xmp_blacks = _xmp_pick(xmp, "Blacks2012", "Blacks") / 100.0
-    lin = lin + stock.black_lift + xmp_blacks * 0.05
+    lin = lin + stock.black_lift
+    if abs(xmp_blacks) > 1e-3:
+        # Mask: pixels in linear < 0.1 get the full lift, falling off by 0.25.
+        mask = (0.25 - lin).clamp(0.0, 0.25) / 0.25
+        lin = lin + mask * (xmp_blacks * 0.03)
     if abs(xmp_shadows) > 1e-3:
-        # Boost shadows: gamma-bend the lower region
-        shadow_gamma = max(0.4, 1.0 - xmp_shadows * 0.4)
-        lin = torch.where(lin < 0.3, lin.clamp_min(0.0) ** shadow_gamma, lin)
+        shadow_gamma = max(0.5, 1.0 - xmp_shadows * 0.25)
+        # Cubic falloff window so the bend is local to shadow region.
+        lift_mask = ((0.35 - lin).clamp(0.0, 0.35) / 0.35) ** 2
+        shadow_bent = lin.clamp_min(0.0) ** shadow_gamma
+        lin = lin + (shadow_bent - lin) * lift_mask
 
     # 4. S-curve + highlight roll (preset contrast × XMP contrast multiplier)
     xmp_contrast = _xmp_pick(xmp, "Contrast2012", "Contrast") / 100.0
-    contrast_eff = stock.contrast * (1.0 + xmp_contrast * 0.5)
+    # XMP Contrast ±100 → stock contrast scaled by ±20%
+    contrast_eff = stock.contrast * (1.0 + xmp_contrast * 0.20)
     xmp_highlights = _xmp_pick(xmp, "Highlights2012", "Highlights") / 100.0
-    # Negative XMP highlights = recover highlights = more roll-off
-    roll_eff = max(0.0, stock.highlight_roll + (-xmp_highlights) * 0.4)
+    # Negative LR highlights = recover; positive = brighten. Apply as gentle
+    # roll-off delta — full slider ±20% of the roll region.
+    roll_eff = max(0.0, min(1.0, stock.highlight_roll + (-xmp_highlights) * 0.20))
     xmp_whites = _xmp_pick(xmp, "Whites2012", "Whites") / 100.0
     if abs(xmp_whites) > 1e-3:
-        lin = lin * (1.0 + xmp_whites * 0.15)
+        # Highlight-only gain, same mask shape as the shadow bend.
+        white_mask = ((lin - 0.65).clamp(0.0, 0.35) / 0.35) ** 2
+        lin = lin + white_mask * (xmp_whites * 0.10)
     lin = _scurve(lin, strength=contrast_eff, highlight_roll=roll_eff)
 
     # 5. Halation in linear (BCHW)
@@ -604,16 +641,20 @@ def apply_film_stock(
     lin = lin_bchw.permute(0, 2, 3, 1).contiguous()
 
     # 6. Saturation (preset × XMP Saturation; XMP Vibrance pulls less-saturated pixels harder)
+    # XMP Saturation ±100 → stock saturation scaled by ±50% (was ±100% before,
+    # which made +100 produce double-saturated burns on already-saturated stocks).
     xmp_sat = _xmp_pick(xmp, "Saturation") / 100.0
-    sat_eff = stock.saturation * (1.0 + xmp_sat)
+    sat_eff = stock.saturation * (1.0 + xmp_sat * 0.5)
     lin = _saturate(lin, sat_eff)
     xmp_vibrance = _xmp_pick(xmp, "Vibrance") / 100.0
     if abs(xmp_vibrance) > 1e-3:
+        # Use Rec.709 luma in linear space; clamp chroma to avoid negative
+        # boost factors when channels exceed neutral.
         luma = 0.2126 * lin[..., 0:1] + 0.7152 * lin[..., 1:2] + 0.0722 * lin[..., 2:3]
-        chroma = (lin - luma).abs().max(dim=-1, keepdim=True).values
-        # Boost pixels with low chroma more (classic vibrance feel)
-        boost = (1.0 - chroma.clamp(0.0, 1.0)) * xmp_vibrance
-        lin = luma + (lin - luma) * (1.0 + boost)
+        chroma = (lin - luma).abs().max(dim=-1, keepdim=True).values.clamp(0.0, 1.0)
+        # Half the magnitude of Saturation, weighted toward low-chroma pixels.
+        boost = (1.0 - chroma) * xmp_vibrance * 0.5
+        lin = (luma + (lin - luma) * (1.0 + boost)).clamp_min(0.0)
 
     # 7. Grain (preset + XMP GrainAmount slider folds in on top)
     generator = None
@@ -624,8 +665,9 @@ def apply_film_stock(
             generator = None
     xmp_grain_amount = _xmp_pick(xmp, "GrainAmount") / 100.0
     xmp_grain_size = _xmp_pick(xmp, "GrainSize") / 100.0
-    grain_mass_eff = stock.grain_mass * max(0.0, grain_amount_mult) + xmp_grain_amount * 0.04
-    grain_size_eff = stock.grain_size + xmp_grain_size * 0.8
+    # XMP GrainAmount is 0..100; treat as additive ~0..0.02 of luma std
+    grain_mass_eff = stock.grain_mass * max(0.0, grain_amount_mult) + max(0.0, xmp_grain_amount) * 0.02
+    grain_size_eff = max(0.0, stock.grain_size + max(0.0, xmp_grain_size) * 0.4)
     lin = _add_grain(
         lin,
         mass=grain_mass_eff,
