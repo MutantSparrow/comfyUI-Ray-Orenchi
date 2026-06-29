@@ -75,7 +75,7 @@ class RayPromptIterator:
     RETURN_TYPES = ("STRING", "FLOAT", "IMAGE",)
     RETURN_NAMES = ("new_prompt", "confidence", "image",)
     FUNCTION = "process"
-    CATEGORY = "Ray/LLM💬"
+    CATEGORY = "Ray/Prompts📝"
 
     def process(self, server_url, model, keep_alive, temperature, seed, copy_to_clipboard,
                 original_prompt, image=None, changes_required=None, node_id=None):

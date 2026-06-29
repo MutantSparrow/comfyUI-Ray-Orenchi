@@ -401,7 +401,7 @@ class RayVHS:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("image",)
     FUNCTION = "process"
-    CATEGORY = "Ray/VHS📼"
+    CATEGORY = "Ray/VFX✨"
 
     def process(
         self,

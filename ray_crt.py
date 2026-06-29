@@ -595,7 +595,7 @@ class RayCRT:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("crt_image",)
     FUNCTION = "process"
-    CATEGORY = "Ray/CRT📺"
+    CATEGORY = "Ray/VFX✨"
 
     def process(
         self,

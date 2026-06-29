@@ -10,7 +10,7 @@ class RaySwitch:
     RETURN_TYPES = ("BOOLEAN",)
     RETURN_NAMES = ("bool",)
     FUNCTION = "process"
-    CATEGORY = "Ray/Switch🔘"
+    CATEGORY = "Ray/Analog🎛️"
 
     def process(self, state):
         return (bool(state),)

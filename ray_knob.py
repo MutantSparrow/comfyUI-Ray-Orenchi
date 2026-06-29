@@ -18,7 +18,7 @@ class RayKnob:
     RETURN_TYPES = ("INT", "FLOAT")
     RETURN_NAMES = ("int", "float")
     FUNCTION = "process"
-    CATEGORY = "Ray/Knob🎛️"
+    CATEGORY = "Ray/Analog🎛️"
 
     def process(self, min_value, max_value, spin_value, clamp, allow_negative, knob_value):
         lo = float(min_value) if allow_negative else max(0.0, float(min_value))

@@ -312,7 +312,7 @@ class RayPromptDexter:
     RETURN_TYPES = ("STRING", "STRING", "IMAGE")
     RETURN_NAMES = ("prompt_single", "prompt_multiline", "image")
     FUNCTION = "process"
-    CATEGORY = "Ray/Web🌐"
+    CATEGORY = "Ray/Prompts📝"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
