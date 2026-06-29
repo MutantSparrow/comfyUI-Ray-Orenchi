@@ -35,6 +35,21 @@ def test_stock_names_includes_all_families():
     assert "Kodak Tri-X 400" in names
     assert "Fuji Velvia 50" in names
     assert "Custom" in names
+    assert "None" in names
+
+
+def test_none_preset_is_passthrough_without_grain():
+    """`None` preset must leave the image untouched when grain/halation/XMP/LUT
+    are all zero. Lets users layer a LUT or XMP cleanly without the stock."""
+    img = _ramp(32, 32)
+    node = rfs.RayFilmStock()
+    (out,) = node.process(
+        image=img, preset="None",
+        intensity=1.0, grain_amount=0.0, halation_amount=0.0,
+        expose_stops=0.0, seed=0,
+    )
+    diff = (out - img).abs().max().item()
+    assert diff < 0.02, f"None preset must be near-identity, max diff was {diff}"
 
 
 def test_node_returns_image_tensor():
@@ -172,6 +187,48 @@ def test_apply_identity_lut_is_close_to_input():
     lut = rfs.parse_cube_lut(_identity_cube_text(8))
     out = rfs.apply_cube_lut(img, lut)
     assert torch.allclose(out, img, atol=0.05)
+
+
+def _channel_swap_cube_text(n=4):
+    """Asymmetric LUT: maps (r,g,b) -> (b,g,r). Verifies LUT axis bookkeeping.
+
+    If axis order is wrong, output channel ordering breaks and a pure-red
+    input no longer becomes pure-blue.
+    """
+    lines = [f"LUT_3D_SIZE {n}"]
+    for b in range(n):
+        for g in range(n):
+            for r in range(n):
+                rv = r / (n - 1)
+                gv = g / (n - 1)
+                bv = b / (n - 1)
+                # Output: swap R and B
+                lines.append(f"{bv:.6f} {gv:.6f} {rv:.6f}")
+    return "\n".join(lines)
+
+
+def test_apply_lut_axis_order_is_correct():
+    """A LUT that swaps R<->B must actually swap the channels on output.
+    Catches the BGR/RGB axis bug in `apply_cube_lut`'s grid construction."""
+    lut = rfs.parse_cube_lut(_channel_swap_cube_text(8))
+    # Pure red input
+    red = torch.zeros((1, 4, 4, 3), dtype=torch.float32)
+    red[..., 0] = 1.0
+    out = rfs.apply_cube_lut(red, lut)
+    # Expected: pure blue (R=0, G=0, B=1)
+    assert out[..., 0].max().item() < 0.1, f"R channel should be ~0, got {out[..., 0].max().item()}"
+    assert out[..., 2].min().item() > 0.9, f"B channel should be ~1, got {out[..., 2].min().item()}"
+
+
+def test_apply_lut_preserves_green_when_swapping_r_and_b():
+    lut = rfs.parse_cube_lut(_channel_swap_cube_text(8))
+    green = torch.zeros((1, 4, 4, 3), dtype=torch.float32)
+    green[..., 1] = 1.0
+    out = rfs.apply_cube_lut(green, lut)
+    # Green stays green under an R<->B swap LUT
+    assert out[..., 1].min().item() > 0.9
+    assert out[..., 0].max().item() < 0.1
+    assert out[..., 2].max().item() < 0.1
 
 
 def test_lut_in_node_via_unified_dropdown(tmp_path):
