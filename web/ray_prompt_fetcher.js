@@ -94,8 +94,8 @@ function updateDexterCategoryWidget(node, list, anyLabel) {
     const w = getWidget(node, "dexter__category");
     if (!w) return;
     const merged = [anyLabel, ...list.filter((c) => c && c !== anyLabel)];
-    w.options = w.options || {};
-    w.options.values = merged;
+    // Replace the whole options object so Vue's reactivity tracker notices.
+    w.options = { ...(w.options || {}), values: merged };
     if (!merged.includes(w.value)) w.value = anyLabel;
     node.setDirtyCanvas?.(true, true);
 }
