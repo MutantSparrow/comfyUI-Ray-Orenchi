@@ -71,3 +71,31 @@ def linear_to_srgb(t: torch.Tensor) -> torch.Tensor:
         t * SRGB_LINEAR_SLOPE,
         SRGB_GAMMA_SLOPE * t.clamp_min(0.0).pow(1.0 / SRGB_GAMMA_EXPONENT) - SRGB_GAMMA_OFFSET,
     )
+
+
+# --- YUV (BT.601) ------------------------------------------------------------
+# Used by analog-video nodes (VHS, NTSC) where chroma subsampling and head-
+# switching artifacts are most natural to model in Y/U/V.
+
+BT601_RGB_TO_YUV = (
+    (0.299, 0.587, 0.114),
+    (-0.14713, -0.28886, 0.436),
+    (0.615, -0.51499, -0.10001),
+)
+BT601_YUV_TO_RGB = (
+    (1.0, 0.0, 1.13983),
+    (1.0, -0.39465, -0.58060),
+    (1.0, 2.03211, 0.0),
+)
+
+
+def rgb_to_yuv(t: torch.Tensor) -> torch.Tensor:
+    """BHWC sRGB-encoded RGB [0,1] → BHWC YUV (Y in [0,1], U,V in [-0.5,0.5])."""
+    m = torch.tensor(BT601_RGB_TO_YUV, dtype=t.dtype, device=t.device)
+    return torch.einsum("...c,kc->...k", t, m)
+
+
+def yuv_to_rgb(t: torch.Tensor) -> torch.Tensor:
+    """BHWC YUV → BHWC RGB [0,1] (sRGB-encoded; clamped)."""
+    m = torch.tensor(BT601_YUV_TO_RGB, dtype=t.dtype, device=t.device)
+    return torch.einsum("...c,kc->...k", t, m).clamp(0.0, 1.0)
