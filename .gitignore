@@ -29,3 +29,7 @@ desktop.ini
 # Secrets — never commit token/key files
 *.secret
 civitai.secret
+
+# Local prompt library database (RayPromptLibrary)
+prompt_library.db
+prompt_library.db-*
