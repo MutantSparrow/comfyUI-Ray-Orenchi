@@ -10,6 +10,11 @@ Bundles:
   • RayPromptDexter          — Ray's Web: PromptDexter Scraper
   • RayCivitAI               — Ray's Web: CivitAI Gallery Scraper
   • RayLocalScraper          — Ray's Local: Folder Image Scraper
+  • RayPromptFetcher         — Ray's Prompt Fetcher (Local + Web combined)
+  • RayMetaInspect           — Ray's Local: Metadata Inspector (read/embed)
+  • RayPromptLibrary         — Ray's LM: Local Prompt Library (SQLite)
+  • RayFilmStock             — Ray's VFX: Film Stock emulation
+  • RayVHS                   — Ray's VFX: VHS / Tape degradation
 
 Web assets live under ./web and are served at /extensions/comfyUI-Ray-Orenchi/.
 """
@@ -26,9 +31,15 @@ try:
     from .ray_promptdexter import RayPromptDexter
     from .ray_civitai import RayCivitAI
     from .ray_local_scraper import RayLocalScraper
+    from .ray_prompt_fetcher import RayPromptFetcher
+    from .ray_meta_inspect import RayMetaInspect
+    from .ray_prompt_library import RayPromptLibrary
+    from .ray_film_stock import RayFilmStock
+    from .ray_vhs import RayVHS
     from . import ollama_routes  # noqa: F401  registers aiohttp routes on import
     from . import promptdexter_routes  # noqa: F401
     from . import civitai_routes  # noqa: F401
+    from . import prompt_library_routes  # noqa: F401
 except ImportError:
     from ray_crt import RayCRT
     from ray_offset_print import RayOffsetPrint
@@ -40,6 +51,11 @@ except ImportError:
     from ray_promptdexter import RayPromptDexter
     from ray_civitai import RayCivitAI
     from ray_local_scraper import RayLocalScraper
+    from ray_prompt_fetcher import RayPromptFetcher
+    from ray_meta_inspect import RayMetaInspect
+    from ray_prompt_library import RayPromptLibrary
+    from ray_film_stock import RayFilmStock
+    from ray_vhs import RayVHS
     try:
         import ollama_routes  # noqa: F401
     except ImportError:
@@ -50,6 +66,10 @@ except ImportError:
         pass
     try:
         import civitai_routes  # noqa: F401
+    except ImportError:
+        pass
+    try:
+        import prompt_library_routes  # noqa: F401
     except ImportError:
         pass
 
@@ -67,6 +87,11 @@ NODE_CLASS_MAPPINGS = {
     "RayPromptDexter":     RayPromptDexter,
     "RayCivitAI":          RayCivitAI,
     "RayLocalScraper":     RayLocalScraper,
+    "RayPromptFetcher":    RayPromptFetcher,
+    "RayMetaInspect":      RayMetaInspect,
+    "RayPromptLibrary":    RayPromptLibrary,
+    "RayFilmStock":        RayFilmStock,
+    "RayVHS":              RayVHS,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -80,6 +105,11 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayPromptDexter":     "Ray's Web: PromptDexter Scraper",
     "RayCivitAI":          "Ray's Web: CivitAI Gallery Scraper",
     "RayLocalScraper":     "Ray's Local: Folder Image Scraper",
+    "RayPromptFetcher":    "Ray's Prompt Fetcher",
+    "RayMetaInspect":      "Ray's Local: Metadata Inspector",
+    "RayPromptLibrary":    "Ray's LM: Prompt Library",
+    "RayFilmStock":        "Ray's VFX: Film Stock",
+    "RayVHS":              "Ray's VFX: VHS / Tape",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
