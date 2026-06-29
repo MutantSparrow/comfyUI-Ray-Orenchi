@@ -174,3 +174,146 @@ def test_return_names_match_count():
     rt = rmi.RayMetaInspect.RETURN_TYPES
     rn = rmi.RayMetaInspect.RETURN_NAMES
     assert len(rt) == len(rn) == 12
+
+
+# ----- path resolution -----------------------------------------------------
+
+
+def test_resolve_path_direct_absolute(tmp_path):
+    p = _png(tmp_path / "x.png")
+    out = rmi._resolve_path(str(p))
+    assert out == p
+
+
+@pytest.mark.parametrize("wrap", [
+    ('"', '"'),
+    ("'", "'"),
+    ("«", "»"),
+    ("“", "”"),
+    ("‘", "’"),
+])
+def test_resolve_path_strips_surrounding_quotes(tmp_path, wrap):
+    """Windows Explorer's 'Copy as path' wraps in `"…"`; macOS and some
+    locales use guillemets / smart quotes. A wrapped path must still resolve."""
+    p = _png(tmp_path / "quoted.png")
+    quoted = f"{wrap[0]}{p}{wrap[1]}"
+    out = rmi._resolve_path(quoted)
+    assert out == p
+
+
+def test_resolve_path_strips_quotes_around_annotated(tmp_path, monkeypatch):
+    target = _png(tmp_path / "annot.png")
+
+    class _Stub:
+        @staticmethod
+        def get_input_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_output_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_temp_directory():
+            return str(tmp_path)
+
+    monkeypatch.setattr(rmi, "folder_paths", _Stub)
+    out = rmi._resolve_path('"annot.png [input]"')
+    assert out == target
+
+
+def test_resolve_path_empty_returns_non_file():
+    out = rmi._resolve_path("")
+    # Empty input → a Path that isn't a real file. The caller (_do_inspect)
+    # short-circuits on empty input before reaching the resolver anyway.
+    assert not out.is_file()
+
+
+def test_resolve_path_annotated_input_via_folder_paths(tmp_path, monkeypatch):
+    """The /upload/image drag-drop returns `name [input]` — the resolver must
+    route that through folder_paths.get_input_directory() so the file is
+    located even when CWD is not ComfyUI's root."""
+    target = _png(tmp_path / "__00039_.png")
+
+    class _Stub:
+        @staticmethod
+        def get_input_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_output_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_temp_directory():
+            return str(tmp_path)
+
+    monkeypatch.setattr(rmi, "folder_paths", _Stub)
+    out = rmi._resolve_path("__00039_.png [input]")
+    assert out == target
+
+
+def test_resolve_path_relative_input_prefix(tmp_path, monkeypatch):
+    target = _png(tmp_path / "shot.png")
+
+    class _Stub:
+        @staticmethod
+        def get_input_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_output_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_temp_directory():
+            return str(tmp_path)
+
+    monkeypatch.setattr(rmi, "folder_paths", _Stub)
+    out = rmi._resolve_path("input/shot.png")
+    assert out == target
+
+
+def test_resolve_path_annotated_with_subfolder(tmp_path, monkeypatch):
+    (tmp_path / "sub").mkdir()
+    target = _png(tmp_path / "sub" / "nested.png")
+
+    class _Stub:
+        @staticmethod
+        def get_input_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_output_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_temp_directory():
+            return str(tmp_path)
+
+    monkeypatch.setattr(rmi, "folder_paths", _Stub)
+    out = rmi._resolve_path("sub/nested.png [input]")
+    assert out == target
+
+
+def test_resolve_path_missing_file_returns_original(tmp_path, monkeypatch):
+    """When nothing resolves, return the user-supplied path verbatim so
+    inspect_file() can surface a clear 'not a file' error."""
+    class _Stub:
+        @staticmethod
+        def get_input_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_output_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_temp_directory():
+            return str(tmp_path)
+
+    monkeypatch.setattr(rmi, "folder_paths", _Stub)
+    out = rmi._resolve_path("does_not_exist.png [input]")
+    # Resolver falls back to the direct expanduser path.
+    assert "does_not_exist.png" in str(out)
+    assert not out.is_file()

@@ -35,8 +35,10 @@ function rebuildDropdown(node, files) {
     if (!w) return;
     const values = [NONE, ...files];
     const prev = w.value;
-    w.options = w.options || {};
-    w.options.values = values;
+    // Replace the whole options object (not just .values in-place) so Vue's
+    // reactivity tracker notices the new reference. LiteGraph reads .values
+    // freshly on each draw, so it doesn't care either way.
+    w.options = { ...(w.options || {}), values };
     w.value = values.includes(prev) ? prev : NONE;
     node.setDirtyCanvas?.(true, true);
 }

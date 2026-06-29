@@ -39,6 +39,15 @@ try:
 except ImportError:
     torch = None
 
+# Optional: ComfyUI's path resolver. Lets the node accept the annotated
+# "name [input]" / "name [output]" / "name [temp]" filename format that the
+# /upload/image endpoint returns, plus plain relative `input/foo.png` paths
+# when ComfyUI's CWD differs from this node-pack's CWD.
+try:
+    import folder_paths  # type: ignore[import-not-found]
+except ImportError:
+    folder_paths = None  # type: ignore[assignment]
+
 try:
     from .ray_local_scraper import (
         _strip_a1111,
@@ -60,6 +69,98 @@ except ImportError:
 MODE_INSPECT = "Inspect"
 MODE_EMBED = "Embed"
 MODES = [MODE_INSPECT, MODE_EMBED]
+
+
+_ANNOTATED_RE = re.compile(r"^(.*)\s*\[(input|output|temp)\]\s*$")
+
+# Pairs of quote characters that may wrap a copied path. Windows Explorer's
+# "Copy as path" uses ASCII double quotes; some locales paste guillemets or
+# curly quotes instead.
+_QUOTE_PAIRS = (
+    ('"', '"'),
+    ("'", "'"),
+    ("«", "»"),
+    ("“", "”"),  # “ ”
+    ("‘", "’"),  # ‘ ’
+    ("`", "`"),
+)
+
+
+def _strip_path_quotes(s: str) -> str:
+    """Strip one matched pair of surrounding quote characters, if present."""
+    if not s:
+        return s
+    for opener, closer in _QUOTE_PAIRS:
+        if len(s) >= 2 and s[0] == opener and s[-1] == closer:
+            return s[1:-1].strip()
+    return s
+
+
+def _resolve_path(path_str: str) -> pathlib.Path:
+    """Resolve a user-supplied path. Handles three shapes:
+
+      1. An absolute path or a path that already exists relative to CWD.
+      2. ComfyUI's annotated `name [input]` / `name [output]` / `name [temp]`
+         filename format returned by the /upload/image endpoint.
+      3. Plain `input/<name>` / `output/<name>` / `temp/<name>` relative paths,
+         which we look up via `folder_paths` against ComfyUI's actual roots so
+         the node works even when the process CWD differs from ComfyUI's.
+
+    Returns the first candidate that resolves to an existing file. Falls back
+    to the original `pathlib.Path(path_str)` so `inspect_file` can surface a
+    clear "not a file" error if none worked.
+    """
+    raw = (path_str or "").strip()
+    # Windows Explorer's "Copy as path" wraps the path with `"…"`. macOS and
+    # some shells use guillemets / smart quotes. Strip a single matched pair
+    # of any common quote characters so a literal paste resolves cleanly.
+    raw = _strip_path_quotes(raw)
+    if not raw:
+        return pathlib.Path(raw)
+
+    # 1. Direct
+    direct = pathlib.Path(raw).expanduser()
+    if direct.is_file():
+        return direct
+
+    # 2. Annotated "name [input]"
+    m = _ANNOTATED_RE.match(raw)
+    sub = ""
+    name = None
+    folder_type = None
+    if m:
+        name = m.group(1).strip()
+        folder_type = m.group(2)
+        # The "name" portion may itself contain a forward-slash subfolder.
+        if "/" in name or "\\" in name:
+            sub_path = pathlib.Path(name)
+            sub = str(sub_path.parent)
+            name = sub_path.name
+    elif raw.lower().startswith(("input/", "input\\", "output/", "output\\",
+                                  "temp/", "temp\\")):
+        # 3. `input/<name>` style — strip the prefix and route via folder_paths.
+        head = raw.split("/", 1)[0].split("\\", 1)[0].lower()
+        rest = pathlib.Path(raw[len(head) + 1:])
+        folder_type = head
+        name = rest.name
+        sub = str(rest.parent) if str(rest.parent) != "." else ""
+
+    if folder_type and name and folder_paths is not None:
+        try:
+            if folder_type == "input":
+                base = folder_paths.get_input_directory()
+            elif folder_type == "output":
+                base = folder_paths.get_output_directory()
+            else:
+                base = folder_paths.get_temp_directory()
+        except Exception:
+            base = None
+        if base:
+            candidate = pathlib.Path(base) / sub / name if sub else pathlib.Path(base) / name
+            if candidate.is_file():
+                return candidate
+
+    return direct
 
 
 _A1111_NEG_RE = re.compile(r"\nNegative prompt:\s*(.*?)(?=\n[A-Z][a-z]+ ?[A-Za-z]*:|$)", re.DOTALL)
@@ -434,7 +535,7 @@ class RayMetaInspect:
     def _do_inspect(self, path_str):
         if not path_str:
             return self._empty_outputs("path is empty")
-        p = pathlib.Path(path_str).expanduser()
+        p = _resolve_path(path_str)
         r = inspect_file(p)
         tensor = _pil_to_tensor(r["pil_image"]) if r["pil_image"] is not None else _empty_tensor()
         return (
