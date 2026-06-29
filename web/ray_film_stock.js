@@ -21,7 +21,11 @@ async function fetchAssets(folder) {
 }
 
 /**
- * Rebuild the asset_file widget as a combo dropdown with the supplied entries.
+ * Update the asset_file dropdown's choice list with the supplied entries.
+ * The widget is already a combo (declared as such in INPUT_TYPES so Vue and
+ * LiteGraph both render a real dropdown). We only swap the values array and
+ * preserve the current selection when still valid.
+ *
  * When the folder contains both LUTs and XMPs the entries are pre-tagged
  * `[LUT] …` / `[XMP] …`; otherwise they're plain relative paths. Subfolder
  * paths are kept verbatim so the dropdown navigates by directory.
@@ -33,10 +37,6 @@ function rebuildDropdown(node, files) {
     const prev = w.value;
     w.options = w.options || {};
     w.options.values = values;
-    if (w.type !== "combo") {
-        w.__rfsOrigType = w.__rfsOrigType ?? w.type;
-        w.type = "combo";
-    }
     w.value = values.includes(prev) ? prev : NONE;
     node.setDirtyCanvas?.(true, true);
 }

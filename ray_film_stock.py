@@ -815,10 +815,12 @@ class RayFilmStock:
                     "default": "", "multiline": False,
                     "placeholder": "folder with .cube / .3dl / .xmp (recursed)",
                 }),
-                "asset_file": ("STRING", {
-                    "default": NONE_CHOICE, "multiline": False,
-                    "placeholder": "pick a LUT or XMP from the folder",
-                }),
+                # Declared as a COMBO (list of choices) so both LiteGraph and
+                # the Vue frontend render a real dropdown. The companion JS
+                # repopulates `.options.values` live whenever assets_folder
+                # changes. Default list seeded with the (none) sentinel so the
+                # widget is interactive even before a folder is set.
+                "asset_file": ([NONE_CHOICE], {"default": NONE_CHOICE}),
             },
         }
 
@@ -826,6 +828,13 @@ class RayFilmStock:
     RETURN_NAMES = ("image",)
     FUNCTION = "process"
     CATEGORY = "Ray/Film📷"
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, asset_file=None, **kwargs):
+        """Accept any asset_file value — its allowed set is server-discovered
+        from `assets_folder` at runtime via the companion JS, so the static
+        combo list is just a UI seed, not a source of truth."""
+        return True
 
     def process(
         self,
