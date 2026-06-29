@@ -1,24 +1,17 @@
 import { app } from "../../scripts/app.js";
 
 const NODE_NAME = "RayFilmStock";
-
-const KIND_BY_FILE = {
-    lut_file: "lut",
-    xmp_file: "xmp",
-};
-const FILE_TO_FOLDER = {
-    lut_file: "lut_folder",
-    xmp_file: "xmp_folder",
-};
+const FOLDER_WIDGET = "assets_folder";
+const FILE_WIDGET = "asset_file";
 const NONE = "(none)";
 
 function getWidget(node, name) {
     return node.widgets?.find((w) => w.name === name);
 }
 
-async function fetchList(kind, folder) {
+async function fetchAssets(folder) {
     try {
-        const url = `/ray_film_stock/list?kind=${encodeURIComponent(kind)}&folder=${encodeURIComponent(folder)}`;
+        const url = `/ray_film_stock/list?folder=${encodeURIComponent(folder)}`;
         const r = await fetch(url);
         const j = await r.json();
         return Array.isArray(j.files) ? j.files : [];
@@ -28,20 +21,18 @@ async function fetchList(kind, folder) {
 }
 
 /**
- * Convert a STRING widget into a combo dropdown of files plus a "(none)"
- * sentinel. Re-runs each time the corresponding folder changes.
+ * Rebuild the asset_file widget as a combo dropdown with the supplied entries.
+ * When the folder contains both LUTs and XMPs the entries are pre-tagged
+ * `[LUT] …` / `[XMP] …`; otherwise they're plain relative paths. Subfolder
+ * paths are kept verbatim so the dropdown navigates by directory.
  */
-function rebuildAsDropdown(node, fileWidgetName, files) {
-    const w = getWidget(node, fileWidgetName);
+function rebuildDropdown(node, files) {
+    const w = getWidget(node, FILE_WIDGET);
     if (!w) return;
     const values = [NONE, ...files];
-    // Preserve current selection if still valid; else fall back to NONE.
     const prev = w.value;
     w.options = w.options || {};
     w.options.values = values;
-    // Switch widget visual type to combo if it's currently a text input.
-    // STRING widgets register as `text` by default; mutate `type` and add a
-    // `callback` so LiteGraph + Vue both render a dropdown.
     if (w.type !== "combo") {
         w.__rfsOrigType = w.__rfsOrigType ?? w.type;
         w.type = "combo";
@@ -50,38 +41,33 @@ function rebuildAsDropdown(node, fileWidgetName, files) {
     node.setDirtyCanvas?.(true, true);
 }
 
-async function refreshDropdown(node, fileWidgetName) {
-    const kind = KIND_BY_FILE[fileWidgetName];
-    const folderW = getWidget(node, FILE_TO_FOLDER[fileWidgetName]);
+async function refresh(node) {
+    const folderW = getWidget(node, FOLDER_WIDGET);
     const folder = (folderW?.value || "").trim();
     if (!folder) {
-        rebuildAsDropdown(node, fileWidgetName, []);
+        rebuildDropdown(node, []);
         return;
     }
-    const files = await fetchList(kind, folder);
-    rebuildAsDropdown(node, fileWidgetName, files);
+    const files = await fetchAssets(folder);
+    rebuildDropdown(node, files);
 }
 
-function wireFolderToFile(node, folderName, fileName) {
-    const folderW = getWidget(node, folderName);
+function wireFolderListener(node) {
+    const folderW = getWidget(node, FOLDER_WIDGET);
     if (!folderW) return;
     const orig = folderW.callback;
     let debounceTimer = null;
     folderW.callback = function (v) {
         const r = orig?.apply(this, arguments);
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => refreshDropdown(node, fileName), 350);
+        debounceTimer = setTimeout(() => refresh(node), 350);
         return r;
     };
 }
 
 function bootstrap(node) {
-    wireFolderToFile(node, "lut_folder", "lut_file");
-    wireFolderToFile(node, "xmp_folder", "xmp_file");
-    // Initial population — covers workflows loaded from disk where the
-    // folder text widget already has a value.
-    refreshDropdown(node, "lut_file");
-    refreshDropdown(node, "xmp_file");
+    wireFolderListener(node);
+    refresh(node);
 }
 
 app.registerExtension({
@@ -102,8 +88,7 @@ app.registerExtension({
         nodeType.prototype.onConfigure = function () {
             const r = origConf?.apply(this, arguments);
             try {
-                refreshDropdown(this, "lut_file");
-                refreshDropdown(this, "xmp_file");
+                refresh(this);
             } catch (e) {
                 console.error("[RayFilmStock] onConfigure error:", e);
             }

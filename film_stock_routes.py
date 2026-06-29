@@ -1,4 +1,4 @@
-"""HTTP routes for RayFilmStock: list .cube/.3dl LUTs and .xmp sidecars in a folder."""
+"""HTTP route for RayFilmStock: list LUT/XMP assets in a folder."""
 
 from aiohttp import web
 
@@ -17,16 +17,14 @@ if PromptServer is not None:
 
     @PromptServer.instance.routes.get("/ray_film_stock/list")
     async def list_assets(request: web.Request):
-        kind = (request.query.get("kind") or "lut").lower()
         folder = request.query.get("folder") or ""
-        exts = rfs._LUT_EXTS if kind == "lut" else rfs._XMP_EXTS
         try:
-            files = rfs.list_files(folder, exts)
+            files = rfs.list_assets(folder)
             return web.json_response({
                 "ok": True,
-                "kind": kind,
                 "folder": folder,
                 "files": files,
+                "none": rfs.NONE_CHOICE,
             })
         except Exception as e:
             return web.json_response({"ok": False, "error": str(e)}, status=500)

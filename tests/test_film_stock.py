@@ -24,7 +24,7 @@ def test_input_types_declares_required():
     it = rfs.RayFilmStock.INPUT_TYPES()
     assert "image" in it["required"]
     assert "preset" in it["required"]
-    for k in ("lut_folder", "lut_file", "xmp_folder", "xmp_file"):
+    for k in ("assets_folder", "asset_file"):
         assert k in it["optional"], f"missing optional widget: {k}"
 
 
@@ -174,7 +174,7 @@ def test_apply_identity_lut_is_close_to_input():
     assert torch.allclose(out, img, atol=0.05)
 
 
-def test_lut_folder_dropdown_in_node(tmp_path):
+def test_lut_in_node_via_unified_dropdown(tmp_path):
     p = tmp_path / "id.cube"
     p.write_text(_identity_cube_text(4))
     img = _flat(16, 16, 0.5)
@@ -183,7 +183,7 @@ def test_lut_folder_dropdown_in_node(tmp_path):
         image=img, preset="Custom",
         intensity=1.0, grain_amount=0.0, halation_amount=0.0,
         expose_stops=0.0, seed=0,
-        lut_folder=str(tmp_path), lut_file="id.cube",
+        assets_folder=str(tmp_path), asset_file="id.cube",
     )
     assert 0.3 < out.mean().item() < 0.7
 
@@ -239,7 +239,7 @@ def test_xmp_exposure_brightens_image(tmp_path):
         image=img, preset="Custom",
         intensity=1.0, grain_amount=0.0, halation_amount=0.0,
         expose_stops=0.0, seed=0,
-        xmp_folder=str(tmp_path), xmp_file="develop.xmp",
+        assets_folder=str(tmp_path), asset_file="develop.xmp",
     )
     assert out.mean().item() > img.mean().item() + 0.1
 
@@ -255,7 +255,7 @@ def test_xmp_saturation_pulls_chroma(tmp_path):
         image=img, preset="Custom",
         intensity=1.0, grain_amount=0.0, halation_amount=0.0,
         expose_stops=0.0, seed=0,
-        xmp_folder=str(tmp_path), xmp_file="desat.xmp",
+        assets_folder=str(tmp_path), asset_file="desat.xmp",
     )
     avg = desat.mean(dim=(0, 1, 2))
     spread = float(avg.max() - avg.min())
@@ -275,31 +275,95 @@ def test_xmp_vignette_darkens_corners(tmp_path):
         image=img, preset="Custom",
         intensity=1.0, grain_amount=0.0, halation_amount=0.0,
         expose_stops=0.0, seed=0,
-        xmp_folder=str(tmp_path), xmp_file="vig.xmp",
+        assets_folder=str(tmp_path), asset_file="vig.xmp",
     )
     center = out[:, 28:36, 28:36].mean().item()
     corner = out[:, :8, :8].mean().item()
     assert corner < center - 0.05
 
 
-def test_list_files_finds_lut_and_xmp(tmp_path):
+def test_list_assets_lut_only_omits_tags(tmp_path):
     (tmp_path / "a.cube").write_text(_identity_cube_text(2))
-    (tmp_path / "b.cube").write_text(_identity_cube_text(2))
     (tmp_path / "sub").mkdir()
     (tmp_path / "sub" / "nested.cube").write_text(_identity_cube_text(2))
     (tmp_path / "ignored.txt").write_text("nope")
-    files = rfs.list_files(str(tmp_path), rfs._LUT_EXTS)
-    assert "a.cube" in files
-    assert "b.cube" in files
-    assert "sub/nested.cube" in files
-    assert "ignored.txt" not in files
+    files = rfs.list_assets(str(tmp_path))
+    assert files == ["a.cube", "sub/nested.cube"]
 
 
-def test_list_files_empty_when_folder_missing():
-    assert rfs.list_files("S:/nonexistent_definitely", rfs._LUT_EXTS) == []
-    assert rfs.list_files("", rfs._LUT_EXTS) == []
+def test_list_assets_xmp_only_omits_tags(tmp_path):
+    (tmp_path / "a.xmp").write_text("<crs:Exposure2012>1</crs:Exposure2012>")
+    (tmp_path / "deep").mkdir()
+    (tmp_path / "deep" / "develop.xmp").write_text(
+        "<crs:Saturation>10</crs:Saturation>"
+    )
+    files = rfs.list_assets(str(tmp_path))
+    assert files == ["a.xmp", "deep/develop.xmp"]
+
+
+def test_list_assets_mixed_adds_lut_xmp_tags(tmp_path):
+    (tmp_path / "color.cube").write_text(_identity_cube_text(2))
+    (tmp_path / "tone.xmp").write_text("<crs:Exposure2012>1</crs:Exposure2012>")
+    (tmp_path / "cinema").mkdir()
+    (tmp_path / "cinema" / "portra.cube").write_text(_identity_cube_text(2))
+    files = rfs.list_assets(str(tmp_path))
+    # LUTs come first, XMPs second, both prefixed when mixed
+    assert files == [
+        "[LUT] cinema/portra.cube",
+        "[LUT] color.cube",
+        "[XMP] tone.xmp",
+    ]
+
+
+def test_list_assets_empty_when_folder_missing():
+    assert rfs.list_assets("S:/nonexistent_definitely") == []
+    assert rfs.list_assets("") == []
 
 
 def test_resolve_chosen_handles_none():
-    assert rfs._resolve_chosen("", "(none)") is None
+    assert rfs._resolve_chosen("", rfs.NONE_CHOICE) is None
     assert rfs._resolve_chosen("", "") is None
+
+
+def test_resolve_chosen_strips_tag(tmp_path):
+    (tmp_path / "tone.xmp").write_text("<crs:Exposure2012>1</crs:Exposure2012>")
+    p = rfs._resolve_chosen(str(tmp_path), "[XMP] tone.xmp")
+    assert p is not None
+    assert p.name == "tone.xmp"
+
+
+def test_resolve_chosen_works_for_subfolder(tmp_path):
+    (tmp_path / "cinema").mkdir()
+    target = tmp_path / "cinema" / "portra.cube"
+    target.write_text(_identity_cube_text(2))
+    p = rfs._resolve_chosen(str(tmp_path), "[LUT] cinema/portra.cube")
+    assert p is not None
+    assert p == target
+
+
+def test_node_dispatches_xmp_via_extension(tmp_path):
+    """asset_file ending in .xmp should be parsed as XMP automatically."""
+    (tmp_path / "exp.xmp").write_text(_xmp_doc(Exposure2012="2.0"))
+    img = _flat(16, 16, 0.3)
+    node = rfs.RayFilmStock()
+    (out,) = node.process(
+        image=img, preset="Custom",
+        intensity=1.0, grain_amount=0.0, halation_amount=0.0,
+        expose_stops=0.0, seed=0,
+        assets_folder=str(tmp_path), asset_file="[XMP] exp.xmp",
+    )
+    assert out.mean().item() > img.mean().item() + 0.1
+
+
+def test_node_dispatches_lut_via_extension(tmp_path):
+    """asset_file ending in .cube should be parsed as a LUT."""
+    (tmp_path / "id.cube").write_text(_identity_cube_text(4))
+    img = _flat(16, 16, 0.5)
+    node = rfs.RayFilmStock()
+    (out,) = node.process(
+        image=img, preset="Custom",
+        intensity=1.0, grain_amount=0.0, halation_amount=0.0,
+        expose_stops=0.0, seed=0,
+        assets_folder=str(tmp_path), asset_file="[LUT] id.cube",
+    )
+    assert 0.3 < out.mean().item() < 0.7
