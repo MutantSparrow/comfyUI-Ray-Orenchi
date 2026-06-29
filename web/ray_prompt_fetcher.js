@@ -52,10 +52,12 @@ function applyMode(node, mode) {
         setWidgetHidden(w, hide);
     }
     applyModeStyling(node, mode);
+    // Snap height. node.setSize is the v2-friendly path; node.size[1] is the
+    // LiteGraph mutation path — set both so we cover frontends.
     if (typeof node.computeSize === "function") {
         const sz = node.computeSize();
-        // Preserve user-resized width, only snap height.
-        node.size[1] = sz[1];
+        if (Array.isArray(node.size)) node.size[1] = sz[1];
+        node.setSize?.([Array.isArray(node.size) ? node.size[0] : sz[0], sz[1]]);
     }
     node.setDirtyCanvas?.(true, true);
 }
