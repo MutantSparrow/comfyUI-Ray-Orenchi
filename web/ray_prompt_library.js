@@ -5,7 +5,6 @@ import {
     RAY_PALETTE,
     setWidgetHidden as commonSetHidden,
     findWidget as getWidget,
-    autowireRayPreview,
 } from "./_common.js";
 
 const NODE_NAME = "RayPromptLibrary";
@@ -399,7 +398,6 @@ function bootstrap(node) {
     const statusEl = injectStatusWidget(node);
     refreshStatus(node, statusEl);
     injectBrowsePanel(node);
-    autowireRayPreview(node, { height: 200, label: "library preview" });
 
     const modeW = getWidget(node, "mode");
     if (!modeW) return;

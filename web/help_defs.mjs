@@ -236,7 +236,6 @@ export const RAY_HELP_DEFS = {
                 heading: "Browse panel",
                 body: "Full-text search, tag + source filters, and multiple sort orders (most recent, longest, similarity by embedding). Click a row to select — the node then serves that row on every subsequent run.",
             },
-            { heading: "Preview", body: "Inline preview widget renders the emitted image." },
         ],
     },
 

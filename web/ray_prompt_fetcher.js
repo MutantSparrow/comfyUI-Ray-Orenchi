@@ -5,7 +5,6 @@ import {
     RAY_PALETTE,
     setWidgetHidden as commonSetHidden,
     findWidget as getWidget,
-    autowireRayPreview,
 } from "./_common.js";
 
 const NODE_NAME = "RayPromptFetcher";
@@ -31,8 +30,6 @@ function applyMode(node, mode) {
             commonSetHidden(node, w, false);
             continue;
         }
-        // Never hide our own DOM widgets (preview, status).
-        if (w.type === "RAY_PREVIEW") { continue; }
         const hide = !w.name?.startsWith(keep);
         commonSetHidden(node, w, hide);
     }
@@ -85,8 +82,6 @@ function updateDexterCategoryWidget(node, list, anyLabel) {
 async function bootstrap(node) {
     const modeW = getWidget(node, "scraper_mode");
     if (!modeW) return;
-
-    autowireRayPreview(node, { height: 200, label: "fetcher preview" });
 
     // Populate Dexter categories asynchronously — same source the dedicated
     // node uses. INPUT_TYPES already seeded the dropdown, but the live list

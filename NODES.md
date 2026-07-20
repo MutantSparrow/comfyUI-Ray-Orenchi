@@ -258,8 +258,6 @@ If the image carries multiple positive prompts (e.g. a ComfyUI workflow with sev
 | **Output** `image` | IMAGE (list) | Image tensor (BHWC float32 [0,1]), repeated across every prompt entry. |
 | **Output** `image_path` | STRING (list) | Absolute path of the chosen file, repeated across every prompt entry. |
 
-**Inline preview.** After each execute the node renders the picked image inside itself — no downstream Preview Image required.
-
 Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.tif`.
 
 ---
@@ -293,7 +291,7 @@ Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.
 | **Output** `image` | IMAGE (list) | Result image. |
 | **Output** `image_path` | STRING (list) | Absolute path for Local mode; empty for web modes. |
 
-Node tint hue-shifts by active mode. Inline preview widget renders the emitted image.
+Node tint hue-shifts by active mode.
 
 ---
 
@@ -398,4 +396,4 @@ Each slider defaults to `-1.0` (meaning "use the preset value") and `0..1` overr
 | **Output** `image` | IMAGE (list) | Image stored with the selected row. |
 | **Output** `image_path` | STRING (list) | Path to the associated image on disk, if any. |
 
-**Browse panel.** Full-text search, tag + source filters, and multiple sort orders (most recent, longest, similarity by embedding). Click a row to select — the node then serves that row on every subsequent run. Inline preview widget renders the emitted image.
+**Browse panel.** Full-text search, tag + source filters, and multiple sort orders (most recent, longest, similarity by embedding). Click a row to select — the node then serves that row on every subsequent run.
