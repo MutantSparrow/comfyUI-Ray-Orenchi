@@ -6,7 +6,7 @@ import {
     getBrushedAluminumURL,
     getAllStyleCSS,
 } from "./knob_styles.js";
-import { TWO_PI, mountDymoLabel } from "./_common.js";
+import { TWO_PI, mountDymoLabel, setWidgetHidden, findWidget } from "./_common.js";
 
 const STYLE_ID = "ray-knob-styles";
 
@@ -93,11 +93,6 @@ function injectStylesOnce() {
     padding:6px 6px 4px;
     box-sizing:border-box;
 }
-.ray-knob-wrap.rk-compact {
-    background:transparent;
-    box-shadow:none;
-    padding:0;
-}
 .ray-knob-wrap .rk-host {
     width: 156px;
     height: 156px;
@@ -110,9 +105,7 @@ function injectStylesOnce() {
     text-align:center;
     text-shadow:0 1px 0 rgba(255,255,255,0.45);
     line-height:1.1;
-}
-.ray-knob-wrap.rk-compact .rk-readout { display:none; }
-.ray-knob-wrap.rk-compact .ray-dymo   { display:none; }`;
+}`;
     document.head.appendChild(tag);
 }
 
@@ -135,11 +128,36 @@ function buildKnobElement(node, kvw) {
     readout.className = "rk-readout";
     wrap.appendChild(readout);
 
+    // Compact mode = pure analog appliance. Keep chrome/panel/Dymo/host/
+    // readout; hide the numeric config widgets and the node title so the
+    // node looks like a physical unit. Outputs remain wired.
+    const CONFIG_WIDGETS = [
+        "min_value", "max_value", "spin_value", "clamp", "allow_negative",
+    ];
     const applyCompact = () => {
         const c = !!node.properties?.compact;
-        wrap.classList.toggle("rk-compact", c);
+        for (const name of CONFIG_WIDGETS) {
+            const w = findWidget(node, name);
+            if (w) setWidgetHidden(node, w, c);
+        }
+        // Per-instance title blanking — leaves the header bar in place but
+        // empty so the analog panel is the only prominent surface. Class-
+        // wide title_mode is left untouched to avoid affecting siblings.
+        if (c) {
+            if (node._rayKnobOrigTitle == null) node._rayKnobOrigTitle = node.title ?? "";
+            node.title = "";
+        } else if (node._rayKnobOrigTitle != null) {
+            node.title = node._rayKnobOrigTitle;
+            node._rayKnobOrigTitle = null;
+        }
+        if (typeof node.computeSize === "function") {
+            const sz = node.computeSize();
+            if (Array.isArray(node.size)) node.size[1] = sz[1];
+            node.setSize?.([Array.isArray(node.size) ? node.size[0] : sz[0], sz[1]]);
+        }
     };
-    applyCompact();
+    // Defer first apply so the widgets are all in place.
+    setTimeout(applyCompact, 0);
     node._rayKnobApplyCompact = applyCompact;
 
     let currentStyle = null;

@@ -103,7 +103,7 @@ than pick a bespoke one.
 | **Output** `int` | INT | Quantized via `clamp`. |
 | **Output** `float` | FLOAT | Raw clamped float in `[min, max]`. |
 
-**Right-click menu.** Style picker (brushed-metal, black-plastic, bakelite, brass, and more), **Compact mode** (chromeless — just the knob face on the black node body), **Edit label…** (Dymo tape above the face). Double-clicking the Dymo tape also enters edit mode. Style, compact flag, and label text persist with the workflow.
+**Right-click menu.** Style picker (brushed-metal, black-plastic, bakelite, brass, and more), **Compact mode** (hides the min/max/spin/clamp/allow_negative config widgets and blanks the node title so the node reads as a bare analog appliance — brushed panel, Dymo label, knob face and readout stay), **Edit label…** (Dymo tape above the face). Double-clicking the Dymo tape also enters edit mode. Style, compact flag, and label text persist with the workflow.
 
 ---
 
@@ -118,7 +118,7 @@ than pick a bespoke one.
 | **Control** `state` | bool | Toggle. |
 | **Output** `bool` | BOOLEAN | Mirror of `state`. |
 
-**Right-click menu.** Style picker (Chrome Rocker, Bakelite Flip, Silver Paddle, Brass Slider, Minimal Pill, Dark Studio Dome), **Compact mode** (chromeless), **Edit label…** (Dymo tape). Double-clicking the Dymo tape also enters edit mode. Style, compact flag, and label text persist with the workflow.
+**Right-click menu.** Style picker (Chrome Rocker, Bakelite Flip, Silver Paddle, Brass Slider, Minimal Pill, Dark Studio Dome), **Compact mode** (blanks the node title so the node reads as a bare analog appliance — brushed panel, Dymo label, switch face and readout stay), **Edit label…** (Dymo tape). Double-clicking the Dymo tape also enters edit mode. Style, compact flag, and label text persist with the workflow.
 
 ---
 
