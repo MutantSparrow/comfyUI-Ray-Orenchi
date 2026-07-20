@@ -6,7 +6,7 @@ import {
     getBrushedAluminumURL,
     getAllStyleCSS,
 } from "./knob_styles.js";
-import { TWO_PI, mountDymoLabel, setWidgetHidden, findWidget } from "./_common.js";
+import { TWO_PI, mountDymoLabel, findWidget } from "./_common.js";
 
 const STYLE_ID = "ray-knob-styles";
 
