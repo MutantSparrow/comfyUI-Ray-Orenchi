@@ -784,11 +784,22 @@ def _apply_outline(
 class RayPixelArtDetector:
     """ComfyUI node: pixel-art downscale + palette reduction with palette preview."""
 
+    DESCRIPTION = (
+        "Pixel-art conversion pipeline. Downscales (manual target size or "
+        "auto pixel-size detection), reduces palette (kmeans-Lab, "
+        "kmeans-RGB, quantize, or OkLab hue-ramps), optional dithering "
+        "(Bayer 2/4/8, blue-noise, Riemersma, Knoll), silhouette outline, "
+        "and highlight protection.\n\n"
+        "Attach a `palette_image` to force a fixed palette — snaps to "
+        "{2}∪{4·k} colors and bypasses source clustering. Emits both the "
+        "reduced image and a hue-sorted palette swatch grid."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image": ("IMAGE",),
+                "image": ("IMAGE", {"tooltip": "Source image."}),
                 "mode": (
                     [
                         "manual_resize",
@@ -796,19 +807,28 @@ class RayPixelArtDetector:
                         "auto_downscale_strict",
                         "auto_pixel_size",
                     ],
-                    {"default": "manual_resize"},
+                    {"default": "manual_resize",
+                     "tooltip": "How to size the pixel grid."},
                 ),
-                "target_resolution": ("INT", {"default": 128, "min": 32, "max": 2048, "step": 8}),
-                "max_downscale_factor": ("INT", {"default": 16, "min": 2, "max": 64}),
-                "reduce_palette": ("BOOLEAN", {"default": True}),
-                "max_colors": ("INT", {"default": 32, "min": 2, "max": 256}),
+                "target_resolution": ("INT", {"default": 128, "min": 32, "max": 2048, "step": 8,
+                                              "tooltip": "Target longest side in manual mode."}),
+                "max_downscale_factor": ("INT", {"default": 16, "min": 2, "max": 64,
+                                                 "tooltip": "Cap for auto downscale modes."}),
+                "reduce_palette": ("BOOLEAN", {"default": True,
+                                                "tooltip": "Run palette reduction."}),
+                "max_colors": ("INT", {"default": 32, "min": 2, "max": 256,
+                                       "tooltip": "Palette-size target."}),
                 "palette_strategy": (
                     ["kmeans_lab", "kmeans_rgb", "quantize_simple", "ramps_oklab"],
-                    {"default": "kmeans_lab"},
+                    {"default": "kmeans_lab",
+                     "tooltip": "Palette-reduction algorithm."},
                 ),
-                "ramp_levels": ([3, 4, 5], {"default": RAMP_LEVELS_DEFAULT}),
-                "protect_highlights": ("BOOLEAN", {"default": True}),
-                "highlight_threshold": ("INT", {"default": 90, "min": 50, "max": 100}),
+                "ramp_levels": ([3, 4, 5], {"default": RAMP_LEVELS_DEFAULT,
+                                             "tooltip": "L* levels per cluster (ramps_oklab)."}),
+                "protect_highlights": ("BOOLEAN", {"default": True,
+                                                    "tooltip": "Reserve a slot for near-white highlights."}),
+                "highlight_threshold": ("INT", {"default": 90, "min": 50, "max": 100,
+                                                 "tooltip": "L* cutoff for highlight protection."}),
                 "dither": (
                     [
                         "none",
@@ -819,30 +839,42 @@ class RayPixelArtDetector:
                         "riemersma",
                         "knoll",
                     ],
-                    {"default": "none"},
+                    {"default": "none",
+                     "tooltip": "Dither kernel."},
                 ),
-                "selective_dither": ("BOOLEAN", {"default": False}),
+                "selective_dither": ("BOOLEAN", {"default": False,
+                                                  "tooltip": "Restrict dither to non-smooth regions."}),
                 "dither_smooth_threshold": (
                     "FLOAT",
                     {"default": DITHER_SMOOTH_THRESHOLD_DEFAULT,
-                     "min": 0.0, "max": 0.30, "step": 0.005},
+                     "min": 0.0, "max": 0.30, "step": 0.005,
+                     "tooltip": "OkLab L* std cutoff for smooth-region detection."},
                 ),
-                "silhouette_outline": ("BOOLEAN", {"default": False}),
+                "silhouette_outline": ("BOOLEAN", {"default": False,
+                                                    "tooltip": "Darken silhouette edges by N palette ranks."}),
                 "outline_steps": (
                     "INT",
-                    {"default": OUTLINE_STEPS_DEFAULT, "min": 1, "max": 3},
+                    {"default": OUTLINE_STEPS_DEFAULT, "min": 1, "max": 3,
+                     "tooltip": "Palette-rank steps for the outline."},
                 ),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFF}),
+                "seed": ("INT", {
+                    "default": -1, "min": -1, "max": 2**31 - 1,
+                    "tooltip": "-1 for random; any >=0 value is reproducible.",
+                }),
             },
             "optional": {
-                "palette_image": ("IMAGE",),
+                "palette_image": ("IMAGE", {"tooltip": "Optional fixed palette source."}),
             },
         }
 
     RETURN_TYPES = ("IMAGE", "IMAGE")
     RETURN_NAMES = ("pixel_art", "palette_preview")
+    OUTPUT_TOOLTIPS = (
+        "Pixel-art reduced image at the chosen resolution.",
+        "Hue-sorted swatch grid of the final palette.",
+    )
     FUNCTION = "process"
-    CATEGORY = "Ray/VFX✨"
+    CATEGORY = "👑 Ray/✨ VFX"
 
     # --- Public entry point --------------------------------------------------
 
@@ -868,6 +900,14 @@ class RayPixelArtDetector:
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         image = normalize_image(image)
         device, dtype = image.device, image.dtype
+
+        # Normalize seed sentinel (-1 = OS-random) into a valid sklearn
+        # random_state before threading it through the palette pipeline.
+        if seed is None or int(seed) < 0:
+            import secrets
+            seed = int(secrets.randbits(31))
+        else:
+            seed = int(seed)
 
         # Palette-image override: extract a fixed palette, snap to {2}∪{4k},
         # force reduce_palette True, and skip source-derived clustering.

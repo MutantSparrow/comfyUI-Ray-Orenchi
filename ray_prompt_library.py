@@ -37,13 +37,24 @@ _RECENT_BY_NODE: dict = {}
 _CACHE_MAX = 20
 
 MODE_SAVE = "Save"
+MODE_BROWSE = "Browse"
+# Legacy name — old workflows serialized "Fetch"; normalized to Browse in
+# process(). Kept as a constant so external tests / imports don't break.
 MODE_FETCH = "Fetch"
-MODES = [MODE_SAVE, MODE_FETCH]
+MODES = [MODE_SAVE, MODE_BROWSE]
 
 SORT_RANDOM = "random"
 SORT_RECENT = "most_recent"
+SORT_OLDEST = "oldest"
 SORT_LONGEST = "longest"
+SORT_SHORTEST = "shortest"
+SORT_SOURCE = "source"
+SORT_SIMILARITY = "similarity"
 SORTS = [SORT_RANDOM, SORT_RECENT, SORT_LONGEST]
+BROWSE_SORTS = [
+    SORT_RECENT, SORT_OLDEST, SORT_LONGEST, SORT_SHORTEST,
+    SORT_SOURCE, SORT_SIMILARITY,
+]
 
 _EMBED_MODEL_NAME = "all-MiniLM-L6-v2"
 _EMBED_MODEL = None
@@ -318,6 +329,173 @@ def fetch_prompt(
         conn.close()
 
 
+def fetch_by_id(
+    row_id: int,
+    db_path: Optional[pathlib.Path] = None,
+) -> Optional[dict]:
+    """Direct-load a single row by primary key. Returns None if absent."""
+    try:
+        rid = int(row_id)
+    except (TypeError, ValueError):
+        return None
+    if rid < 0:
+        return None
+    conn = _connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT * FROM prompts WHERE id = ?", (rid,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def _fts_available(conn: sqlite3.Connection) -> bool:
+    try:
+        conn.execute("SELECT 1 FROM prompts_fts LIMIT 1")
+        return True
+    except sqlite3.OperationalError:
+        return False
+
+
+def _fts_escape(q: str) -> str:
+    """Escape a keyword query for FTS5 MATCH. Wrap each bare token in double
+    quotes so punctuation/operators are treated as literals; join with AND."""
+    tokens = re.findall(r"[A-Za-z0-9_]+", q or "")
+    if not tokens:
+        return ""
+    return " AND ".join(f'"{t}"' for t in tokens)
+
+
+def _row_to_dict(row) -> dict:
+    """sqlite3.Row → JSON-safe dict. Truncates prompt to 240 chars for listing."""
+    d = dict(row)
+    full = d.get("prompt") or ""
+    d["prompt_preview"] = full[:240] + ("…" if len(full) > 240 else "")
+    d["length"] = len(full)
+    # Strip embedding blob — not JSON-serializable and never needed by UI.
+    d.pop("embedding", None)
+    return d
+
+
+def search_prompts(
+    q: str = "",
+    source: str = "",
+    tag: str = "",
+    sort: str = SORT_RECENT,
+    limit: int = 200,
+    offset: int = 0,
+    db_path: Optional[pathlib.Path] = None,
+) -> dict:
+    """Search + sort + paginate the library. Returns {rows, total, has_embeddings}.
+
+    Keyword `q` uses FTS5 MATCH when the virtual table is present, LIKE fallback
+    otherwise. `sort=similarity` embeds `q` and ranks by cosine over rows that
+    match the base filters and have an embedding blob — falls back to `most_recent`
+    when embeddings unavailable.
+    """
+    limit = max(1, min(int(limit or 200), 2000))
+    offset = max(0, int(offset or 0))
+    conn = _connect(db_path)
+    try:
+        # Tag / source filter shared across paths.
+        where_parts: list = []
+        params: list = []
+        if source:
+            where_parts.append("source = ?")
+            params.append(source)
+        if tag:
+            for t in [s.strip() for s in tag.split(",") if s.strip()]:
+                where_parts.append("tags LIKE ?")
+                params.append(f"%{t}%")
+
+        # Similarity branch — embed q, cosine over candidate pool.
+        if sort == SORT_SIMILARITY and q.strip():
+            emb = _embed(q.strip())
+            if emb is not None:
+                candidate_sql = (
+                    "SELECT * FROM prompts"
+                    + (" WHERE " + " AND ".join(where_parts + ["embedding IS NOT NULL"])
+                       if where_parts else " WHERE embedding IS NOT NULL")
+                )
+                rows = conn.execute(candidate_sql, params).fetchall()
+                if rows:
+                    mat = np.vstack([
+                        np.frombuffer(r["embedding"], dtype=np.float32)
+                        for r in rows
+                    ])
+                    q_arr = np.frombuffer(emb, dtype=np.float32)
+                    order = _cosine_argsort(q_arr, mat)
+                    total = len(rows)
+                    picked = [rows[int(i)] for i in order[offset:offset + limit]]
+                    return {
+                        "rows": [_row_to_dict(r) for r in picked],
+                        "total": total,
+                        "has_embeddings": True,
+                        "used": "similarity",
+                    }
+            # No embedder or no candidates — fall through to keyword ranking.
+
+        # Keyword branch — FTS5 when available, LIKE otherwise.
+        use_fts = bool(q.strip()) and _fts_available(conn)
+        if use_fts:
+            match_query = _fts_escape(q)
+        else:
+            match_query = ""
+
+        order_sql = {
+            SORT_RECENT: "ORDER BY p.created_at DESC",
+            SORT_OLDEST: "ORDER BY p.created_at ASC",
+            SORT_LONGEST: "ORDER BY length(p.prompt) DESC",
+            SORT_SHORTEST: "ORDER BY length(p.prompt) ASC",
+            SORT_SOURCE: "ORDER BY p.source ASC, p.created_at DESC",
+            SORT_RANDOM: "ORDER BY RANDOM()",
+            SORT_SIMILARITY: "ORDER BY p.created_at DESC",  # fallback
+        }.get(sort, "ORDER BY p.created_at DESC")
+
+        if use_fts and match_query:
+            base = (
+                "FROM prompts_fts f JOIN prompts p ON p.id = f.rowid "
+                "WHERE prompts_fts MATCH ?"
+            )
+            local_params = [match_query]
+            if where_parts:
+                base += " AND " + " AND ".join(where_parts)
+                local_params.extend(params)
+            total = conn.execute(
+                f"SELECT COUNT(*) as n {base}", local_params
+            ).fetchone()["n"]
+            rows = conn.execute(
+                f"SELECT p.* {base} {order_sql} LIMIT ? OFFSET ?",
+                local_params + [limit, offset],
+            ).fetchall()
+        else:
+            base = "FROM prompts p"
+            local_params = list(params)
+            local_where = list(where_parts)
+            if q.strip():
+                local_where.append("p.prompt LIKE ?")
+                local_params.append(f"%{q.strip()}%")
+            if local_where:
+                base += " WHERE " + " AND ".join(local_where)
+            total = conn.execute(
+                f"SELECT COUNT(*) as n {base}", local_params
+            ).fetchone()["n"]
+            rows = conn.execute(
+                f"SELECT p.* {base} {order_sql} LIMIT ? OFFSET ?",
+                local_params + [limit, offset],
+            ).fetchall()
+
+        return {
+            "rows": [_row_to_dict(r) for r in rows],
+            "total": int(total),
+            "has_embeddings": _get_embed_model() is not None,
+            "used": "fts" if use_fts else ("like" if q.strip() else "list"),
+        }
+    finally:
+        conn.close()
+
+
 def stats(db_path: Optional[pathlib.Path] = None) -> dict:
     conn = _connect(db_path)
     try:
@@ -367,51 +545,78 @@ def _empty_tensor():
 class RayPromptLibrary:
     """Save/fetch prompts to a local SQLite library."""
 
+    DESCRIPTION = (
+        "Local SQLite prompt library. Two modes on the same node:\n"
+        "  • `Save`   — write `prompt_in` to the DB with source, tags, "
+        "image path, model.\n"
+        "  • `Browse` — inline searchable table; pick a row and its "
+        "prompt + image path flow onto the outputs.\n\n"
+        "Browse panel supports full-text search, tag / source filters, "
+        "and multiple sort orders (recent, longest, similarity by "
+        "embedding). Right-click a row to select — the node then serves "
+        "that row on every subsequent run."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "mode": (MODES, {"default": MODE_FETCH}),
+                "mode": (MODES, {
+                    "default": MODE_BROWSE,
+                    "tooltip": "Save writes prompt_in to the library. Browse serves rows from the table.",
+                }),
                 "prompt_in": ("STRING", {
                     "default": "",
                     "multiline": True,
-                    "placeholder": "passthrough — written to DB in Save mode",
+                    "placeholder": "Passthrough — written to DB in Save mode",
+                    "tooltip": "Save mode: prompt text to store. Passed through on the outputs regardless of mode.",
                 }),
-                "seed": ("INT", {"default": -1, "min": -1, "max": 2**31 - 1}),
+                "seed": ("INT", {
+                    "default": -1, "min": -1, "max": 2**31 - 1,
+                    "tooltip": "-1 for random; any >=0 value is reproducible.",
+                }),
 
                 # Save mode widgets
                 "save__source": ("STRING", {
                     "default": "manual",
                     "placeholder": "manual / local / dexter / civitai / ollama",
+                    "tooltip": "Save mode: source label attached to this row.",
                 }),
                 "save__tags": ("STRING", {
                     "default": "",
-                    "placeholder": "comma-separated tags",
+                    "placeholder": "Comma-separated tags",
+                    "tooltip": "Save mode: comma-separated tags stored with this row.",
                 }),
-                "save__image_path": ("STRING", {"default": ""}),
-                "save__model": ("STRING", {"default": ""}),
+                "save__image_path": ("STRING", {"default": "",
+                                                 "tooltip": "Save mode: absolute path to the image this prompt produced (optional)."}),
+                "save__model": ("STRING", {"default": "",
+                                            "tooltip": "Save mode: model / checkpoint that produced the row (optional)."}),
 
-                # Fetch mode widgets
-                "fetch__tag": ("STRING", {"default": ""}),
-                "fetch__source": ("STRING", {"default": ""}),
-                "fetch__min_length": ("INT", {"default": 0, "min": 0, "max": 100000}),
-                "fetch__contains": ("STRING", {"default": ""}),
-                "fetch__exclude": ("STRING", {"default": ""}),
-                "fetch__sort": (SORTS, {"default": SORT_RANDOM}),
-                "fetch__similar_to": ("STRING", {
-                    "default": "",
-                    "multiline": True,
-                    "placeholder": "when set, ranks by similarity (needs sentence-transformers)",
-                }),
+                # Browse mode widgets. The JS renders a live table; this INT
+                # captures the user's row selection so the graph run picks
+                # the same row, and survives workflow save/load.
+                "browse__selected_id": (
+                    "INT",
+                    {"default": -1, "min": -1, "max": 2**31 - 1,
+                     "tooltip": "Browse mode: DB row id selected in the panel."},
+                ),
+                "browse__last_query": ("STRING", {"default": "",
+                                                   "tooltip": "Browse mode: last search query (managed by the panel)."}),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
         }
 
     RETURN_TYPES = ("STRING", "STRING", "IMAGE", "STRING")
     RETURN_NAMES = ("prompt_single", "prompt_multiline", "image", "image_path")
+    OUTPUT_TOOLTIPS = (
+        "Whitespace-collapsed single-line prompt (list).",
+        "Prompt with original newlines preserved (list).",
+        "Image tensor stored with the selected row (BHWC float32 [0,1]).",
+        "Path to the associated image on disk, if any.",
+    )
     OUTPUT_IS_LIST = (True, True, True, True)
     FUNCTION = "process"
-    CATEGORY = "Ray/Prompts📝"
+    CATEGORY = "👑 Ray/💬 LLM"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
@@ -426,23 +631,17 @@ class RayPromptLibrary:
         save__tags,
         save__image_path,
         save__model,
-        fetch__tag,
-        fetch__source,
-        fetch__min_length,
-        fetch__contains,
-        fetch__exclude,
-        fetch__sort,
-        fetch__similar_to,
+        browse__selected_id,
+        browse__last_query="",
         node_id=None,
+        **_legacy,
     ):
-        node_key = str(node_id) if node_id is not None else "_default"
         seed_int = int(seed)
         seed_arg: Optional[int] = seed_int if seed_int >= 0 else None
-        recent = _RECENT_BY_NODE.setdefault(node_key, deque(maxlen=_CACHE_MAX))
 
-        mode = (mode or MODE_FETCH).strip()
+        mode = (mode or MODE_BROWSE).strip()
         if mode == MODE_SAVE:
-            return self._do_save(
+            result = self._do_save(
                 prompt_in=prompt_in,
                 source=save__source,
                 tags=save__tags,
@@ -450,20 +649,27 @@ class RayPromptLibrary:
                 model=save__model,
                 seed=seed_arg,
             )
-        return self._do_fetch(
-            tag=fetch__tag,
-            source=fetch__source,
-            min_length=fetch__min_length,
-            contains=fetch__contains,
-            exclude=fetch__exclude,
-            sort=fetch__sort,
-            similar_to=fetch__similar_to,
-            seed=seed_arg,
-            recent=recent,
-        )
+        else:
+            # Legacy "Fetch" mode from older workflows falls through to Browse.
+            result = self._do_browse(selected_id=browse__selected_id)
+
+        # Dispatch inline preview if the selected/saved row has an image path.
+        try:
+            image_path_list = result[3] if len(result) >= 4 else [""]
+            path = image_path_list[0] if image_path_list else ""
+            if path:
+                try:
+                    from _common import send_preview
+                except ImportError:
+                    from ._common import send_preview  # type: ignore
+                send_preview(node_id, path)
+        except Exception:
+            pass
+
+        return result
 
     def _do_save(self, prompt_in, source, tags, image_path, model, seed):
-        res = save_prompt(
+        save_prompt(
             prompt=prompt_in,
             source=source,
             tags=tags,
@@ -474,23 +680,20 @@ class RayPromptLibrary:
         single = re.sub(r"\s+", " ", (prompt_in or "")).strip()
         return ([single], [prompt_in or ""], [_empty_tensor()], [image_path or ""])
 
-    def _do_fetch(
-        self, tag, source, min_length, contains, exclude, sort,
-        similar_to, seed, recent,
-    ):
-        row = fetch_prompt(
-            tag=tag,
-            source=source,
-            min_length=int(min_length),
-            contains=contains,
-            exclude=exclude,
-            sort=sort,
-            similar_to=similar_to,
-            seed=seed,
-            recent=recent,
-        )
+    def _do_browse(self, selected_id):
+        try:
+            rid = int(selected_id)
+        except (TypeError, ValueError):
+            rid = -1
+        if rid < 0:
+            raise RuntimeError(
+                "no prompt selected — pick a row in the Browse table"
+            )
+        row = fetch_by_id(rid)
         if row is None:
-            return ([""], [""], [_empty_tensor()], [""])
+            raise RuntimeError(
+                f"selected prompt id={rid} no longer in the library"
+            )
         multi = row["prompt"] or ""
         single = row.get("prompt_single") or re.sub(r"\s+", " ", multi).strip()
         return (

@@ -290,6 +290,17 @@ def _build_outputs(prompt_multiline: str, image_url: Optional[str], timeout: int
 class RayPromptDexter:
     """Fetch a random prompt + image from promptdexter.com, seed-deterministic."""
 
+    DESCRIPTION = (
+        "Random prompt + matching image scraped from promptdexter.com. "
+        "Discovery is sitemap-driven so picks reach deep content, not "
+        "just the homepage top row.\n\n"
+        "Seed-deterministic — freeze the seed for reproducible output. "
+        "Per-node 20-entry LRU avoids consecutive repeats; with a frozen "
+        "seed the cache forces a deterministic skip to the next "
+        "candidate. The 🔄 refresh sitemap button re-fetches the "
+        "category list live."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         try:
@@ -299,20 +310,37 @@ class RayPromptDexter:
         category_choices = [ANY_CATEGORY] + cats
         return {
             "required": {
-                "seed": ("INT", {"default": -1, "min": -1, "max": 2**31 - 1}),
-                "category": (category_choices, {"default": ANY_CATEGORY}),
-                "clear_cache": ("BOOLEAN", {"default": False}),
+                "seed": ("INT", {
+                    "default": -1, "min": -1, "max": 2**31 - 1,
+                    "tooltip": "-1 for random; any >=0 value is reproducible.",
+                }),
+                "category": (category_choices, {
+                    "default": ANY_CATEGORY,
+                    "tooltip": "Sitemap category slug, or (any) for the whole site.",
+                }),
+                "clear_cache": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Drop this node's recent-pick deque before selecting.",
+                }),
             },
             "optional": {
-                "timeout": ("INT", {"default": 10, "min": 2, "max": 60, "step": 1}),
+                "timeout": ("INT", {
+                    "default": 10, "min": 2, "max": 60, "step": 1,
+                    "tooltip": "HTTP timeout per request, in seconds.",
+                }),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
         }
 
     RETURN_TYPES = ("STRING", "STRING", "IMAGE")
     RETURN_NAMES = ("prompt_single", "prompt_multiline", "image")
+    OUTPUT_TOOLTIPS = (
+        "Whitespace-collapsed single-line prompt.",
+        "Prompt with original newlines preserved.",
+        "Matching image (BHWC float32 [0,1]); 1x1 black on fetch failure.",
+    )
     FUNCTION = "process"
-    CATEGORY = "Ray/Prompts📝"
+    CATEGORY = "👑 Ray/📝 Prompts"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
@@ -361,4 +389,12 @@ class RayPromptDexter:
         prompt_single, prompt_multiline, image_tensor = _build_outputs(
             prompt_multiline, image_url, int(timeout)
         )
+
+        if image_url:
+            try:
+                from _common import send_preview
+            except ImportError:
+                from ._common import send_preview  # type: ignore
+            send_preview(node_id, image_url)
+
         return (prompt_single, prompt_multiline, image_tensor)

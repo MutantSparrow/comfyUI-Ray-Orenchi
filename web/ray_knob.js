@@ -6,7 +6,7 @@ import {
     getBrushedAluminumURL,
     getAllStyleCSS,
 } from "./knob_styles.js";
-import { TWO_PI } from "./_common.js";
+import { TWO_PI, mountDymoLabel } from "./_common.js";
 
 const STYLE_ID = "ray-knob-styles";
 
@@ -58,19 +58,11 @@ function installGlobalKnobDispatcher() {
     const handler = (e) => {
         if (e.button !== undefined && e.button !== 0) return;
         const wraps = document.querySelectorAll(".ray-knob-wrap");
-        // Diagnostic — remove once stable
-        if (wraps.length === 0) {
-            console.log("[RayKnob] click but no .ray-knob-wrap in DOM", { type: e.type });
-        }
         for (const w of wraps) {
             if (!w.isConnected || typeof w._rayKnobOnDown !== "function") continue;
             const r = w.getBoundingClientRect();
-            if (r.width === 0 || r.height === 0) {
-                console.log("[RayKnob] wrap has zero size", { w: r.width, h: r.height, top: r.top, left: r.left });
-                continue;
-            }
+            if (r.width === 0 || r.height === 0) continue;
             if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) continue;
-            console.log("[RayKnob] dispatch hit", { type: e.type, target: e.target?.tagName });
             w._rayKnobOnDown(e);
             return;
         }
@@ -101,6 +93,11 @@ function injectStylesOnce() {
     padding:6px 6px 4px;
     box-sizing:border-box;
 }
+.ray-knob-wrap.rk-compact {
+    background:transparent;
+    box-shadow:none;
+    padding:0;
+}
 .ray-knob-wrap .rk-host {
     width: 156px;
     height: 156px;
@@ -113,7 +110,9 @@ function injectStylesOnce() {
     text-align:center;
     text-shadow:0 1px 0 rgba(255,255,255,0.45);
     line-height:1.1;
-}`;
+}
+.ray-knob-wrap.rk-compact .rk-readout { display:none; }
+.ray-knob-wrap.rk-compact .ray-dymo   { display:none; }`;
     document.head.appendChild(tag);
 }
 
@@ -123,6 +122,11 @@ function buildKnobElement(node, kvw) {
     const wrap = document.createElement("div");
     wrap.className = "ray-knob-wrap";
 
+    // Dymo label sits above the knob face. Mount before the host so it
+    // stacks visually on top; still hidden in compact mode via CSS.
+    const dymo = mountDymoLabel(node, { placeholder: "LABEL" });
+    if (dymo?.root) wrap.appendChild(dymo.root);
+
     const host = document.createElement("div");
     host.className = "rk-host";
     wrap.appendChild(host);
@@ -130,6 +134,13 @@ function buildKnobElement(node, kvw) {
     const readout = document.createElement("div");
     readout.className = "rk-readout";
     wrap.appendChild(readout);
+
+    const applyCompact = () => {
+        const c = !!node.properties?.compact;
+        wrap.classList.toggle("rk-compact", c);
+    };
+    applyCompact();
+    node._rayKnobApplyCompact = applyCompact;
 
     let currentStyle = null;
     let pointerEl = null;
@@ -217,7 +228,6 @@ function buildKnobElement(node, kvw) {
     const onDown = (e) => {
         if (e.button !== undefined && e.button !== 0) return;
         const { cx, cy } = knobCenter();
-        console.log("[RayKnob] pointerdown fired", { type: e.type, x: e.clientX, y: e.clientY, cx, cy });
         lastAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
         activePointerId = e.pointerId;
         wrap.style.cursor = "grabbing";
@@ -264,8 +274,16 @@ app.registerExtension({
             if (!styles.includes(this.properties.style)) {
                 this.properties.style = DEFAULT_STYLE;
             }
+            if (typeof this.properties.compact !== "boolean") {
+                this.properties.compact = false;
+            }
+            if (typeof this.properties.ray_label !== "string") {
+                this.properties.ray_label = "";
+            }
             if (typeof this.addProperty === "function") {
                 this.addProperty("style", this.properties.style, "enum", { values: styles });
+                this.addProperty("compact", this.properties.compact, "boolean");
+                this.addProperty("ray_label", this.properties.ray_label, "string");
             }
 
             const kvw = this.widgets?.find(w => w.name === "knob_value");
@@ -317,21 +335,37 @@ app.registerExtension({
         nodeType.prototype.getExtraMenuOptions = function (canvas, options) {
             const node = this;
             const styles = styleList();
-            options.unshift({
-                content: "Knob Style",
-                has_submenu: true,
-                submenu: {
-                    options: styles.map(s => ({
-                        content: (node.properties?.style === s ? "● " : "  ") + (KNOB_STYLES[s]?.label || s),
-                        callback: () => {
-                            node.properties = node.properties || {};
-                            node.properties.style = s;
-                            node._knobRender?.();
-                            node.setDirtyCanvas?.(true, true);
-                        },
-                    })),
+            const compact = !!node.properties?.compact;
+            options.unshift(
+                {
+                    content: "Knob Style",
+                    has_submenu: true,
+                    submenu: {
+                        options: styles.map(s => ({
+                            content: (node.properties?.style === s ? "● " : "  ") + (KNOB_STYLES[s]?.label || s),
+                            callback: () => {
+                                node.properties = node.properties || {};
+                                node.properties.style = s;
+                                node._knobRender?.();
+                                node.setDirtyCanvas?.(true, true);
+                            },
+                        })),
+                    },
                 },
-            });
+                {
+                    content: (compact ? "● " : "  ") + "Compact mode",
+                    callback: () => {
+                        node.properties = node.properties || {};
+                        node.properties.compact = !node.properties.compact;
+                        node._rayKnobApplyCompact?.();
+                        node.setDirtyCanvas?.(true, true);
+                    },
+                },
+                {
+                    content: "Edit label…",
+                    callback: () => { node._rayDymo?.beginEdit?.(); },
+                },
+            );
             return getExtraMenuOptions?.apply(this, arguments);
         };
 
@@ -343,8 +377,25 @@ app.registerExtension({
                 }
                 this._knobRender?.();
                 this.setDirtyCanvas?.(true, true);
+            } else if (name === "compact") {
+                this._rayKnobApplyCompact?.();
+                this.setDirtyCanvas?.(true, true);
             }
             return onPropertyChanged?.apply(this, arguments);
+        };
+
+        const onConfigure = nodeType.prototype.onConfigure;
+        nodeType.prototype.onConfigure = function () {
+            const r = onConfigure?.apply(this, arguments);
+            // Restore label + compact after workflow load.
+            setTimeout(() => {
+                if (this._rayDymo && typeof this.properties?.ray_label === "string") {
+                    this._rayDymo.setText(this.properties.ray_label);
+                }
+                this._rayKnobApplyCompact?.();
+                this._knobRender?.();
+            }, 0);
+            return r;
         };
 
         // Node body stays black; brushed aluminium is rendered only inside the knob widget DOM.

@@ -6,23 +6,41 @@ in the image's metadata. Designed as a functional sibling to the
 PromptDexter and CivitAI scrapers but for local files.
 
 Prompt extraction sources, in priority order:
-  1. PNG `parameters` chunk (Automatic1111 / Forge native format).
-  2. PNG `prompt` chunk (ComfyUI's serialized prompt graph JSON).
-  3. PNG `workflow` chunk (ComfyUI workflow JSON).
-  4. JPEG/WEBP EXIF UserComment (A1111 also writes here).
-  5. JPEG/WEBP `info['parameters']` (PIL surfaces it for some encoders).
+  1. PNG `parameters` chunk (Automatic1111 / Forge native format, or a
+     JSON blob from SwarmUI / InvokeAI when the writer used that key).
+  2. PNG `prompt` chunk (ComfyUI serialized graph, OR a flat literal
+     string when written by JustRayzist / minimal ComfyUI plugins).
+  3. PNG `workflow` chunk — API format (node dict) or UI format
+     (nodes/links array).
+  4. Every other `info[]` key whose name looks prompt-shaped
+     (`prompt*`, `positive*`, `caption`, `description`, `comment`,
+     `sui_image_params`, `invokeai_metadata`, `sd-metadata`,
+     `novelai_metadata`, `dream`, `Software` on Fooocus, `title`,
+     `notes`). Values may be plain text or JSON.
+  5. EXIF: UserComment (37510), ImageDescription (270), XPComment
+     (40092), XPSubject (40095), XPTitle (40091), XPKeywords (40094).
   6. Sidecar `<image>.txt` in the same directory.
 
-When multiple positive prompts are found inside a single image (e.g. a
-ComfyUI workflow with several CLIPTextEncode nodes), every output is
-emitted as a ComfyUI list — one entry per prompt — so downstream nodes
-iterate over each prompt independently. The image and path entries are
-broadcast (repeated) across every prompt in the batch.
+Every candidate is passed through `_valid_prompt_candidate` which rejects
+strings that look like filesystem paths (drive letters, backslash-heavy
+strings with no spaces, tail-image-extension paths). This is what keeps
+random ``C:\\loras\\foo.safetensors``-shaped fields from leaking through
+as prompts.
+
+When multiple positive prompts are found inside a single image, every
+output is emitted as a ComfyUI list — one entry per prompt — so
+downstream nodes iterate over each prompt independently.
+
+`prompt_best_try` collapses to a single prompt per image (the longest
+one, treated as the most descriptive final prompt). When on, the scraper
+also remembers the last best-try prompt it emitted for this node and,
+if the current pick would emit the same prompt again, advances to the
+next image until a new best-try prompt is found or the pool runs out.
 
 Outputs (all OUTPUT_IS_LIST = True):
   STRING prompt_single     — each prompt collapsed to one line.
   STRING prompt_multiline  — each prompt with its newlines preserved.
-  IMAGE  image             — BHWC float32 [0,1] tensor (same tensor reused).
+  IMAGE  image             — BHWC float32 [0,1] tensor.
   STRING image_path        — absolute path of the source file (repeated).
 """
 
@@ -47,27 +65,14 @@ except ImportError:
 
 _SUPPORTED_EXT = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif")
 
-_FILE_LIST_CACHE: dict = {}   # key=(folder, recurse) -> sorted list[str]
-_RECENT_BY_NODE: dict = {}
+_FILE_LIST_CACHE: dict = {}     # (folder, recurse) -> sorted list[str]
+_RECENT_BY_NODE: dict = {}      # node_key -> deque of recently picked paths
+_LAST_BEST_BY_NODE: dict = {}   # node_key -> last emitted best_try prompt
 _CACHE_MAX = 20
 
-# ComfyUI node classes whose `inputs.text` (or similar) typically holds a
-# positive prompt. Order matters — explicit CLIPTextEncode wins.
-_COMFY_PROMPT_CLASS_HINTS = (
-    "CLIPTextEncode",
-    "BNK_CLIPTextEncodeAdvanced",
-    "CLIPTextEncodeFlux",
-    "CLIPTextEncodeSDXL",
-    "Text Multiline",
-    "Text Concatenate",
-    "ShowText",
-    "String Literal",
-)
-_COMFY_PROMPT_INPUT_FIELDS = ("text", "string", "positive", "prompt", "Text")
-
-# Class-name substrings that mark a node as the *target* (a text encoder
-# that we want to feed a prompt into). When such a node's text input is
-# wired rather than literal we walk backwards through the graph.
+# ComfyUI class-name substrings that mark a node as a text encoder we
+# want to feed a prompt into. If its text input is wired instead of a
+# literal, we walk backwards through the graph.
 _COMFY_ENCODER_HINTS = (
     "CLIPTextEncode",
     "BNK_CLIPTextEncodeAdvanced",
@@ -75,14 +80,17 @@ _COMFY_ENCODER_HINTS = (
     "CLIPTextEncodeSDXL",
     "smZ CLIPTextEncode",
     "AdvancedCLIPTextEncode",
+    "CLIPTextEncodeSD3",
+    "T5TextEncode",
+    "ImpactWildcardEncode",
 )
 
 # Class-name substrings that mark a node as a *source* of free-form
-# prompt text (Show Text, Text Multiline, String literals, primitive
-# nodes, concat / pipe nodes...). When we follow a link back, we try to
-# pull the literal text out of one of these.
+# prompt text. Used both for backwards-walking wired encoders and as a
+# fallback when a graph ships without any encoder.
 _COMFY_TEXT_SOURCE_HINTS = (
     "Text Multiline",
+    "TextMultiline",
     "ShowText",
     "Show Text",
     "Show_text",
@@ -90,18 +98,152 @@ _COMFY_TEXT_SOURCE_HINTS = (
     "String Literal",
     "StringLiteral",
     "String Constant",
+    "String",
     "PrimitiveNode",
     "Text Concatenate",
     "TextConcatenate",
     "Text Concat",
+    "TextConcat",
     "Text Combine",
+    "TextCombine",
     "StringFunction",
     "easy showAnything",
     "easy textConcat",
+    "easy positive",
     "DPRandomGenerator",
+    "Wildcard",
+    "PromptComposer",
+    "Prompt",
     "Text",
+    "Note",
+    "MarkdownNote",
 )
+
+# Field names on a node's `inputs` dict that typically hold prompt text.
+_COMFY_PROMPT_INPUT_FIELDS = (
+    "text", "text_g", "text_l", "text_positive",
+    "string", "String",
+    "positive", "prompt", "Prompt", "Text",
+    "populated_text", "wildcard_text",
+    "value",
+)
+
+# Cap for how deep the graph walker chases wired links before giving up.
 _COMFY_MAX_LINK_DEPTH = 8
+
+# `info[]` key names (case-insensitive) that are likely to carry prompt
+# text. Broad on purpose — the path/JSON filters downstream stop paths,
+# software strings, and numeric flags from leaking through.
+_INFO_KEY_HINTS = (
+    "prompt", "positive", "caption", "description", "comment",
+    "usercomment", "notes", "dream",
+    "sd-metadata", "sui_image_params", "invokeai_metadata",
+    "novelai_metadata", "fooocus", "params", "settings",
+    "title",
+)
+
+# Info keys we always consume via a dedicated path — don't double-emit them
+# in the generic sweep.
+_INFO_KEY_CONSUMED = {"parameters", "Parameters", "prompt", "workflow"}
+
+
+# ---------------------------------------------------------------------------
+# Prompt validity / rejection heuristics
+# ---------------------------------------------------------------------------
+
+
+_PATH_START_RE = re.compile(
+    r"""^\s*(?:
+        [A-Za-z]:[\\/]         |    # windows drive: C:\ or C:/
+        \\\\[^\\]+\\           |    # UNC \\server\share
+        \.{1,2}[\\/]           |    # ./  ../
+        ~[\\/]                 |    # ~/
+        /[A-Za-z0-9._-]+/           # unix path root
+    )""",
+    re.VERBOSE,
+)
+_TRAILING_IMAGE_EXT_RE = re.compile(
+    r"[\\/][^\\/]+\.(png|jpe?g|webp|bmp|tiff?|gif|mp4|mov|avi|"
+    r"safetensors|pt|ckpt|json|txt)\b",
+    re.IGNORECASE,
+)
+_MODEL_FILE_ONLY_RE = re.compile(
+    r"^[\w.\-]+\.(safetensors|ckpt|pt|bin|onnx)$",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_path(s: str) -> bool:
+    """True if `s` looks like a filesystem path rather than a prompt.
+
+    Only rejects strings whose *entire content* reads as a path — a real
+    prompt that merely references `embedding:embeddings/foo.pt` inside a
+    longer text will still pass, because the separator density check is
+    gated on the string having very few spaces.
+    """
+    if not s:
+        return False
+    if "\n" in s:
+        # Real prompts often span lines; paths do not. A newline is a
+        # strong signal we're looking at prose.
+        return False
+
+    stripped = s.strip()
+    if not stripped:
+        return False
+
+    if _PATH_START_RE.match(stripped):
+        return True
+
+    # Model / weight filename all by itself: `something.safetensors`.
+    if _MODEL_FILE_ONLY_RE.match(stripped):
+        return True
+
+    seps = stripped.count("\\") + stripped.count("/")
+    spaces = stripped.count(" ")
+
+    # Heavy separators, no whitespace: bare path.
+    if seps >= 2 and spaces == 0:
+        return True
+
+    # Something like `models\stable-diffusion\foo.safetensors` — some
+    # separators, only a couple of spaces, and an image/model ext tail.
+    if seps >= 2 and spaces < 3 and _TRAILING_IMAGE_EXT_RE.search(stripped):
+        return True
+
+    return False
+
+
+def _valid_prompt_candidate(s: str, min_len: int = 4) -> bool:
+    """True if `s` is worth returning as a prompt candidate."""
+    if not isinstance(s, str):
+        return False
+    stripped = s.strip()
+    if len(stripped) < min_len:
+        return False
+    if stripped.lower() in ("true", "false", "none", "null", "nan"):
+        return False
+    # Pure numeric / boolean flag strings.
+    if re.fullmatch(r"[-+]?\d+(\.\d+)?", stripped):
+        return False
+    if _looks_like_path(stripped):
+        return False
+    return True
+
+
+def _clean_candidates(items) -> list:
+    """De-duplicate and drop invalid entries while preserving order."""
+    seen: set = set()
+    out: list = []
+    for it in items or []:
+        s = (it or "").strip() if isinstance(it, str) else ""
+        if not _valid_prompt_candidate(s):
+            continue
+        if s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +255,6 @@ def _strip_a1111(blob: str) -> str:
     """Return only the positive portion of an A1111 parameters block."""
     if not isinstance(blob, str):
         return ""
-    # A1111 format: "<positive>\nNegative prompt: <neg>\nSteps: ..."
     parts = re.split(r"\n(?:Negative prompt:|Steps:)", blob, maxsplit=1)
     return parts[0].strip()
 
@@ -126,6 +267,12 @@ def _is_link_ref(val) -> bool:
         and isinstance(val[0], (str, int))
         and isinstance(val[1], int)
     )
+
+
+def _node_matches(class_type: str, hints: tuple) -> bool:
+    if not isinstance(class_type, str):
+        return False
+    return any(hint in class_type for hint in hints)
 
 
 def _resolve_text_from_node(
@@ -156,20 +303,20 @@ def _resolve_text_from_node(
         val = inputs.get(field)
         if isinstance(val, str):
             stripped = val.strip()
-            if len(stripped) >= 4:
+            if _valid_prompt_candidate(stripped):
                 return stripped
 
-    # Second pass: collect EVERY literal string input (covers
-    # concat / pipe nodes whose fields are text_a, text_b, str_1...).
+    # Second pass: collect every literal string input that passes the
+    # prompt-candidate filter (covers concat / pipe nodes whose fields are
+    # text_a, text_b, str_1...).
     literal_pieces: list = []
     for field, val in inputs.items():
         if isinstance(val, str):
             stripped = val.strip()
-            if len(stripped) >= 4:
-                literal_pieces.append((field, stripped))
+            if _valid_prompt_candidate(stripped):
+                literal_pieces.append(stripped)
     if literal_pieces:
-        # Heuristically sort: keep declaration order, but join with spaces.
-        return " ".join(text for _f, text in literal_pieces)
+        return " ".join(literal_pieces)
 
     # Third pass: follow wired links upstream.
     for field, val in inputs.items():
@@ -184,22 +331,20 @@ def _resolve_text_from_node(
 def _resolve_encoder_text(node: dict, graph: dict) -> str:
     """For a single text-encoder node, return its prompt text.
 
-    If the `text`/`positive`/`prompt` input is a literal string, return
-    it directly. If it's a wired link, walk back through ShowText /
-    TextMultiline / StringLiteral / concat nodes until a literal is
-    found.
+    If a known prompt input is a literal string, return it directly. If
+    it's a wired link, walk back through ShowText / TextMultiline /
+    StringLiteral / concat nodes until a literal is found.
     """
     inputs = node.get("inputs") or {}
     if not isinstance(inputs, dict):
         return ""
-    # Try every field name we know an encoder might use, in priority order.
     for field in _COMFY_PROMPT_INPUT_FIELDS:
         if field not in inputs:
             continue
         val = inputs[field]
         if isinstance(val, str):
             stripped = val.strip()
-            if len(stripped) >= 4:
+            if _valid_prompt_candidate(stripped):
                 return stripped
         elif _is_link_ref(val):
             text = _resolve_text_from_node(val[0], graph, visited=set(), depth=0)
@@ -208,25 +353,15 @@ def _resolve_encoder_text(node: dict, graph: dict) -> str:
     return ""
 
 
-def _node_matches(class_type: str, hints: tuple) -> bool:
-    return any(hint in class_type for hint in hints)
-
-
 def _extract_prompts_from_comfy_graph(graph_obj) -> list:
-    """Walk a ComfyUI prompt graph and return *all* plausible prompts.
+    """Walk a ComfyUI prompt graph and return every plausible prompt.
 
     `graph_obj` is the value of either the `prompt` chunk (a node dict
     keyed by node id) or a workflow object with a nested `prompt` key.
-    Two strategies in order:
 
-    1. Find every text-encoder node (CLIPTextEncode and friends), pull
-       the prompt out of its text input — literal or wired. This is the
-       most accurate: it directly answers "what prompt fed the model?"
-
-    2. If no encoders found, fall back to harvesting literal text from
-       any node whose class_type smells like a text source — for graphs
-       that ship without their encoders (rare, but happens with
-       split-workflow uploads).
+    Strategy 1: every text encoder contributes its resolved prompt.
+    Strategy 2 (fallback): harvest literal text from source nodes when
+    no encoder produced anything usable.
     """
     if isinstance(graph_obj, str):
         try:
@@ -239,7 +374,6 @@ def _extract_prompts_from_comfy_graph(graph_obj) -> list:
     if "prompt" in graph_obj and isinstance(graph_obj["prompt"], dict):
         graph_obj = graph_obj["prompt"]
 
-    # Build a sane node map. Skip top-level keys whose value isn't a node.
     graph: dict = {}
     for nid, node in graph_obj.items():
         if isinstance(node, dict) and "class_type" in node:
@@ -256,55 +390,35 @@ def _extract_prompts_from_comfy_graph(graph_obj) -> list:
             encoder_prompts.append(text)
 
     if encoder_prompts:
-        seen = set()
-        out: list = []
-        for t in encoder_prompts:
-            if t not in seen:
-                seen.add(t)
-                out.append(t)
-        return out
+        return _clean_candidates(encoder_prompts)
 
-    # --- Strategy 2: harvest literal text from known source nodes.
+    # --- Strategy 2: harvest from source nodes.
     candidates: list = []  # (priority, length, text)
-    all_hints = _COMFY_PROMPT_CLASS_HINTS
     for _nid, node in graph.items():
         ct = node.get("class_type") or ""
         inputs = node.get("inputs") or {}
         if not isinstance(inputs, dict):
             continue
-        priority = next(
-            (i for i, hint in enumerate(all_hints) if hint in ct), 999
-        )
-        if priority == 999 and not _node_matches(ct, _COMFY_TEXT_SOURCE_HINTS):
+        if not _node_matches(ct, _COMFY_TEXT_SOURCE_HINTS):
             continue
-        if priority == 999:
-            priority = len(all_hints)  # text-source fallback
+        priority = next(
+            (i for i, hint in enumerate(_COMFY_TEXT_SOURCE_HINTS) if hint in ct),
+            len(_COMFY_TEXT_SOURCE_HINTS),
+        )
         for field in _COMFY_PROMPT_INPUT_FIELDS:
             val = inputs.get(field)
             if isinstance(val, str):
                 stripped = val.strip()
-                if len(stripped) >= 8:
+                if _valid_prompt_candidate(stripped, min_len=8):
                     candidates.append((priority, len(stripped), stripped))
                     break
 
     candidates.sort(key=lambda c: (c[0], -c[1]))
-    seen = set()
-    out: list = []
-    for _, _, text in candidates:
-        if text not in seen:
-            seen.add(text)
-            out.append(text)
-    return out
+    return _clean_candidates(text for _, _, text in candidates)
 
 
 def _looks_like_comfy_graph(s) -> bool:
-    """True if `s` is a ComfyUI graph (API or UI format) we can parse.
-
-    Used to distinguish JustRayzist / flat-text `prompt` chunks from a
-    serialized ComfyUI prompt object — the former are literal prompts,
-    the latter need graph walking. Accepts both raw strings (parsed) and
-    already-parsed dicts.
-    """
+    """True if `s` is a ComfyUI graph (API or UI format) we can parse."""
     obj = s
     if isinstance(obj, str):
         st = obj.lstrip()
@@ -316,13 +430,11 @@ def _looks_like_comfy_graph(s) -> bool:
             return False
     if not isinstance(obj, dict):
         return False
-    # API format: dict keyed by node id -> {class_type, inputs}
     if "prompt" in obj and isinstance(obj["prompt"], dict):
         return True
     for v in obj.values():
         if isinstance(v, dict) and "class_type" in v:
             return True
-    # UI format: {nodes: [...], links: [...], ...}
     nodes = obj.get("nodes")
     if isinstance(nodes, list) and nodes:
         for n in nodes:
@@ -332,15 +444,8 @@ def _looks_like_comfy_graph(s) -> bool:
 
 
 def _extract_prompts_from_ui_workflow(obj) -> list:
-    """Walk a ComfyUI *UI* workflow (nodes/links array shape) and harvest
-    plausible prompts from widgets_values.
-
-    Strategy:
-      1. Encoder nodes (CLIPTextEncode*): widgets_values is a list where
-         the leading string entries are the prompt(s).
-      2. Text source nodes (Show Text, Text Multiline, easy wildcards,
-         easy showAnything): also store their text in widgets_values,
-         sometimes nested one level deep ([["..."]] for showAnything).
+    """Walk a ComfyUI UI workflow (nodes/links array) and harvest prompts
+    from `widgets_values`.
     """
     if isinstance(obj, str):
         try:
@@ -358,12 +463,14 @@ def _extract_prompts_from_ui_workflow(obj) -> list:
 
     def _push(text: str) -> None:
         t = (text or "").strip()
-        if len(t) < 4 or t in seen:
+        if not _valid_prompt_candidate(t):
+            return
+        if t in seen:
             return
         seen.add(t)
         out.append(t)
 
-    def _harvest(values, encoder: bool) -> None:
+    def _harvest(values) -> None:
         if not isinstance(values, list):
             return
         for v in values:
@@ -373,7 +480,15 @@ def _extract_prompts_from_ui_workflow(obj) -> list:
                 for inner in v:
                     if isinstance(inner, str):
                         _push(inner)
-            # ints/floats: skip silently (seed, guidance, etc.)
+                    elif isinstance(inner, dict):
+                        # easy showAnything can wrap the string in a dict.
+                        for iv in inner.values():
+                            if isinstance(iv, str):
+                                _push(iv)
+            elif isinstance(v, dict):
+                for iv in v.values():
+                    if isinstance(iv, str):
+                        _push(iv)
 
     encoder_hits = []
     source_hits = []
@@ -387,20 +502,16 @@ def _extract_prompts_from_ui_workflow(obj) -> list:
         wv = n.get("widgets_values")
         if _node_matches(ct, _COMFY_ENCODER_HINTS):
             encoder_hits.append(wv)
-            # Encoder with no usable string in widgets_values = its prompt
-            # came in over a wire, so we must walk source nodes too.
             if not _has_meaningful_string(wv):
                 has_wired_encoder = True
         elif _node_matches(ct, _COMFY_TEXT_SOURCE_HINTS):
             source_hits.append(wv)
 
     for wv in encoder_hits:
-        _harvest(wv, encoder=True)
-    # Pull from source nodes when no encoder produced text OR at least one
-    # encoder was wired (its real prompt lives in an upstream node).
+        _harvest(wv)
     if not out or has_wired_encoder:
         for wv in source_hits:
-            _harvest(wv, encoder=False)
+            _harvest(wv)
     return out
 
 
@@ -418,33 +529,79 @@ def _has_meaningful_string(values) -> bool:
     return False
 
 
+# EXIF tag numbers we mine for prompt-shaped fields, in order.
+_EXIF_TEXT_TAGS: tuple = (
+    (37510, "UserComment"),
+    (270,   "ImageDescription"),
+    (40092, "XPComment"),
+    (40095, "XPSubject"),
+    (40091, "XPTitle"),
+    (40094, "XPKeywords"),
+)
+
+
+def _decode_exif_bytes(raw: bytes, tag_id: int) -> str:
+    """Decode a raw EXIF bytes value into a plain string."""
+    if not isinstance(raw, bytes):
+        return ""
+    # UserComment uses an 8-byte character-code header.
+    if tag_id == 37510:
+        if raw.startswith(b"UNICODE\0"):
+            try:
+                return raw[8:].decode("utf-16-be", errors="replace").strip("\x00").strip()
+            except Exception:
+                try:
+                    return raw[8:].decode("utf-16-le", errors="replace").strip("\x00").strip()
+                except Exception:
+                    return ""
+        if raw.startswith(b"ASCII\0\0\0"):
+            return raw[8:].decode("ascii", errors="replace").strip("\x00").strip()
+        return raw.decode("utf-8", errors="replace").strip("\x00").strip()
+    # XP* tags are Windows-style UTF-16LE, null-terminated.
+    if tag_id in (40091, 40092, 40094, 40095):
+        try:
+            return raw.decode("utf-16-le", errors="replace").strip("\x00").strip()
+        except Exception:
+            pass
+    return raw.decode("utf-8", errors="replace").strip("\x00").strip()
+
+
 def _read_exif_user_comment(pil_image: Image.Image) -> str:
-    """EXIF UserComment from a PIL image, decoded to plain text."""
+    """EXIF UserComment (tag 37510) from a PIL image, decoded to plain text."""
     try:
         exif = pil_image.getexif()
     except Exception:
         return ""
     if not exif:
         return ""
-    # 37510 = UserComment
     raw = exif.get(37510)
     if raw is None:
         return ""
     if isinstance(raw, bytes):
-        # EXIF UserComment is prefixed with an 8-byte character-code header
-        # ("ASCII\0\0\0", "UNICODE\0", "JIS\0\0\0\0\0").
-        if raw.startswith(b"UNICODE\0"):
-            try:
-                return raw[8:].decode("utf-16-be").strip()
-            except Exception:
-                try:
-                    return raw[8:].decode("utf-16-le").strip()
-                except Exception:
-                    return ""
-        if raw.startswith(b"ASCII\0\0\0"):
-            return raw[8:].decode("ascii", errors="replace").strip()
-        return raw.decode("utf-8", errors="replace").strip()
+        return _decode_exif_bytes(raw, 37510)
     return str(raw).strip()
+
+
+def _read_exif_text_tags(pil_image: Image.Image) -> list:
+    """Return every prompt-shaped string found in EXIF text tags."""
+    try:
+        exif = pil_image.getexif()
+    except Exception:
+        return []
+    if not exif:
+        return []
+    out: list = []
+    for tag_id, _name in _EXIF_TEXT_TAGS:
+        raw = exif.get(tag_id)
+        if raw is None:
+            continue
+        text = _decode_exif_bytes(raw, tag_id) if isinstance(raw, bytes) else str(raw).strip()
+        if not text:
+            continue
+        # A1111 sometimes packs full parameters into UserComment.
+        stripped = _strip_a1111(text) if "Negative prompt:" in text or "\nSteps:" in text else text
+        out.append(stripped.strip())
+    return out
 
 
 def _read_sidecar(image_path: pathlib.Path) -> str:
@@ -459,27 +616,97 @@ def _read_sidecar(image_path: pathlib.Path) -> str:
         return ""
 
 
-def extract_prompts(image_path: pathlib.Path, pil_image: Image.Image) -> list:
-    """Return a list of positive prompts found in the image's metadata.
+def _walk_json_for_prompts(obj, depth: int = 0) -> list:
+    """Recursively pull prompt-shaped strings out of a nested JSON object.
 
-    May return an empty list when nothing is found. Order is best-effort:
-    A1111 first, then ComfyUI graphs (each CLIPTextEncode contributes one
-    entry), then EXIF/sidecar fallback.
+    Used for SwarmUI / InvokeAI / NovelAI metadata blobs, which store the
+    positive prompt at some key like `prompt` or `sui_image_params.prompt`.
     """
+    if depth > 6 or obj is None:
+        return []
+    out: list = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            kl = str(k).lower()
+            # Explicit prompt-ish keys pull their values directly.
+            if any(hint in kl for hint in ("prompt", "positive", "caption",
+                                            "description", "text")):
+                if isinstance(v, str) and _valid_prompt_candidate(v):
+                    out.append(v.strip())
+                elif isinstance(v, (dict, list)):
+                    out.extend(_walk_json_for_prompts(v, depth + 1))
+            elif isinstance(v, (dict, list)):
+                out.extend(_walk_json_for_prompts(v, depth + 1))
+    elif isinstance(obj, list):
+        for v in obj:
+            if isinstance(v, (dict, list)):
+                out.extend(_walk_json_for_prompts(v, depth + 1))
+            elif isinstance(v, str) and _valid_prompt_candidate(v):
+                out.append(v.strip())
+    return out
+
+
+def _harvest_info_value(key: str, val) -> list:
+    """Pull prompt candidates from a single `info[]` entry."""
+    if not isinstance(key, str):
+        return []
+    kl = key.lower()
+    if not any(hint in kl for hint in _INFO_KEY_HINTS):
+        return []
+    # Skip obvious flags / counters we don't want to smuggle in as prompts.
+    if kl.endswith(("_enhanced", "_count", "_json", "_seed", "_steps",
+                    "_cfg", "_size", "_flag", "_enabled")):
+        return []
+
+    if isinstance(val, str):
+        stripped = val.strip()
+        if not stripped:
+            return []
+        # JSON-looking string: try to parse and harvest inner prompt keys.
+        if stripped[:1] in ("{", "[") and stripped[-1:] in ("}", "]"):
+            try:
+                parsed = json.loads(stripped)
+            except Exception:
+                parsed = None
+            if parsed is not None:
+                inner = _walk_json_for_prompts(parsed)
+                if inner:
+                    return inner
+        # A1111-shaped blob under some non-`parameters` key.
+        if "Negative prompt:" in stripped or "\nSteps:" in stripped:
+            pos = _strip_a1111(stripped)
+            return [pos] if pos else []
+        return [stripped]
+    if isinstance(val, (dict, list)):
+        return _walk_json_for_prompts(val)
+    return []
+
+
+def extract_prompts(image_path: pathlib.Path, pil_image: Image.Image) -> list:
+    """Return a list of positive prompts found in the image's metadata."""
     info = pil_image.info or {}
 
     prompts: list = []
 
-    # 1. A1111 parameters chunk (PNG iTXt or JPEG info).
+    # 1. A1111 `parameters` (may also carry a JSON blob from SwarmUI /
+    # InvokeAI when they piggyback on the same key).
     params_blob = info.get("parameters") or info.get("Parameters")
     if isinstance(params_blob, str) and params_blob.strip():
-        positive = _strip_a1111(params_blob)
-        if positive:
-            prompts.append(positive)
+        stripped = params_blob.strip()
+        if stripped[:1] in ("{", "[") and stripped[-1:] in ("}", "]"):
+            try:
+                parsed = json.loads(stripped)
+                prompts.extend(_walk_json_for_prompts(parsed))
+            except Exception:
+                positive = _strip_a1111(stripped)
+                if positive:
+                    prompts.append(positive)
+        else:
+            positive = _strip_a1111(stripped)
+            if positive:
+                prompts.append(positive)
 
-    # 2. PNG `prompt` chunk. ComfyUI writes a serialized graph here, but
-    # some pipelines (JustRayzist etc.) write the literal prompt as a flat
-    # string. Detect the shape before dispatching.
+    # 2. PNG `prompt` chunk (graph or literal).
     comfy_prompt = info.get("prompt")
     if comfy_prompt:
         if isinstance(comfy_prompt, str) and not _looks_like_comfy_graph(comfy_prompt):
@@ -489,11 +716,7 @@ def extract_prompts(image_path: pathlib.Path, pil_image: Image.Image) -> list:
         else:
             prompts.extend(_extract_prompts_from_comfy_graph(comfy_prompt))
 
-    # 3. PNG `workflow` chunk. Two shapes possible:
-    #    - API format: {<node_id>: {class_type, inputs}} (same as `prompt`)
-    #    - UI format:  {nodes: [...], links: [...], groups: [...]}
-    # Route UI format through a dedicated walker — `_extract_prompts_from_comfy_graph`
-    # expects API format and would otherwise return the whole graph as a literal.
+    # 3. PNG `workflow` chunk (API or UI shape).
     comfy_workflow = info.get("workflow")
     if comfy_workflow:
         parsed = comfy_workflow
@@ -514,53 +737,24 @@ def extract_prompts(image_path: pathlib.Path, pil_image: Image.Image) -> list:
             if literal:
                 prompts.append(literal)
 
-    # 3b. Generic flat-string prompt chunks: JustRayzist and similar tools
-    # write multiple plain-text keys like `prompt_effective`, `prompt_original`,
-    # `prompt_wildcard_resolved`, etc. Collect every string-valued key whose
-    # name contains "prompt" and isn't one we already handled or a flag.
-    _consumed = {"parameters", "Parameters", "prompt", "workflow"}
+    # 4. Every other info[] key that looks prompt-shaped.
     for key, val in info.items():
-        if not isinstance(key, str) or key in _consumed:
+        if not isinstance(key, str) or key in _INFO_KEY_CONSUMED:
             continue
-        kl = key.lower()
-        if "prompt" not in kl:
-            continue
-        # Skip booleans-as-strings and counters.
-        if kl.endswith("_enhanced") or kl.endswith("_count") or kl.endswith("_json"):
-            continue
-        if not isinstance(val, str):
-            continue
-        stripped = val.strip()
-        if len(stripped) < 8:
-            continue
-        if stripped.lower() in ("true", "false", "none", "null"):
-            continue
-        prompts.append(stripped)
+        prompts.extend(_harvest_info_value(key, val))
 
-    # 4. EXIF UserComment fallback.
-    if not prompts:
-        exif_text = _read_exif_user_comment(pil_image)
-        if exif_text:
-            # Some encoders embed A1111-style here; others store JSON.
-            positive = _strip_a1111(exif_text)
-            if positive:
-                prompts.append(positive)
+    # 5. EXIF text tags (UserComment, ImageDescription, XP*).
+    exif_texts = _read_exif_text_tags(pil_image)
+    prompts.extend(exif_texts)
 
-    # 5. Sidecar .txt file.
-    if not prompts:
+    # 6. Sidecar .txt file — only when nothing else survived the filter.
+    cleaned = _clean_candidates(prompts)
+    if not cleaned:
         sidecar = _read_sidecar(image_path)
         if sidecar:
-            prompts.append(sidecar)
+            cleaned = _clean_candidates([sidecar])
 
-    # De-duplicate while preserving order.
-    seen = set()
-    deduped: list = []
-    for p in prompts:
-        s = (p or "").strip()
-        if s and s not in seen:
-            seen.add(s)
-            deduped.append(s)
-    return deduped
+    return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -581,11 +775,7 @@ def _coerce_bool(val) -> bool:
 
 
 def _enumerate_images(folder: pathlib.Path, recurse: bool) -> list:
-    """List image file paths under `folder`. Sorted for deterministic seeding.
-
-    Uses os.walk for recursion so symlinks and permission errors on a
-    single subtree don't abort the whole scan.
-    """
+    """List image file paths under `folder`. Sorted for deterministic seeding."""
     if not folder.is_dir():
         return []
     out: list = []
@@ -624,6 +814,7 @@ def _file_list(folder: pathlib.Path, recurse: bool, refresh: bool = False) -> li
 def clear_cache():
     _FILE_LIST_CACHE.clear()
     _RECENT_BY_NODE.clear()
+    _LAST_BEST_BY_NODE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -669,6 +860,19 @@ def _select_path(paths: list, recent: deque, rng, deterministic: bool) -> str:
 class RayLocalScraper:
     """Pick a random image from a local folder and extract its prompts."""
 
+    DESCRIPTION = (
+        "Random image from a local folder, with any generation prompt "
+        "found in its metadata. Reads A1111 `parameters`, ComfyUI "
+        "`prompt` / `workflow` graphs (walking wired ShowText / Text "
+        "Multiline / String Literal chains up to 8 hops), JPEG/WEBP "
+        "EXIF UserComment, and `<image>.txt` sidecars.\n\n"
+        "Seed-deterministic with a 20-entry LRU to avoid consecutive "
+        "repeats. `prompt_best_try` collapses each image to its single "
+        "best prompt AND skips a pick if it repeats the previous best. "
+        "Multi-prompt images emit one list entry per prompt across all "
+        "outputs."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -676,28 +880,46 @@ class RayLocalScraper:
                 "folder": ("STRING", {
                     "default": "",
                     "multiline": False,
-                    "placeholder": "absolute path to a folder of images",
+                    "placeholder": "Absolute path to a folder of images",
+                    "tooltip": "Absolute path to a folder of images.",
                 }),
-                "recurse_subfolders": ("BOOLEAN", {"default": False}),
-                "skip_no_prompt": ("BOOLEAN", {"default": False}),
-                "prompt_best_try": ("BOOLEAN", {"default": False}),
-                "seed": ("INT", {"default": -1, "min": -1, "max": 2**31 - 1}),
+                "recurse_subfolders": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Walk every subdirectory under folder.",
+                }),
+                "skip_no_prompt": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Skip images whose metadata yields no prompt.",
+                }),
+                "prompt_best_try": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Collapse to one prompt per image, and skip repeats of the last emit.",
+                }),
+                "seed": ("INT", {
+                    "default": -1, "min": -1, "max": 2**31 - 1,
+                    "tooltip": "-1 for random; any >=0 value is reproducible.",
+                }),
             },
             "optional": {
-                "refresh_listing": ("BOOLEAN", {"default": False}),
+                "refresh_listing": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Force a re-scan of the folder before selecting.",
+                }),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
         }
 
     RETURN_TYPES = ("STRING", "STRING", "IMAGE", "STRING")
     RETURN_NAMES = ("prompt_single", "prompt_multiline", "image", "image_path")
-    # ComfyUI batches list outputs: when an image carries multiple prompts,
-    # each output is emitted as a parallel list so the workflow can iterate
-    # over every prompt. The image/path entries are repeated per prompt so
-    # downstream nodes see (prompt_i, image, path) tuples.
+    OUTPUT_TOOLTIPS = (
+        "Whitespace-collapsed single-line prompt (list, one per prompt found).",
+        "Prompt with original newlines preserved (list).",
+        "Image tensor, repeated across every prompt entry.",
+        "Absolute path of the chosen file, repeated across every prompt entry.",
+    )
     OUTPUT_IS_LIST = (True, True, True, True)
     FUNCTION = "process"
-    CATEGORY = "Ray/Prompts📝"
+    CATEGORY = "👑 Ray/📝 Prompts"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
@@ -708,8 +930,8 @@ class RayLocalScraper:
         folder,
         recurse_subfolders,
         skip_no_prompt,
-        prompt_best_try,
         seed,
+        prompt_best_try=False,
         refresh_listing=False,
         node_id=None,
     ):
@@ -738,12 +960,14 @@ class RayLocalScraper:
             deterministic = True
 
         recent = _RECENT_BY_NODE.setdefault(node_key, deque(maxlen=_CACHE_MAX))
+        last_best = _LAST_BEST_BY_NODE.get(node_key, "")
 
-        # When skip_no_prompt is on, we may need to try several picks
-        # before finding one with extractable metadata. Cap attempts at
-        # the pool size so we don't loop forever on a folder of raw images.
+        # Loop enabled whenever we might need to keep looking:
+        # - skip_no_prompt: keep trying until we find one with a prompt
+        # - best_try:       keep trying if the best-try prompt matches last emit
+        need_loop = skip_no_prompt or best_try
+        max_attempts = min(len(paths), 50) if need_loop else 1
         attempts = 0
-        max_attempts = min(len(paths), 50) if skip_no_prompt else 1
         chosen_path: Optional[str] = None
         chosen_prompts: list = []
         pil_image: Optional[Image.Image] = None
@@ -757,32 +981,61 @@ class RayLocalScraper:
                 break
 
             if pick in candidates_tried:
-                # Same pick chosen again means the LRU forced a fallback;
-                # bail rather than spin.
+                # LRU forced a fallback repeat — bail rather than spin.
                 break
             candidates_tried.add(pick)
 
             try:
-                pil_image = Image.open(pick)
-                pil_image.load()
+                candidate_img = Image.open(pick)
+                candidate_img.load()
             except Exception as e:
                 print(f"[RayLocalScraper] cannot open {pick}: {e}")
                 continue
 
-            prompts = extract_prompts(pathlib.Path(pick), pil_image)
-            if prompts or not skip_no_prompt:
+            prompts = extract_prompts(pathlib.Path(pick), candidate_img)
+
+            # No prompt case.
+            if not prompts:
+                if skip_no_prompt:
+                    recent.append(pick)
+                    continue
                 chosen_path = pick
                 chosen_prompts = prompts
+                pil_image = candidate_img
                 break
 
-            # Skip this one and mark as recent so we don't immediately
-            # retry the same file.
-            recent.append(pick)
+            # Best-try dedup: if the top prompt matches the last one we
+            # emitted from this node, advance to the next image.
+            if best_try:
+                best = max(prompts, key=len)
+                if best and best == last_best:
+                    recent.append(pick)
+                    continue
+                chosen_path = pick
+                chosen_prompts = [best]
+                pil_image = candidate_img
+                _LAST_BEST_BY_NODE[node_key] = best
+                break
+
+            chosen_path = pick
+            chosen_prompts = prompts
+            pil_image = candidate_img
+            break
 
         if chosen_path is None or pil_image is None:
+            if skip_no_prompt and best_try:
+                raise RuntimeError(
+                    f"no image with a new best-try prompt in {folder_p} "
+                    f"(tried {attempts})"
+                )
             if skip_no_prompt:
                 raise RuntimeError(
                     f"no images with extractable prompts in {folder_p} "
+                    f"(tried {attempts})"
+                )
+            if best_try:
+                raise RuntimeError(
+                    f"no image with a new best-try prompt in {folder_p} "
                     f"(tried {attempts})"
                 )
             raise RuntimeError(f"could not open any image in {folder_p}")
@@ -794,22 +1047,28 @@ class RayLocalScraper:
             image_tensor = _black_tensor()
         path_str = os.fspath(chosen_path)
 
+        try:
+            from _common import send_preview
+        except ImportError:
+            try:
+                from ._common import send_preview  # type: ignore
+            except ImportError:
+                send_preview = None  # type: ignore
+        if send_preview is not None:
+            send_preview(node_id, path_str)
+
         if not chosen_prompts:
-            # No prompt found — emit a single empty entry so downstream
-            # nodes still see a list of length 1 (matching the image + path).
             return ([""], [""], [image_tensor], [path_str])
 
+        # `best_try` already collapsed above; keep the guard for the
+        # (rare) path where prompts came from an unfiltered branch.
         if best_try and len(chosen_prompts) > 1:
-            # Collapse to a single best candidate. Heuristic: longest by
-            # character count — usually the most descriptive / final prompt
-            # after wildcard expansion and enhancement.
             chosen_prompts = [max(chosen_prompts, key=len)]
 
         prompt_multiline_list = list(chosen_prompts)
         prompt_single_list = [
             re.sub(r"\s+", " ", p).strip() for p in chosen_prompts
         ]
-        # Parallel-broadcast the image + path across every prompt.
         n = len(chosen_prompts)
         image_list = [image_tensor] * n
         path_list = [path_str] * n

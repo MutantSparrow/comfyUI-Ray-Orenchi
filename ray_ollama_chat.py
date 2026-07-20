@@ -272,40 +272,72 @@ def _build_chat_text(system_prompt, history, user_prompt):
 
 
 class RayOllamaChat:
+    DESCRIPTION = (
+        "Inline chat node with two backends. `ollama` talks to a local "
+        "Ollama server (supports image + audio attachments per turn); "
+        "`clip` drives the text encoder of a ComfyUI-loaded CLIP model "
+        "directly, no external server. Vision-language CLIPs are "
+        "rejected in CLIP mode.\n\n"
+        "The chat UI is rendered inside the node. Conversation history "
+        "and last message live on the node so workflows reload chats "
+        "after restart. `think` toggles Ollama's thinking-mode where "
+        "the model supports it."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "inference_mode": (["ollama", "clip"], {"default": "ollama"}),
-                "server_url":   ("STRING",  {"default": "http://localhost:11434"}),
-                "model":        ("STRING",  {"default": ""}),
-                "keep_alive":   ("STRING",  {"default": "5m"}),
-                "temperature":  ("FLOAT",   {"default": 0.7, "min": 0.0, "max": 2.0, "step": 0.05}),
-                "seed":         ("INT",     {"default": -1, "min": -1, "max": 2**31 - 1}),
-                "think":        ("BOOLEAN", {"default": False}),
-                "chat_history": ("STRING",  {"default": "[]", "multiline": True}),
-                "last_message": ("STRING",  {"default": "",   "multiline": True}),
-                "pending_user_prompt": ("STRING", {"default": "", "multiline": True}),
-                "attach_image": ("BOOLEAN", {"default": True}),
-                "attach_audio": ("BOOLEAN", {"default": True}),
+                "inference_mode": (["ollama", "clip"], {
+                    "default": "ollama",
+                    "tooltip": "ollama = local Ollama server. clip = ComfyUI CLIP text encoder.",
+                }),
+                "server_url":   ("STRING",  {"default": "http://localhost:11434",
+                                              "tooltip": "Ollama server URL."}),
+                "model":        ("STRING",  {"default": "",
+                                              "tooltip": "Ollama model name (or hint for CLIP mode)."}),
+                "keep_alive":   ("STRING",  {"default": "5m",
+                                              "tooltip": "Ollama keep-alive window (e.g. 5m)."}),
+                "temperature":  ("FLOAT",   {"default": 0.7, "min": 0.0, "max": 2.0, "step": 0.05,
+                                              "tooltip": "Sampling temperature."}),
+                "seed":         ("INT",     {"default": -1, "min": -1, "max": 2**31 - 1,
+                                              "tooltip": "-1 for random; any >=0 value is reproducible."}),
+                "think":        ("BOOLEAN", {"default": False,
+                                              "tooltip": "Enable Ollama thinking mode where supported."}),
+                "chat_history": ("STRING",  {"default": "[]", "multiline": True,
+                                              "tooltip": "Hidden JSON-encoded chat log — managed by the widget."}),
+                "last_message": ("STRING",  {"default": "",   "multiline": True,
+                                              "tooltip": "Hidden — last assistant reply."}),
+                "pending_user_prompt": ("STRING", {"default": "", "multiline": True,
+                                                    "tooltip": "Hidden — user-typed message queued for the next turn."}),
+                "attach_image": ("BOOLEAN", {"default": True,
+                                              "tooltip": "Attach the IMAGE input on the next turn."}),
+                "attach_audio": ("BOOLEAN", {"default": True,
+                                              "tooltip": "Attach the AUDIO input on the next turn."}),
             },
             "optional": {
-                "system_prompt": ("STRING", {"forceInput": True, "multiline": True}),
-                "user_prompt":   ("STRING", {"forceInput": True, "multiline": True}),
-                "image":         ("IMAGE",),
-                "audio":         ("AUDIO",),
-                "clip":          ("CLIP",),
-                "max_new_tokens": ("INT",   {"default": 256, "min": 1, "max": 4096, "step": 1}),
-                "top_p":          ("FLOAT", {"default": 0.92, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "repetition_penalty": ("FLOAT", {"default": 1.08, "min": 1.0, "max": 2.0, "step": 0.01}),
+                "system_prompt": ("STRING", {"forceInput": True, "multiline": True,
+                                              "tooltip": "System message override."}),
+                "user_prompt":   ("STRING", {"forceInput": True, "multiline": True,
+                                              "tooltip": "One-shot user message (alternative to typing)."}),
+                "image":         ("IMAGE",  {"tooltip": "Image to attach when attach_image is on."}),
+                "audio":         ("AUDIO",  {"tooltip": "Audio to attach when attach_audio is on."}),
+                "clip":          ("CLIP",   {"tooltip": "Required for CLIP inference_mode."}),
+                "max_new_tokens": ("INT",   {"default": 256, "min": 1, "max": 4096, "step": 1,
+                                              "tooltip": "CLIP mode: generation cap."}),
+                "top_p":          ("FLOAT", {"default": 0.92, "min": 0.0, "max": 1.0, "step": 0.01,
+                                              "tooltip": "CLIP mode: nucleus sampling."}),
+                "repetition_penalty": ("FLOAT", {"default": 1.08, "min": 1.0, "max": 2.0, "step": 0.01,
+                                                  "tooltip": "CLIP mode: repetition penalty."}),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
         }
 
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("last_message",)
+    OUTPUT_TOOLTIPS = ("Last assistant reply.",)
     FUNCTION = "process"
-    CATEGORY = "Ray/LLM💬"
+    CATEGORY = "👑 Ray/💬 LLM"
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):

@@ -408,28 +408,67 @@ def clear_cache():
 class RayCivitAI:
     """Fetch a random prompt + gallery image from civitai.com, seed-deterministic."""
 
+    DESCRIPTION = (
+        "Random prompt + gallery image from civitai.com via the public "
+        "REST API. Only items with an extractable prompt are kept — "
+        "either the direct `meta.prompt` or text salvaged from a "
+        "ComfyUI workflow blob embedded in `meta.comfy`.\n\n"
+        "Blue (SFW) = browsingLevel PG|PG13; Red = all levels. Filter "
+        "by base model, time period, sort order, and (optionally) a "
+        "specific uploader username. Higher-tier content unlocks if a "
+        "`civitai.secret` token file is present next to the node code "
+        "(gitignored). The 🔄 clear cache button drops the page cache "
+        "and this node's recent-pick deque."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "seed": ("INT", {"default": -1, "min": -1, "max": 2**31 - 1}),
-                "mode": (MODES, {"default": MODE_BLUE}),
-                "base_model": (BASE_MODELS, {"default": BASE_MODELS_DEFAULT}),
-                "period": (PERIODS, {"default": "Week"}),
-                "sort": (SORTS, {"default": "Random"}),
-                "username": ("STRING", {"default": "", "multiline": False,
-                                         "placeholder": "civitai username (optional)"}),
+                "seed": ("INT", {
+                    "default": -1, "min": -1, "max": 2**31 - 1,
+                    "tooltip": "-1 for random; any >=0 value is reproducible.",
+                }),
+                "mode": (MODES, {
+                    "default": MODE_BLUE,
+                    "tooltip": "Blue = SFW (PG | PG13); Red = all browsing levels.",
+                }),
+                "base_model": (BASE_MODELS, {
+                    "default": BASE_MODELS_DEFAULT,
+                    "tooltip": "Restrict picks to images tagged with this base model.",
+                }),
+                "period": (PERIODS, {
+                    "default": "Week",
+                    "tooltip": "Time window for metric-based sorts.",
+                }),
+                "sort": (SORTS, {
+                    "default": "Random",
+                    "tooltip": "Gallery sort order.",
+                }),
+                "username": ("STRING", {
+                    "default": "", "multiline": False,
+                    "placeholder": "CivitAI username (optional)",
+                    "tooltip": "Restrict pool to one uploader. Auto-forces period=AllTime.",
+                }),
             },
             "optional": {
-                "timeout": ("INT", {"default": 15, "min": 2, "max": 60, "step": 1}),
+                "timeout": ("INT", {
+                    "default": 15, "min": 2, "max": 60, "step": 1,
+                    "tooltip": "HTTP timeout per request, in seconds.",
+                }),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
         }
 
     RETURN_TYPES = ("STRING", "STRING", "IMAGE")
     RETURN_NAMES = ("prompt_single", "prompt_multiline", "image")
+    OUTPUT_TOOLTIPS = (
+        "Whitespace-collapsed single-line prompt.",
+        "Prompt with original newlines preserved.",
+        "Gallery image (BHWC float32 [0,1]); 1x1 black on fetch failure.",
+    )
     FUNCTION = "process"
-    CATEGORY = "Ray/Prompts📝"
+    CATEGORY = "👑 Ray/📝 Prompts"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
@@ -475,4 +514,12 @@ class RayCivitAI:
         prompt_single, prompt_multiline, image_tensor = _build_outputs(
             prompt_multiline, image_url, int(timeout)
         )
+
+        if image_url:
+            try:
+                from _common import send_preview
+            except ImportError:
+                from ._common import send_preview  # type: ignore
+            send_preview(node_id, image_url)
+
         return (prompt_single, prompt_multiline, image_tensor)

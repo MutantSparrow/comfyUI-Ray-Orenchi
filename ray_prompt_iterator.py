@@ -51,21 +51,41 @@ def _parse_response(raw: str, fallback_prompt: str):
 
 
 class RayPromptIterator:
+    DESCRIPTION = (
+        "Image-prompt judge + rewriter via Ollama. Given the original "
+        "prompt and (optionally) the rendered image, returns:\n"
+        "  • `confidence`  — [0,1] match score for the current image.\n"
+        "  • `new_prompt`  — revised prompt aimed at closing the gap.\n"
+        "  • `image`       — pass-through of the input image.\n\n"
+        "Pipe `new_prompt` back into your CLIP text encoder to iterate. "
+        "`copy_to_clipboard` mirrors the revised prompt to the OS "
+        "clipboard on execute. System prompt loaded from "
+        "`iterator_sysprompt.txt` (editable)."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "server_url":     ("STRING",  {"default": "http://localhost:11434"}),
-                "model":          ("STRING",  {"default": ""}),
-                "keep_alive":     ("STRING",  {"default": "5m"}),
-                "temperature":    ("FLOAT",   {"default": 0.8, "min": 0.0, "max": 2.0, "step": 0.05}),
-                "seed":           ("INT",     {"default": -1, "min": -1, "max": 2**31 - 1}),
-                "copy_to_clipboard":("BOOLEAN",{"default": False}),
-                "original_prompt":("STRING",  {"forceInput": True}),
+                "server_url":     ("STRING",  {"default": "http://localhost:11434",
+                                                "tooltip": "Ollama server URL."}),
+                "model":          ("STRING",  {"default": "",
+                                                "tooltip": "Vision-capable Ollama model."}),
+                "keep_alive":     ("STRING",  {"default": "5m",
+                                                "tooltip": "Ollama keep-alive window."}),
+                "temperature":    ("FLOAT",   {"default": 0.8, "min": 0.0, "max": 2.0, "step": 0.05,
+                                                "tooltip": "Sampling temperature."}),
+                "seed":           ("INT",     {"default": -1, "min": -1, "max": 2**31 - 1,
+                                                "tooltip": "-1 for random; any >=0 value is reproducible."}),
+                "copy_to_clipboard":("BOOLEAN",{"default": False,
+                                                 "tooltip": "Copy new_prompt to the clipboard on execute."}),
+                "original_prompt":("STRING",  {"forceInput": True,
+                                                "tooltip": "Original generation prompt."}),
             },
             "optional": {
-                "image":           ("IMAGE",),
-                "changes_required":("STRING",  {"forceInput": True}),
+                "image":           ("IMAGE", {"tooltip": "Rendered image to score against the prompt."}),
+                "changes_required":("STRING", {"forceInput": True,
+                                                "tooltip": "Free-form guidance for the rewrite."}),
             },
             "hidden": {
                 "node_id": "UNIQUE_ID",
@@ -74,8 +94,13 @@ class RayPromptIterator:
 
     RETURN_TYPES = ("STRING", "FLOAT", "IMAGE",)
     RETURN_NAMES = ("new_prompt", "confidence", "image",)
+    OUTPUT_TOOLTIPS = (
+        "Rewritten prompt aimed at fixing visible mismatches.",
+        "Image-vs-prompt match score in [0, 1].",
+        "Pass-through of the input image so it stays on the wire.",
+    )
     FUNCTION = "process"
-    CATEGORY = "Ray/Prompts📝"
+    CATEGORY = "👑 Ray/💬 LLM"
 
     def process(self, server_url, model, keep_alive, temperature, seed, copy_to_clipboard,
                 original_prompt, image=None, changes_required=None, node_id=None):

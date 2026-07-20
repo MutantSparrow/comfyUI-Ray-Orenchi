@@ -1,4 +1,9 @@
 import { app } from "../../scripts/app.js";
+import {
+    applyBucketTint,
+    setWidgetHidden as commonSetHidden,
+    findWidget as getWidget,
+} from "./_common.js";
 
 const NODE_NAME = "RayMetaInspect";
 
@@ -11,29 +16,8 @@ const MODE_VISIBLE = {
     [MODE_EMBED]: new Set(["mode", "path", "metadata_json"]),
 };
 
-function getWidget(node, name) {
-    return node.widgets?.find((w) => w.name === name);
-}
-
 function setWidgetHidden(widget, hidden) {
-    if (!widget) return;
-    if (hidden) {
-        if (widget.__rmiOrigType === undefined) {
-            widget.__rmiOrigType = widget.type;
-            widget.__rmiOrigComputeSize = widget.computeSize;
-        }
-        widget.type = "hidden";
-        widget.computeSize = () => [0, -4];
-        widget.hidden = true;
-    } else {
-        if (widget.__rmiOrigType !== undefined) {
-            widget.type = widget.__rmiOrigType;
-            widget.computeSize = widget.__rmiOrigComputeSize;
-            widget.__rmiOrigType = undefined;
-            widget.__rmiOrigComputeSize = undefined;
-        }
-        widget.hidden = false;
-    }
+    commonSetHidden(null, widget, hidden);
 }
 
 function applyMode(node, mode) {
@@ -262,6 +246,7 @@ function wirePathStripper(node) {
 }
 
 function bootstrap(node) {
+    applyBucketTint(node, "Prompts");
     injectDropZone(node);
     injectPreview(node);
     wirePathStripper(node);

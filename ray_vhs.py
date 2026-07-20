@@ -367,41 +367,75 @@ def apply_vhs(
 class RayVHS:
     """VHS / tape degradation in YUV space with OSD overlays."""
 
+    DESCRIPTION = (
+        "Videotape degradation modeled in YUV space: chroma blur, head-"
+        "switching band, tracking wobble, dropouts, hiss, and Y/C "
+        "separation. Each slider defaults to -1 (use the preset value) "
+        "and 0..1 overrides that channel.\n\n"
+        "OSD overlay simulates the classic VCR readout: ▶ PLAY / ● REC / "
+        "Date / Date+Time in any corner. Leave osd_date blank to stamp "
+        "today's date."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
+        _override = "-1 uses the preset value; 0..1 overrides."
         return {
             "required": {
-                "image": ("IMAGE",),
-                "preset": (PRESET_NAMES, {"default": "Worn EP"}),
+                "image": ("IMAGE", {"tooltip": "Source image."}),
+                "preset": (PRESET_NAMES, {
+                    "default": "Worn EP",
+                    "tooltip": "Tape / speed preset (baseline for the sliders below).",
+                }),
                 "chroma_blur": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
+                    "tooltip": f"Chroma blur strength. {_override}",
                 }),
                 "head_switch": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
+                    "tooltip": f"Head-switching band at frame bottom. {_override}",
                 }),
                 "tracking_jitter": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
+                    "tooltip": f"Horizontal tracking wobble. {_override}",
                 }),
                 "dropout_rate": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
+                    "tooltip": f"Random dropouts (bright streaks). {_override}",
                 }),
                 "hiss": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
+                    "tooltip": f"Luma noise / analog hiss. {_override}",
                 }),
                 "yc_separation": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
+                    "tooltip": f"Y/C separation artifact strength. {_override}",
                 }),
-                "osd_mode": (OSD_MODES, {"default": "Off"}),
-                "osd_corner": (OSD_CORNERS, {"default": "BL"}),
-                "osd_date": ("STRING", {"default": "", "placeholder": "YYYY MM DD (blank=today)"}),
-                "seed": ("INT", {"default": -1, "min": -1, "max": 2**31 - 1}),
+                "osd_mode": (OSD_MODES, {
+                    "default": "Off",
+                    "tooltip": "On-screen display overlay: Off / ▶ PLAY / ● REC / Date / Date+Time.",
+                }),
+                "osd_corner": (OSD_CORNERS, {
+                    "default": "BL",
+                    "tooltip": "Corner for the OSD (TL=top-left, TR=top-right, BL=bottom-left, BR=bottom-right).",
+                }),
+                "osd_date": ("STRING", {
+                    "default": "",
+                    "placeholder": "YYYY MM DD (blank = today)",
+                    "tooltip": "OSD date. Leave blank to use today's date.",
+                }),
+                "seed": ("INT", {
+                    "default": -1, "min": -1, "max": 2**31 - 1,
+                    "tooltip": "-1 for random; any >=0 value is reproducible.",
+                }),
             },
         }
 
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("image",)
+    OUTPUT_TOOLTIPS = ("Tape-degraded image with the OSD overlay applied.",)
     FUNCTION = "process"
-    CATEGORY = "Ray/VFX✨"
+    CATEGORY = "👑 Ray/✨ VFX"
 
     def process(
         self,

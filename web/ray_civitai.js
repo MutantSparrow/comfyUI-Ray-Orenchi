@@ -1,10 +1,13 @@
 import { app } from "../../scripts/app.js";
+import {
+    applyBucketTint,
+    shiftTint,
+    RAY_PALETTE,
+    findWidget as getWidget,
+    autowireRayPreview,
+} from "./_common.js";
 
 const NODE_NAME = "RayCivitAI";
-
-function getWidget(node, name) {
-    return node.widgets?.find((w) => w.name === name);
-}
 
 async function postRefresh() {
     try {
@@ -29,10 +32,12 @@ async function fetchOptions() {
 }
 
 function applyModeStyling(node, mode) {
-    const isRed = mode && mode.toLowerCase().startsWith("red");
-    const tint = isRed ? "#7a1f23" : "#1f4f7a";
-    node.bgcolor = tint;
-    node.color = isRed ? "#a83236" : "#3273a8";
+    // Prompts bucket base tint; Red mode hue-shifts toward violet/red.
+    applyBucketTint(node, "Prompts");
+    if (mode && mode.toLowerCase().startsWith("red")) {
+        node.bgcolor = shiftTint(RAY_PALETTE.Prompts.bg, -110);
+        node.color = shiftTint(RAY_PALETTE.Prompts.edge, -110);
+    }
     node.setDirtyCanvas?.(true, true);
 }
 
@@ -78,6 +83,7 @@ function injectRefreshButton(node, statusEl) {
 async function bootstrap(node) {
     const statusEl = injectStatusWidget(node);
     injectRefreshButton(node, statusEl);
+    autowireRayPreview(node, { height: 200, label: "civitai preview" });
 
     const opts = await fetchOptions();
     if (opts && opts.has_token === false) {
@@ -86,8 +92,8 @@ async function bootstrap(node) {
     }
 
     const modeW = getWidget(node, "mode");
+    applyModeStyling(node, modeW?.value);
     if (modeW) {
-        applyModeStyling(node, modeW.value);
         const orig = modeW.callback;
         modeW.callback = function (v) {
             const r = orig?.apply(this, arguments);

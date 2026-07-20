@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { injectStylesOnce, renderMarkdown } from "./chat_styles.js";
+import { applyBucketTint } from "./_common.js";
 
 const NODE_NAME = "RayOllamaChat";
 
@@ -1036,7 +1037,7 @@ app.registerExtension({
         const orig = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             const r = orig?.apply(this, arguments);
-            try { buildChatUI(this); }
+            try { buildChatUI(this); applyBucketTint(this, "LLM"); }
             catch (e) { console.error("[RayOllamaChat] buildChatUI error:", e); }
             this.size = [400, 480];
             return r;

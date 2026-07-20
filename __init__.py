@@ -100,21 +100,25 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "RayCRT":              "Ray's VFX: CRT",
-    "RayOffsetPrint":      "Ray's VFX: Offset Print",
-    "RayPixelArtDetector": "Ray's VFX: Pixel Art",
-    "RayKnob":             "🎛️ Ray's Analog Series: Knob",
-    "RaySwitch":           "🔘 Ray's Analog Series: Switch",
-    "RayOllamaChat":       "Ray's LM: Ollama + Clip Chat",
-    "RayPromptIterator":   "Ray's LM: LM Prompt Iterator",
-    "RayPromptDexter":     "Ray's Web: PromptDexter Scraper",
-    "RayCivitAI":          "Ray's Web: CivitAI Gallery Scraper",
-    "RayLocalScraper":     "Ray's Local: Folder Image Scraper",
-    "RayPromptFetcher":    "Ray's Prompt Fetcher",
-    "RayMetaInspect":      "Ray's Local: Metadata Inspector",
-    "RayPromptLibrary":    "Ray's LM: Prompt Library",
-    "RayFilmStock":        "Ray's VFX: Film Stock",
-    "RayVHS":              "Ray's VFX: VHS / Tape",
+    # 👑 Ray/✨ VFX
+    "RayCRT":              "✨ Ray's VFX: CRT",
+    "RayOffsetPrint":      "✨ Ray's VFX: Offset Print",
+    "RayPixelArtDetector": "✨ Ray's VFX: Pixel Art",
+    "RayFilmStock":        "✨ Ray's VFX: Film Stock",
+    "RayVHS":              "✨ Ray's VFX: VHS / Tape",
+    # 👑 Ray/🎛️ Analog
+    "RayKnob":             "🎛️ Ray's Analog: Knob",
+    "RaySwitch":           "🎛️ Ray's Analog: Switch",
+    # 👑 Ray/💬 LLM
+    "RayOllamaChat":       "💬 Ray's LLM: Ollama Chat",
+    "RayPromptIterator":   "💬 Ray's LLM: Prompt Iterator",
+    "RayPromptLibrary":    "💬 Ray's LLM: Prompt Library",
+    # 👑 Ray/📝 Prompts
+    "RayPromptDexter":     "📝 Ray's Prompts: PromptDexter Scraper",
+    "RayCivitAI":          "📝 Ray's Prompts: CivitAI Gallery Scraper",
+    "RayLocalScraper":     "📝 Ray's Prompts: Folder Image Scraper",
+    "RayPromptFetcher":    "📝 Ray's Prompts: Prompt Fetcher",
+    "RayMetaInspect":      "📝 Ray's Prompts: Metadata Inspector",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]

@@ -59,6 +59,20 @@ def _empty_tensor():
 class RayPromptFetcher:
     """All-in-one prompt fetcher with a mode-selector dropdown."""
 
+    DESCRIPTION = (
+        "One node, three prompt sources. Pick a mode and the JS hides "
+        "widgets for the others.\n"
+        "  • `Local Folder`  — random image + extracted prompt from a "
+        "local folder (RayLocalScraper).\n"
+        "  • `PromptDexter`  — random prompt + image from "
+        "promptdexter.com (RayPromptDexter).\n"
+        "  • `CivitAI`       — random prompt + image from civitai.com "
+        "(RayCivitAI).\n\n"
+        "Outputs are harmonized to `(prompt_single, prompt_multiline, "
+        "image, image_path)` so any mode is drop-in compatible with "
+        "downstream wiring. `image_path` is empty for web modes."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         try:
@@ -69,49 +83,85 @@ class RayPromptFetcher:
 
         return {
             "required": {
-                "scraper_mode": (MODES, {"default": MODE_LOCAL}),
-                "seed": ("INT", {"default": -1, "min": -1, "max": 2**31 - 1}),
+                "scraper_mode": (MODES, {
+                    "default": MODE_LOCAL,
+                    "tooltip": "Which backend runs. The JS hides widgets for the other modes.",
+                }),
+                "seed": ("INT", {
+                    "default": -1, "min": -1, "max": 2**31 - 1,
+                    "tooltip": "-1 for random; any >=0 value is reproducible.",
+                }),
 
                 # --- Local mode widgets ---
                 "local__folder": ("STRING", {
                     "default": "",
                     "multiline": False,
-                    "placeholder": "absolute path to a folder of images",
+                    "placeholder": "Absolute path to a folder of images",
+                    "tooltip": "Local mode: absolute path to a folder of images.",
                 }),
-                "local__recurse_subfolders": ("BOOLEAN", {"default": False}),
-                "local__skip_no_prompt": ("BOOLEAN", {"default": False}),
-                "local__prompt_best_try": ("BOOLEAN", {"default": False}),
+                "local__recurse_subfolders": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Local mode: walk every subdirectory.",
+                }),
+                "local__skip_no_prompt": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Local mode: skip images whose metadata yields no prompt.",
+                }),
+                "local__prompt_best_try": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Local mode: collapse to one prompt per image; skip repeats.",
+                }),
 
                 # --- PromptDexter mode widgets ---
                 "dexter__category": (
                     dexter_category_choices,
-                    {"default": _dexter.ANY_CATEGORY},
+                    {"default": _dexter.ANY_CATEGORY,
+                     "tooltip": "PromptDexter mode: sitemap category slug, or (any)."},
                 ),
-                "dexter__clear_cache": ("BOOLEAN", {"default": False}),
+                "dexter__clear_cache": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "PromptDexter mode: drop the recent-pick deque before selecting.",
+                }),
 
                 # --- CivitAI mode widgets ---
-                "civitai__mode": (_civit.MODES, {"default": _civit.MODE_BLUE}),
+                "civitai__mode": (_civit.MODES, {
+                    "default": _civit.MODE_BLUE,
+                    "tooltip": "CivitAI mode: Blue = SFW; Red = all levels.",
+                }),
                 "civitai__base_model": (
                     _civit.BASE_MODELS,
-                    {"default": _civit.BASE_MODELS_DEFAULT},
+                    {"default": _civit.BASE_MODELS_DEFAULT,
+                     "tooltip": "CivitAI mode: restrict picks to this base model."},
                 ),
-                "civitai__period": (_civit.PERIODS, {"default": "Week"}),
-                "civitai__sort": (_civit.SORTS, {"default": "Random"}),
+                "civitai__period": (_civit.PERIODS, {
+                    "default": "Week",
+                    "tooltip": "CivitAI mode: time window.",
+                }),
+                "civitai__sort": (_civit.SORTS, {
+                    "default": "Random",
+                    "tooltip": "CivitAI mode: gallery sort order.",
+                }),
                 "civitai__username": ("STRING", {
                     "default": "",
                     "multiline": False,
-                    "placeholder": "civitai username (optional)",
+                    "placeholder": "CivitAI username (optional)",
+                    "tooltip": "CivitAI mode: restrict pool to one uploader.",
                 }),
             },
             "optional": {
-                "local__refresh_listing": ("BOOLEAN", {"default": False}),
+                "local__refresh_listing": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Local mode: force a re-scan of the folder.",
+                }),
                 "dexter__timeout": (
                     "INT",
-                    {"default": 10, "min": 2, "max": 60, "step": 1},
+                    {"default": 10, "min": 2, "max": 60, "step": 1,
+                     "tooltip": "PromptDexter mode: HTTP timeout per request."},
                 ),
                 "civitai__timeout": (
                     "INT",
-                    {"default": 15, "min": 2, "max": 60, "step": 1},
+                    {"default": 15, "min": 2, "max": 60, "step": 1,
+                     "tooltip": "CivitAI mode: HTTP timeout per request."},
                 ),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
@@ -119,9 +169,15 @@ class RayPromptFetcher:
 
     RETURN_TYPES = ("STRING", "STRING", "IMAGE", "STRING")
     RETURN_NAMES = ("prompt_single", "prompt_multiline", "image", "image_path")
+    OUTPUT_TOOLTIPS = (
+        "Whitespace-collapsed single-line prompt (list).",
+        "Prompt with original newlines preserved (list).",
+        "Image tensor (BHWC float32 [0,1]).",
+        "For Local mode: absolute path of the source file. Empty for web modes.",
+    )
     OUTPUT_IS_LIST = (True, True, True, True)
     FUNCTION = "process"
-    CATEGORY = "Ray/Prompts📝"
+    CATEGORY = "👑 Ray/📝 Prompts"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):

@@ -6,6 +6,7 @@ import {
     listSwitchStyles,
     getAllSwitchStyleCSS,
 } from "./switch_styles.js";
+import { mountDymoLabel } from "./_common.js";
 
 const STYLE_ID = "ray-switch-styles";
 
@@ -59,6 +60,11 @@ function injectStylesOnce() {
     padding:6px 6px 4px;
     box-sizing:border-box;
 }
+.ray-switch-wrap.rs-compact {
+    background:transparent;
+    box-shadow:none;
+    padding:0;
+}
 .ray-switch-wrap .rs-host {
     width: 156px;
     height: 156px;
@@ -72,7 +78,9 @@ function injectStylesOnce() {
     text-shadow:0 1px 0 rgba(255,255,255,0.45);
     line-height:1.1;
     letter-spacing:0.08em;
-}`;
+}
+.ray-switch-wrap.rs-compact .rs-readout { display:none; }
+.ray-switch-wrap.rs-compact .ray-dymo   { display:none; }`;
     document.head.appendChild(tag);
 }
 
@@ -82,6 +90,10 @@ function buildSwitchElement(node, sw) {
     const wrap = document.createElement("div");
     wrap.className = "ray-switch-wrap";
 
+    // Dymo label above the switch face; hidden in compact mode via CSS.
+    const dymo = mountDymoLabel(node, { placeholder: "LABEL" });
+    if (dymo?.root) wrap.appendChild(dymo.root);
+
     const host = document.createElement("div");
     host.className = "rs-host";
     wrap.appendChild(host);
@@ -89,6 +101,13 @@ function buildSwitchElement(node, sw) {
     const readout = document.createElement("div");
     readout.className = "rs-readout";
     wrap.appendChild(readout);
+
+    const applyCompact = () => {
+        const c = !!node.properties?.compact;
+        wrap.classList.toggle("rs-compact", c);
+    };
+    applyCompact();
+    node._raySwitchApplyCompact = applyCompact;
 
     let currentStyle = null;
 
@@ -158,8 +177,16 @@ app.registerExtension({
             if (!styles.includes(this.properties.style)) {
                 this.properties.style = DEFAULT_SWITCH_STYLE;
             }
+            if (typeof this.properties.compact !== "boolean") {
+                this.properties.compact = false;
+            }
+            if (typeof this.properties.ray_label !== "string") {
+                this.properties.ray_label = "";
+            }
             if (typeof this.addProperty === "function") {
                 this.addProperty("style", this.properties.style, "enum", { values: styles });
+                this.addProperty("compact", this.properties.compact, "boolean");
+                this.addProperty("ray_label", this.properties.ray_label, "string");
             }
 
             const sw = this.widgets?.find(w => w.name === "state");
@@ -199,21 +226,37 @@ app.registerExtension({
         nodeType.prototype.getExtraMenuOptions = function (canvas, options) {
             const node = this;
             const styles = styleList();
-            options.unshift({
-                content: "Switch Style",
-                has_submenu: true,
-                submenu: {
-                    options: styles.map(s => ({
-                        content: (node.properties?.style === s ? "● " : "  ") + (SWITCH_STYLES[s]?.label || s),
-                        callback: () => {
-                            node.properties = node.properties || {};
-                            node.properties.style = s;
-                            node._switchRender?.();
-                            node.setDirtyCanvas?.(true, true);
-                        },
-                    })),
+            const compact = !!node.properties?.compact;
+            options.unshift(
+                {
+                    content: "Switch Style",
+                    has_submenu: true,
+                    submenu: {
+                        options: styles.map(s => ({
+                            content: (node.properties?.style === s ? "● " : "  ") + (SWITCH_STYLES[s]?.label || s),
+                            callback: () => {
+                                node.properties = node.properties || {};
+                                node.properties.style = s;
+                                node._switchRender?.();
+                                node.setDirtyCanvas?.(true, true);
+                            },
+                        })),
+                    },
                 },
-            });
+                {
+                    content: (compact ? "● " : "  ") + "Compact mode",
+                    callback: () => {
+                        node.properties = node.properties || {};
+                        node.properties.compact = !node.properties.compact;
+                        node._raySwitchApplyCompact?.();
+                        node.setDirtyCanvas?.(true, true);
+                    },
+                },
+                {
+                    content: "Edit label…",
+                    callback: () => { node._rayDymo?.beginEdit?.(); },
+                },
+            );
             return getExtraMenuOptions?.apply(this, arguments);
         };
 
@@ -225,8 +268,24 @@ app.registerExtension({
                 }
                 this._switchRender?.();
                 this.setDirtyCanvas?.(true, true);
+            } else if (name === "compact") {
+                this._raySwitchApplyCompact?.();
+                this.setDirtyCanvas?.(true, true);
             }
             return onPropertyChanged?.apply(this, arguments);
+        };
+
+        const onConfigure = nodeType.prototype.onConfigure;
+        nodeType.prototype.onConfigure = function () {
+            const r = onConfigure?.apply(this, arguments);
+            setTimeout(() => {
+                if (this._rayDymo && typeof this.properties?.ray_label === "string") {
+                    this._rayDymo.setText(this.properties.ray_label);
+                }
+                this._raySwitchApplyCompact?.();
+                this._switchRender?.();
+            }, 0);
+            return r;
         };
 
         const onDrawBackground = nodeType.prototype.onDrawBackground;
