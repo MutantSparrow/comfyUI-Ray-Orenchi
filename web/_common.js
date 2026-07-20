@@ -223,11 +223,14 @@ export function mountRayPreview(node, {
         hideOnZoom: false,
     });
     if (widget) {
-        widget.computeSize = () => [node.size?.[0] || 200, height];
+        widget.computeSize = () => (
+            state && state.hidden ? [0, -4] : [node.size?.[0] || 200, height]
+        );
     }
 
     const state = {
-        root, img, empty,
+        root, img, empty, widget,
+        hidden: false,
         setUrl(url) {
             if (!url) {
                 img.style.display = "none";
@@ -247,6 +250,22 @@ export function mountRayPreview(node, {
             img.src = url;
         },
         clear() { this.setUrl(null); },
+        setVisible(v) {
+            this.hidden = !v;
+            root.style.display = v ? "" : "none";
+            if (widget) {
+                widget.hidden = !v;
+                widget.type = v ? "RAY_PREVIEW" : "converted-widget";
+            }
+            if (typeof node.setDirtyCanvas === "function") {
+                node.setDirtyCanvas(true, true);
+            }
+            if (typeof node.computeSize === "function" && Array.isArray(node.size)) {
+                const sz = node.computeSize();
+                node.size[1] = sz[1];
+                node.setSize?.([node.size[0] || sz[0], sz[1]]);
+            }
+        },
     };
 
     if (initialUrl) state.setUrl(initialUrl);
@@ -314,9 +333,22 @@ export function onRayPreview(node, callback) {
 export function autowireRayPreview(node, opts = {}) {
     const state = mountRayPreview(node, opts);
     onRayPreview(node, detail => {
+        if (state.hidden) return;
         const url = previewPayloadToUrl(detail);
         if (url) state.setUrl(url);
     });
+    // If the node exposes a `show_preview` BOOLEAN widget, wire it up so
+    // toggling it live shows / hides the preview panel.
+    const w = findWidget(node, "show_preview");
+    if (w) {
+        state.setVisible(!!w.value);
+        const orig = w.callback;
+        w.callback = function (v) {
+            const r = orig?.apply(this, arguments);
+            state.setVisible(!!v);
+            return r;
+        };
+    }
     return state;
 }
 

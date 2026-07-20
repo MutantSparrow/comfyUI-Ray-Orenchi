@@ -464,8 +464,9 @@ def test_process_returns_empty_prompt_when_no_metadata(tmp_path):
 
 
 def test_process_skip_no_prompt_finds_the_one_with_prompt(tmp_path):
-    # Three bare PNGs + one with a prompt. With skip_no_prompt on, we must
-    # land on the prompted one regardless of seed.
+    # Three bare PNGs + one with a prompt. skip_no_prompt only fires in
+    # random-seed mode (locked seed = locked image, always) — so this
+    # test runs with seed=-1.
     bare = []
     for i in range(3):
         b = tmp_path / f"bare{i}.png"
@@ -480,7 +481,7 @@ def test_process_skip_no_prompt_finds_the_one_with_prompt(tmp_path):
         folder=str(tmp_path),
         recurse_subfolders=False,
         skip_no_prompt=True,
-        seed=5,
+        seed=-1,
         refresh_listing=True,
         node_id="t",
     )
@@ -489,6 +490,7 @@ def test_process_skip_no_prompt_finds_the_one_with_prompt(tmp_path):
 
 
 def test_process_skip_no_prompt_raises_when_none_match(tmp_path):
+    # skip_no_prompt is a random-mode-only rule. seed=-1 to exercise it.
     for i in range(3):
         _make_solid_png(tmp_path / f"bare{i}.png")
     node = RayLocalScraper()
@@ -497,10 +499,64 @@ def test_process_skip_no_prompt_raises_when_none_match(tmp_path):
             folder=str(tmp_path),
             recurse_subfolders=False,
             skip_no_prompt=True,
-            seed=1,
+            seed=-1,
             refresh_listing=True,
             node_id="t",
         )
+
+
+def test_locked_seed_ignores_skip_no_prompt(tmp_path):
+    """Hard rule: locked seed = locked image every run, regardless of the
+    skip_no_prompt flag. If the seed points at a bare image, the node
+    must return that image with empty prompt strings, not skip past it."""
+    for i in range(3):
+        _make_solid_png(tmp_path / f"bare{i}.png")
+    node = RayLocalScraper()
+    single, multi, image, path_out = node.process(
+        folder=str(tmp_path),
+        recurse_subfolders=False,
+        skip_no_prompt=True,   # ← should have no effect w/ locked seed
+        seed=42,
+        refresh_listing=True,
+        node_id="lock",
+    )
+    assert single == [""]
+    # And the same locked seed must return the same file every time.
+    out2 = node.process(
+        folder=str(tmp_path), recurse_subfolders=False,
+        skip_no_prompt=True, seed=42, refresh_listing=False, node_id="lock",
+    )
+    assert path_out[0] == out2[3][0]
+
+
+def test_locked_seed_ignores_prompt_best_try(tmp_path):
+    """Same rule for prompt_best_try: locked seed wins, always."""
+    _make_solid_png(tmp_path / "a.png", info={
+        "parameters": "the only prompt\nNegative prompt: x\nSteps: 1"
+    })
+    _make_solid_png(tmp_path / "b.png", info={
+        "parameters": "another prompt\nNegative prompt: x\nSteps: 1"
+    })
+    node = RayLocalScraper()
+    out1 = node.process(
+        folder=str(tmp_path), recurse_subfolders=False,
+        skip_no_prompt=False, prompt_best_try=True,
+        seed=42, refresh_listing=True, node_id="lock2",
+    )
+    out2 = node.process(
+        folder=str(tmp_path), recurse_subfolders=False,
+        skip_no_prompt=False, prompt_best_try=True,
+        seed=42, refresh_listing=False, node_id="lock2",
+    )
+    out3 = node.process(
+        folder=str(tmp_path), recurse_subfolders=False,
+        skip_no_prompt=False, prompt_best_try=True,
+        seed=42, refresh_listing=False, node_id="lock2",
+    )
+    # Same seed => same pick every run, regardless of best_try or prior
+    # emit history.
+    assert out1[3][0] == out2[3][0] == out3[3][0]
+    assert out1[0][0] == out2[0][0] == out3[0][0]
 
 
 def test_process_recurse_subfolders_finds_nested_image(tmp_path):
@@ -866,9 +922,8 @@ def test_extract_prompts_from_a1111_json_variant(tmp_path):
 
 
 def test_best_try_skips_when_next_pick_has_same_prompt(tmp_path):
-    """Two images with the SAME prompt + one with a different prompt.
-    With best_try + deterministic seed, running twice must land on
-    different files (the second call must skip the duplicate)."""
+    """best_try is a random-mode-only rule. With seed=-1 the node must
+    still be able to skip duplicate prompts across runs."""
     same = "the identical prompt appearing twice"
     diff = "a completely different prompt about a robot"
     _make_solid_png(tmp_path / "a.png", info={
@@ -887,7 +942,7 @@ def test_best_try_skips_when_next_pick_has_same_prompt(tmp_path):
         recurse_subfolders=False,
         skip_no_prompt=False,
         prompt_best_try=True,
-        seed=1,
+        seed=-1,
         refresh_listing=True,
         node_id="dup",
     )
@@ -896,21 +951,18 @@ def test_best_try_skips_when_next_pick_has_same_prompt(tmp_path):
         recurse_subfolders=False,
         skip_no_prompt=False,
         prompt_best_try=True,
-        seed=1,
-        refresh_listing=True,
+        seed=-1,
+        refresh_listing=False,
         node_id="dup",
     )
-    # Second call sees the same seed, but the recent-pick queue AND the
-    # last-best-prompt memory force it to a different image with a
-    # different prompt.
-    assert out1[0] != out2[0]
+    # In random mode the recent-best deque forces the second call to
+    # land on a different prompt.
     assert out1[0][0] != out2[0][0]
 
 
 def test_best_try_returns_new_prompt_on_repeat(tmp_path):
-    """best_try semantic is 'if the top prompt equals the LAST one this
-    node emitted, advance'. So two consecutive frozen-seed runs must
-    return different prompts."""
+    """best_try in random mode: two consecutive runs must return
+    different prompts as long as the folder holds any."""
     for i, text in enumerate(("alpha prompt aaa", "beta prompt bbb",
                               "gamma prompt ccc")):
         _make_solid_png(tmp_path / f"{i}.png", info={
@@ -919,20 +971,20 @@ def test_best_try_returns_new_prompt_on_repeat(tmp_path):
     node = RayLocalScraper()
     first = node.process(
         folder=str(tmp_path), recurse_subfolders=False,
-        skip_no_prompt=False, prompt_best_try=True, seed=7,
+        skip_no_prompt=False, prompt_best_try=True, seed=-1,
         refresh_listing=True, node_id="rot",
     )
     second = node.process(
         folder=str(tmp_path), recurse_subfolders=False,
-        skip_no_prompt=False, prompt_best_try=True, seed=7,
+        skip_no_prompt=False, prompt_best_try=True, seed=-1,
         refresh_listing=False, node_id="rot",
     )
     assert first[0][0] != second[0][0]
 
 
 def test_best_try_raises_when_only_duplicate_remains(tmp_path):
-    """One image, best_try, called twice with the same prompt in memory
-    -> second call has no new prompt to serve and must raise."""
+    """One image, best_try, random mode, called twice -> second call has
+    no new prompt to serve and must raise."""
     _make_solid_png(tmp_path / "a.png", info={
         "parameters": "the only prompt in town\nNegative prompt: x\nSteps: 1"
     })
@@ -942,7 +994,7 @@ def test_best_try_raises_when_only_duplicate_remains(tmp_path):
         recurse_subfolders=False,
         skip_no_prompt=False,
         prompt_best_try=True,
-        seed=1,
+        seed=-1,
         refresh_listing=True,
         node_id="only",
     )
@@ -952,7 +1004,7 @@ def test_best_try_raises_when_only_duplicate_remains(tmp_path):
             recurse_subfolders=False,
             skip_no_prompt=False,
             prompt_best_try=True,
-            seed=1,
+            seed=-1,
             refresh_listing=False,
             node_id="only",
         )
@@ -987,8 +1039,8 @@ def test_clear_cache_clears_recent_best():
 
 def test_best_try_does_not_flip_flop_with_two_prompts(tmp_path):
     """Regression: a folder with only two distinct prompts must not
-    ping-pong A/B/A/B/A/B forever when the seed is frozen. The recent-best
-    deque should skip both once emitted."""
+    ping-pong A/B/A/B/A/B forever in random mode. The recent-best deque
+    should skip both once emitted."""
     _make_solid_png(tmp_path / "a.png", info={
         "parameters": "prompt alpha\nNegative prompt: x\nSteps: 1"
     })
@@ -997,28 +1049,18 @@ def test_best_try_does_not_flip_flop_with_two_prompts(tmp_path):
     })
     node = RayLocalScraper()
 
-    def _run():
+    def _run(first_call=False):
         return node.process(
             folder=str(tmp_path),
             recurse_subfolders=False,
             skip_no_prompt=False,
             prompt_best_try=True,
-            seed=1,
-            refresh_listing=False,
+            seed=-1,
+            refresh_listing=first_call,
             node_id="flip",
         )
 
-    # Prime the cache so refresh_listing=False on subsequent runs works.
-    node.process(
-        folder=str(tmp_path), recurse_subfolders=False,
-        skip_no_prompt=False, prompt_best_try=True,
-        seed=1, refresh_listing=True, node_id="flip",
-    )
-    # Rewind the deques so we start from a clean slate for the sweep.
-    rls._RECENT_BY_NODE["flip"].clear()
-    rls._RECENT_BEST_BY_NODE["flip"].clear()
-
-    first = _run()
+    first = _run(first_call=True)
     second = _run()
     assert first[0][0] != second[0][0], "second run should serve the other prompt"
 
