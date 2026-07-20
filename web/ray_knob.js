@@ -143,45 +143,52 @@ function buildKnobElement(node, kvw) {
             const w = findWidget(node, name);
             if (w) setWidgetHidden(node, w, c);
         }
-        // 2. Blank the title. LiteGraph honors `title_mode` per-instance in
-        //    modern builds; also blank `title` so any pre-Vue frontend that
-        //    still allocates a title strip renders nothing in it.
+        // 2. Blank the title. Set BOTH title_mode (LiteGraph + Vue read this)
+        //    AND flags.no_title (some Vue builds keep a small header strip
+        //    until this flag is set too). Restore both symmetrically.
         const LG = (typeof window !== "undefined" && window.LiteGraph) || null;
         if (c) {
             if (node._rayKnobOrigTitle == null) node._rayKnobOrigTitle = node.title ?? "";
             node.title = "";
             if (LG) node.title_mode = LG.NO_TITLE;
+            node.flags = { ...(node.flags || {}), no_title: true };
         } else {
             if (node._rayKnobOrigTitle != null) {
                 node.title = node._rayKnobOrigTitle;
                 node._rayKnobOrigTitle = null;
             }
             if (LG) node.title_mode = LG.NORMAL_TITLE ?? 0;
+            if (node.flags) delete node.flags.no_title;
         }
         // 3. Stash / restore input + output pin arrays so no slot dots draw.
         //    We only do this when the node isn't wired (compact assumes a
         //    standalone appliance). If wires exist, keep the pins visible.
         const hasConnections = (arr) => Array.isArray(arr) &&
             arr.some(s => s && (s.link != null || (Array.isArray(s.links) && s.links.length)));
+        let pinsChanged = false;
         if (c) {
             if (!hasConnections(node.inputs) && Array.isArray(node.inputs)
-                && node._rayKnobStashInputs == null) {
+                && node._rayKnobStashInputs == null && node.inputs.length) {
                 node._rayKnobStashInputs = node.inputs;
                 node.inputs = [];
+                pinsChanged = true;
             }
             if (!hasConnections(node.outputs) && Array.isArray(node.outputs)
-                && node._rayKnobStashOutputs == null) {
+                && node._rayKnobStashOutputs == null && node.outputs.length) {
                 node._rayKnobStashOutputs = node.outputs;
                 node.outputs = [];
+                pinsChanged = true;
             }
         } else {
             if (node._rayKnobStashInputs) {
                 node.inputs = node._rayKnobStashInputs;
                 node._rayKnobStashInputs = null;
+                pinsChanged = true;
             }
             if (node._rayKnobStashOutputs) {
                 node.outputs = node._rayKnobStashOutputs;
                 node._rayKnobStashOutputs = null;
+                pinsChanged = true;
             }
         }
         // 4. Snap the size to fit the new content.
@@ -189,6 +196,12 @@ function buildKnobElement(node, kvw) {
             const sz = node.computeSize();
             if (Array.isArray(node.size)) node.size[1] = sz[1];
             node.setSize?.([Array.isArray(node.size) ? node.size[0] : sz[0], sz[1]]);
+        }
+        // 5. Nudge Vue Nodes 2.0 — its layout store caches slot counts, so a
+        //    changed array reference needs an explicit graph-change beat.
+        if (pinsChanged) {
+            app?.graph?.change?.();
+            app?.graph?.setDirtyCanvas?.(true, true);
         }
         node.setDirtyCanvas?.(true, true);
     };

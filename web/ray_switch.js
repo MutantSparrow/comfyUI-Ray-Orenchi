@@ -102,46 +102,57 @@ function buildSwitchElement(node, sw) {
     const applyCompact = () => {
         const c = !!node.properties?.compact;
         const LG = (typeof window !== "undefined" && window.LiteGraph) || null;
-        // Title.
+        // Title — set title_mode + flags.no_title (Vue reads the flag).
         if (c) {
             if (node._raySwitchOrigTitle == null) node._raySwitchOrigTitle = node.title ?? "";
             node.title = "";
             if (LG) node.title_mode = LG.NO_TITLE;
+            node.flags = { ...(node.flags || {}), no_title: true };
         } else {
             if (node._raySwitchOrigTitle != null) {
                 node.title = node._raySwitchOrigTitle;
                 node._raySwitchOrigTitle = null;
             }
             if (LG) node.title_mode = LG.NORMAL_TITLE ?? 0;
+            if (node.flags) delete node.flags.no_title;
         }
         // Pins (only stash when unwired).
         const hasConnections = (arr) => Array.isArray(arr) &&
             arr.some(s => s && (s.link != null || (Array.isArray(s.links) && s.links.length)));
+        let pinsChanged = false;
         if (c) {
             if (!hasConnections(node.inputs) && Array.isArray(node.inputs)
-                && node._raySwitchStashInputs == null) {
+                && node._raySwitchStashInputs == null && node.inputs.length) {
                 node._raySwitchStashInputs = node.inputs;
                 node.inputs = [];
+                pinsChanged = true;
             }
             if (!hasConnections(node.outputs) && Array.isArray(node.outputs)
-                && node._raySwitchStashOutputs == null) {
+                && node._raySwitchStashOutputs == null && node.outputs.length) {
                 node._raySwitchStashOutputs = node.outputs;
                 node.outputs = [];
+                pinsChanged = true;
             }
         } else {
             if (node._raySwitchStashInputs) {
                 node.inputs = node._raySwitchStashInputs;
                 node._raySwitchStashInputs = null;
+                pinsChanged = true;
             }
             if (node._raySwitchStashOutputs) {
                 node.outputs = node._raySwitchStashOutputs;
                 node._raySwitchStashOutputs = null;
+                pinsChanged = true;
             }
         }
         if (typeof node.computeSize === "function") {
             const sz = node.computeSize();
             if (Array.isArray(node.size)) node.size[1] = sz[1];
             node.setSize?.([Array.isArray(node.size) ? node.size[0] : sz[0], sz[1]]);
+        }
+        if (pinsChanged) {
+            app?.graph?.change?.();
+            app?.graph?.setDirtyCanvas?.(true, true);
         }
         node.setDirtyCanvas?.(true, true);
     };
