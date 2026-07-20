@@ -570,32 +570,53 @@ def _apply_crt(
 class RayCRT:
     """ComfyUI node: image-space CRT display effect with SOTA-inspired presets."""
 
+    DESCRIPTION = (
+        "Image-space CRT display effect. Simulates phosphor mask "
+        "(aperture / shadow / slot), scanline beam, halation + bloom, "
+        "NTSC chroma bleed, barrel curvature, vignette, and reflection "
+        "gloss.\n\n"
+        "Presets cover classic Trinitron / PVM monitors plus consoles "
+        "(Super Famicom, PS1, PS2, DS, GBA, PSP…). Tweak intensity, "
+        "scanline_strength, and mask_strength to scale the effect over "
+        "the preset baseline."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image": ("IMAGE",),
-                "preset": (PRESET_NAMES, {"default": PRESET_NAMES[0]}),
-                "curvature": ("BOOLEAN", {"default": True}),
+                "image": ("IMAGE", {"tooltip": "Source frame(s). BHWC accepted."}),
+                "preset": (PRESET_NAMES, {
+                    "default": PRESET_NAMES[0],
+                    "tooltip": "SOTA-inspired CRT preset — monitor or console model.",
+                }),
+                "curvature": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Barrel-warp the image (out-of-bounds becomes bezel).",
+                }),
                 "intensity": (
                     "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01},
+                    {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01,
+                     "tooltip": "Master mix vs untouched input."},
                 ),
                 "scanline_strength": (
                     "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05},
+                    {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                     "tooltip": "Scales preset scan-line depth."},
                 ),
                 "mask_strength": (
                     "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05},
+                    {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                     "tooltip": "Scales preset phosphor-mask depth."},
                 ),
             },
         }
 
     RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("crt_image",)
+    RETURN_NAMES = ("image",)
+    OUTPUT_TOOLTIPS = ("Filtered image with the CRT effect applied.",)
     FUNCTION = "process"
-    CATEGORY = "Ray/VFX✨"
+    CATEGORY = "👑 Ray/✨ VFX"
 
     def process(
         self,
