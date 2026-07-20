@@ -603,6 +603,12 @@ class RayPromptLibrary:
                 "browse__last_query": ("STRING", {"default": "",
                                                    "tooltip": "Browse mode: last search query (managed by the panel)."}),
             },
+            "optional": {
+                "show_preview": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Render the row's image inline in the node.",
+                }),
+            },
             "hidden": {"node_id": "UNIQUE_ID"},
         }
 
@@ -633,6 +639,7 @@ class RayPromptLibrary:
         save__model,
         browse__selected_id,
         browse__last_query="",
+        show_preview=True,
         node_id=None,
         **_legacy,
     ):
@@ -653,18 +660,20 @@ class RayPromptLibrary:
             # Legacy "Fetch" mode from older workflows falls through to Browse.
             result = self._do_browse(selected_id=browse__selected_id)
 
-        # Dispatch inline preview if the selected/saved row has an image path.
-        try:
-            image_path_list = result[3] if len(result) >= 4 else [""]
-            path = image_path_list[0] if image_path_list else ""
-            if path:
-                try:
-                    from _common import send_preview
-                except ImportError:
-                    from ._common import send_preview  # type: ignore
-                send_preview(node_id, path)
-        except Exception:
-            pass
+        # Dispatch inline preview if the selected/saved row has an image path
+        # and the user hasn't toggled the preview off.
+        if show_preview:
+            try:
+                image_path_list = result[3] if len(result) >= 4 else [""]
+                path = image_path_list[0] if image_path_list else ""
+                if path:
+                    try:
+                        from _common import send_preview
+                    except ImportError:
+                        from ._common import send_preview  # type: ignore
+                    send_preview(node_id, path)
+            except Exception:
+                pass
 
         return result
 
