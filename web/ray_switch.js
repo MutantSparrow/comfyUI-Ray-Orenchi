@@ -102,18 +102,30 @@ function buildSwitchElement(node, sw) {
     const applyCompact = () => {
         const c = !!node.properties?.compact;
         const LG = (typeof window !== "undefined" && window.LiteGraph) || null;
-        // Title — set title_mode + flags.no_title (Vue reads the flag).
+        const NO_TITLE = LG?.NO_TITLE ?? -1;
+        const NORMAL_TITLE = LG?.NORMAL_TITLE ?? 0;
+        // Title bar — per-instance getter override for `title_mode` (the
+        // base class getter reads `this.constructor.title_mode`, so a plain
+        // write is discarded). Only touches this instance, siblings intact.
         if (c) {
             if (node._raySwitchOrigTitle == null) node._raySwitchOrigTitle = node.title ?? "";
             node.title = "";
-            if (LG) node.title_mode = LG.NO_TITLE;
+            Object.defineProperty(node, "title_mode", {
+                configurable: true,
+                get() { return NO_TITLE; },
+            });
             node.flags = { ...(node.flags || {}), no_title: true };
         } else {
             if (node._raySwitchOrigTitle != null) {
                 node.title = node._raySwitchOrigTitle;
                 node._raySwitchOrigTitle = null;
             }
-            if (LG) node.title_mode = LG.NORMAL_TITLE ?? 0;
+            try { delete node.title_mode; } catch (_e) {
+                Object.defineProperty(node, "title_mode", {
+                    configurable: true,
+                    get() { return NORMAL_TITLE; },
+                });
+            }
             if (node.flags) delete node.flags.no_title;
         }
         // Pins (only stash when unwired).
