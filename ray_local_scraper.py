@@ -67,7 +67,8 @@ _SUPPORTED_EXT = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif")
 
 _FILE_LIST_CACHE: dict = {}     # (folder, recurse) -> sorted list[str]
 _RECENT_BY_NODE: dict = {}      # node_key -> deque of recently picked paths
-_LAST_BEST_BY_NODE: dict = {}   # node_key -> last emitted best_try prompt
+_RECENT_BEST_BY_NODE: dict = {}   # node_key -> deque of recently emitted best-try prompts
+_BEST_HISTORY_MAX = 20            # skip a pick if its best prompt is in the last N emits
 _CACHE_MAX = 20
 
 # ComfyUI class-name substrings that mark a node as a text encoder we
@@ -814,7 +815,7 @@ def _file_list(folder: pathlib.Path, recurse: bool, refresh: bool = False) -> li
 def clear_cache():
     _FILE_LIST_CACHE.clear()
     _RECENT_BY_NODE.clear()
-    _LAST_BEST_BY_NODE.clear()
+    _RECENT_BEST_BY_NODE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -975,11 +976,16 @@ class RayLocalScraper:
             deterministic = True
 
         recent = _RECENT_BY_NODE.setdefault(node_key, deque(maxlen=_CACHE_MAX))
-        last_best = _LAST_BEST_BY_NODE.get(node_key, "")
+        recent_best = _RECENT_BEST_BY_NODE.setdefault(
+            node_key, deque(maxlen=_BEST_HISTORY_MAX)
+        )
 
         # Loop enabled whenever we might need to keep looking:
         # - skip_no_prompt: keep trying until we find one with a prompt
-        # - best_try:       keep trying if the best-try prompt matches last emit
+        # - best_try:       keep trying while the best-try prompt is in the
+        #                   recent-best deque (not just the very last one —
+        #                   otherwise the node flip-flops A/B/A/B forever
+        #                   when the pool only has two distinct prompts).
         need_loop = skip_no_prompt or best_try
         max_attempts = min(len(paths), 50) if need_loop else 1
         attempts = 0
@@ -1022,17 +1028,18 @@ class RayLocalScraper:
                 pil_image = candidate_img
                 break
 
-            # Best-try dedup: if the top prompt matches the last one we
-            # emitted from this node, advance to the next image.
+            # Best-try dedup: if the top prompt is anywhere in the last
+            # N emits from this node, advance. Deque avoids the A/B/A/B
+            # flip-flop that a single-slot "last emit" comparison caused.
             if best_try:
                 best = max(prompts, key=len)
-                if best and best == last_best:
+                if best and best in recent_best:
                     recent.append(pick)
                     continue
                 chosen_path = pick
                 chosen_prompts = [best]
                 pil_image = candidate_img
-                _LAST_BEST_BY_NODE[node_key] = best
+                recent_best.append(best)
                 break
 
             chosen_path = pick
