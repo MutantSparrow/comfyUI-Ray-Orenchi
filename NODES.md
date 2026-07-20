@@ -103,7 +103,7 @@ than pick a bespoke one.
 | **Output** `int` | INT | Quantized via `clamp`. |
 | **Output** `float` | FLOAT | Raw clamped float in `[min, max]`. |
 
-**Right-click menu.** Style picker (brushed-metal, black-plastic, bakelite, brass, and more), **Compact mode** (hides the min/max/spin/clamp/allow_negative config widgets and blanks the node title so the node reads as a bare analog appliance — brushed panel, Dymo label, knob face and readout stay), **Edit label…** (Dymo tape above the face). Double-clicking the Dymo tape also enters edit mode. Style, compact flag, and label text persist with the workflow.
+**Right-click menu.** Style picker (brushed-metal, black-plastic, bakelite, brass, and more), **Compact mode** (strips everything but the brushed panel, Dymo label, knob face, and readout: title bar via a per-instance `title_mode` override, config widgets via `advanced = true` + `node.showAdvanced` toggle, and unwired input/output pin arrays stashed so no slot dots draw), **Edit label…** (Dymo tape above the face). Double-clicking the Dymo tape also enters edit mode. Style, compact flag, and label text persist with the workflow.
 
 ---
 
@@ -118,7 +118,7 @@ than pick a bespoke one.
 | **Control** `state` | bool | Toggle. |
 | **Output** `bool` | BOOLEAN | Mirror of `state`. |
 
-**Right-click menu.** Style picker (Chrome Rocker, Bakelite Flip, Silver Paddle, Brass Slider, Minimal Pill, Dark Studio Dome), **Compact mode** (blanks the node title so the node reads as a bare analog appliance — brushed panel, Dymo label, switch face and readout stay), **Edit label…** (Dymo tape). Double-clicking the Dymo tape also enters edit mode. Style, compact flag, and label text persist with the workflow.
+**Right-click menu.** Style picker (Chrome Rocker, Bakelite Flip, Silver Paddle, Brass Slider, Minimal Pill, Dark Studio Dome), **Compact mode** (strips everything but the brushed panel, Dymo label, switch face, and readout: title bar via a per-instance `title_mode` override and unwired pin arrays stashed), **Edit label…** (Dymo tape). Double-clicking the Dymo tape also enters edit mode. Style, compact flag, and label text persist with the workflow.
 
 ---
 
@@ -250,7 +250,7 @@ If the image carries multiple positive prompts (e.g. a ComfyUI workflow with sev
 | **Control** `folder` | string | Absolute path to a folder of images. Required; raises if blank or missing. |
 | **Control** `recurse_subfolders` | bool | When on, walks every subdirectory under `folder`. Off by default. |
 | **Control** `skip_no_prompt` | bool | When on, skip images whose metadata yields no prompt and pick the next one from the seed-shuffled pool (capped at 50 attempts). |
-| **Control** `prompt_best_try` | bool | Collapse each image to its single best (longest) prompt AND skip a pick when the best-try text matches the last one emitted from this node. Advances until a new prompt is found or the pool runs out. |
+| **Control** `prompt_best_try` | bool | Two behaviors. **Collapse** — always applies: reduce each image's prompt set to its single longest prompt. **Skip repeats** — random-mode only (`seed = -1`): if the collapsed prompt is anywhere in this node's recent-best deque (last 20 emits) advance to the next image. Locked seeds serve the collapsed prompt for the seeded pick every run regardless of history. |
 | **Control** `seed` | int | `-1` for OS-random (non-deterministic). Any `≥0` value is reproducible. |
 | **Control** `refresh_listing` (optional) | bool | Force a re-scan of the folder before picking. Off by default so repeated runs are cheap. |
 | **Output** `prompt_single` | STRING (list) | One entry per prompt found, each whitespace-collapsed to a single line. |
@@ -275,7 +275,7 @@ Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.
 | **Local** `local__folder` | string | Absolute path to a folder of images. |
 | **Local** `local__recurse_subfolders` | bool | Walk every subdirectory. |
 | **Local** `local__skip_no_prompt` | bool | Skip images whose metadata yields no prompt. |
-| **Local** `local__prompt_best_try` | bool | Collapse to single best prompt + skip repeats of the last one. |
+| **Local** `local__prompt_best_try` | bool | Collapse to single longest prompt (always). Skip repeats via recent-best deque in random mode only. |
 | **Local** `local__refresh_listing` (optional) | bool | Force a re-scan of the folder. |
 | **Dexter** `dexter__category` | dropdown | Sitemap category slug, or `(any)`. |
 | **Dexter** `dexter__clear_cache` | bool | Drop the recent-pick deque. |

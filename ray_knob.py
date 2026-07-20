@@ -7,11 +7,11 @@ class RayKnob:
         "outputs both an INT (quantized by `clamp`) and a raw FLOAT so it "
         "plugs into either side without a converter.\n\n"
         "Right-click for style picker (brushed-metal, black-plastic, "
-        "bakelite, brass…), Compact mode (hides the config widgets and "
-        "title so the node looks like a bare analog appliance — the "
-        "chrome panel, Dymo label, and readout stay), and Edit label. "
-        "The Dymo tape above the face is double-click editable and is "
-        "saved with the workflow."
+        "bakelite, brass…), Compact mode (strips everything except the "
+        "brushed panel, Dymo tape, knob face, and readout — title bar "
+        "gone, config widgets hidden, input/output pins stashed when "
+        "unwired), and Edit label. The Dymo tape above the face is "
+        "double-click editable and is saved with the workflow."
     )
 
     @classmethod
