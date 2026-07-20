@@ -143,7 +143,7 @@ export const RAY_HELP_DEFS = {
                 heading: "Right-click menu",
                 bullets: [
                     "**Knob Style** — brushed-metal, black-plastic, bakelite, brass, and more.",
-                    "**Compact mode** — hides the config widgets + title so the node looks like a bare analog appliance.",
+                    "**Compact mode** — strips everything except the brushed panel + Dymo + knob face + readout. Title bar, config widgets, and unwired pins are all hidden.",
                     "**Edit label…** — Dymo tape above the face (double-click also enters edit).",
                 ],
             },
@@ -170,7 +170,7 @@ export const RAY_HELP_DEFS = {
                 heading: "Right-click menu",
                 bullets: [
                     "**Switch Style** — pick a style.",
-                    "**Compact mode** — blanks the node title so the node reads as a bare appliance.",
+                    "**Compact mode** — strips everything except the brushed panel + Dymo + switch face + readout. Title bar and unwired pins are hidden.",
                     "**Edit label…** — Dymo tape (double-click also enters edit).",
                 ],
             },
