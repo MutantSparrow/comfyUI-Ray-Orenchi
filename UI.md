@@ -161,8 +161,11 @@ Every node must:
 
 - [ ] Category matches its bucket exactly.
 - [ ] Display name follows the pattern.
-- [ ] Class-level `DESCRIPTION` set — surfaces in the node's `?` help
-      icon. What it does, key inputs/outputs, notable gotchas. Terse.
+- [ ] Class-level `DESCRIPTION` set — plain-text fallback surfaced by
+      ComfyUI's built-in Info tab. Terse.
+- [ ] Rich help entry in `web/help_defs.mjs` — powers the `?` button in
+      the selection toolbar. Follows the `{title, tagline, sections[]}`
+      shape (see `web/help.mjs`).
 - [ ] Every widget has a tooltip.
 - [ ] `RETURN_NAMES` uses snake_case; `OUTPUT_TOOLTIPS` is present.
 - [ ] JS calls `applyBucketTint(node, "<bucket>")`.
