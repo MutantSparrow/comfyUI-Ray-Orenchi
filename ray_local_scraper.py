@@ -987,17 +987,22 @@ class RayLocalScraper:
         )
 
         # HARD RULE: a locked seed produces a locked image. Every time.
-        # skip_no_prompt and prompt_best_try are dedup / fallback rules
-        # that only make sense in random-seed mode (seed = -1). With a
-        # fixed seed the user has told us exactly which pick they want,
-        # so we short-circuit both loops and return that pick as-is.
+        # `best_try` has TWO behaviors:
+        #   (a) collapse each image's prompt set down to its single longest
+        #       "best" prompt — a display-side transformation that has
+        #       nothing to do with picking, so it always applies.
+        #   (b) skip a pick if its best-prompt was recently emitted — a
+        #       fallback/dedup rule that CAN advance past the seeded pick,
+        #       so it's only valid in random mode (seed = -1).
+        # `skip_no_prompt` is pure fallback and follows the same rule as (b).
+        # Split the flag so a locked seed still gets the collapse.
+        best_try_skip_repeats = best_try and not deterministic
         if deterministic:
             skip_no_prompt = False
-            best_try = False
 
         # Loop enabled whenever we might need to keep looking. Only ever
         # applies in random-seed mode now.
-        need_loop = skip_no_prompt or best_try
+        need_loop = skip_no_prompt or best_try_skip_repeats
         max_attempts = min(len(paths), 50) if need_loop else 1
         attempts = 0
         chosen_path: Optional[str] = None
@@ -1039,10 +1044,10 @@ class RayLocalScraper:
                 pil_image = candidate_img
                 break
 
-            # Best-try dedup: if the top prompt is anywhere in the last
-            # N emits from this node, advance. Deque avoids the A/B/A/B
-            # flip-flop that a single-slot "last emit" comparison caused.
-            if best_try:
+            # Best-try dedup (random mode only): if the top prompt is
+            # anywhere in the last N emits from this node, advance. Deque
+            # avoids the A/B/A/B flip-flop a single-slot comparison caused.
+            if best_try_skip_repeats:
                 best = max(prompts, key=len)
                 if best and best in recent_best:
                     recent.append(pick)
@@ -1059,7 +1064,7 @@ class RayLocalScraper:
             break
 
         if chosen_path is None or pil_image is None:
-            if skip_no_prompt and best_try:
+            if skip_no_prompt and best_try_skip_repeats:
                 raise RuntimeError(
                     f"no image with a new best-try prompt in {folder_p} "
                     f"(tried {attempts})"
@@ -1069,7 +1074,7 @@ class RayLocalScraper:
                     f"no images with extractable prompts in {folder_p} "
                     f"(tried {attempts})"
                 )
-            if best_try:
+            if best_try_skip_repeats:
                 raise RuntimeError(
                     f"no image with a new best-try prompt in {folder_p} "
                     f"(tried {attempts})"
