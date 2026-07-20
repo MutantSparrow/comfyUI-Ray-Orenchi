@@ -381,11 +381,10 @@ def _select_item(pool: list, recent: deque, rng, deterministic: bool) -> dict:
     if not pool:
         raise RuntimeError("pool is empty")
     if deterministic:
+        # Freezing the seed must produce the same gallery item every run.
+        # `recent` only guards the seed=-1 (OS-random) case.
         indices = list(range(len(pool)))
         rng.shuffle(indices)
-        for i in indices:
-            if pool[i]["id"] not in recent:
-                return pool[i]
         return pool[indices[0]]
     for _ in range(50):
         pick = rng.choice(pool)
