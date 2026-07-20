@@ -529,8 +529,9 @@ def test_locked_seed_ignores_skip_no_prompt(tmp_path):
     assert path_out[0] == out2[3][0]
 
 
-def test_locked_seed_ignores_prompt_best_try(tmp_path):
-    """Same rule for prompt_best_try: locked seed wins, always."""
+def test_locked_seed_ignores_prompt_best_try_skip(tmp_path):
+    """Locked seed = locked pick. best_try's skip-if-recently-emitted
+    fallback must not fire in deterministic mode."""
     _make_solid_png(tmp_path / "a.png", info={
         "parameters": "the only prompt\nNegative prompt: x\nSteps: 1"
     })
@@ -553,10 +554,36 @@ def test_locked_seed_ignores_prompt_best_try(tmp_path):
         skip_no_prompt=False, prompt_best_try=True,
         seed=42, refresh_listing=False, node_id="lock2",
     )
-    # Same seed => same pick every run, regardless of best_try or prior
-    # emit history.
+    # Same seed => same pick every run, regardless of prior emit history.
     assert out1[3][0] == out2[3][0] == out3[3][0]
     assert out1[0][0] == out2[0][0] == out3[0][0]
+
+
+def test_locked_seed_still_collapses_with_best_try(tmp_path):
+    """Locked seed disables best_try's skip step, but the single-longest
+    collapse must STILL apply — a multi-prompt image + best_try must
+    emit exactly one prompt, not the full list."""
+    graph = json.dumps({
+        "1": {"class_type": "CLIPTextEncode",
+              "inputs": {"text": "short one"}},
+        "2": {"class_type": "CLIPTextEncode",
+              "inputs": {"text": "considerably longer positive prompt with detail"}},
+    })
+    _make_solid_png(tmp_path / "multi.png", info={"prompt": graph})
+    node = RayLocalScraper()
+    single, multi, image, path_out = node.process(
+        folder=str(tmp_path),
+        recurse_subfolders=False,
+        skip_no_prompt=False,
+        prompt_best_try=True,
+        seed=7,
+        refresh_listing=True,
+        node_id="collapse",
+    )
+    # best_try collapses to a single entry — the LONGEST prompt.
+    assert len(single) == 1
+    assert len(multi) == 1
+    assert single[0] == "considerably longer positive prompt with detail"
 
 
 def test_process_recurse_subfolders_finds_nested_image(tmp_path):
