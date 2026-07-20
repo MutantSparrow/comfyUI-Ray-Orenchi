@@ -352,7 +352,8 @@ function _injectDymoStylesOnce() {
     padding: 4px 22px;
     box-sizing: border-box;
     background: linear-gradient(180deg, #1c1c1c 0%, #0a0a0a 50%, #050505 100%);
-    border-radius: 4px;
+    /* Vintage sticky-label band — sharp square corners. */
+    border-radius: 0;
     box-shadow:
         inset 0 1px 0 rgba(255,255,255,0.12),
         inset 0 -1px 0 rgba(0,0,0,0.7),
