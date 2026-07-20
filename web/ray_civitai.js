@@ -4,7 +4,6 @@ import {
     shiftTint,
     RAY_PALETTE,
     findWidget as getWidget,
-    autowireRayPreview,
 } from "./_common.js";
 
 const NODE_NAME = "RayCivitAI";
@@ -83,7 +82,6 @@ function injectRefreshButton(node, statusEl) {
 async function bootstrap(node) {
     const statusEl = injectStatusWidget(node);
     injectRefreshButton(node, statusEl);
-    autowireRayPreview(node, { height: 200, label: "civitai preview" });
 
     const opts = await fetchOptions();
     if (opts && opts.has_token === false) {

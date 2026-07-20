@@ -27,7 +27,8 @@
 import { app } from "../../scripts/app.js";
 
 const CSS_ID = "ray-help-css";
-const BRAND = "#c86432";
+// Magenta highlight — deliberately distinct from other node packs' oranges.
+const BRAND = "#d43aa8";
 
 // ── Per-node help registry ─────────────────────────────────────────────
 const _nodeHelp = new Map();

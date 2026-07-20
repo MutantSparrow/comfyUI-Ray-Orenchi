@@ -455,10 +455,6 @@ class RayCivitAI:
                     "default": 15, "min": 2, "max": 60, "step": 1,
                     "tooltip": "HTTP timeout per request, in seconds.",
                 }),
-                "show_preview": ("BOOLEAN", {
-                    "default": True,
-                    "tooltip": "Render the fetched image inline in the node.",
-                }),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
         }
@@ -486,7 +482,6 @@ class RayCivitAI:
         sort,
         username="",
         timeout=15,
-        show_preview=True,
         node_id=None,
     ):
         node_key = str(node_id) if node_id is not None else "_default"
@@ -518,12 +513,5 @@ class RayCivitAI:
         prompt_single, prompt_multiline, image_tensor = _build_outputs(
             prompt_multiline, image_url, int(timeout)
         )
-
-        if image_url and show_preview:
-            try:
-                from _common import send_preview
-            except ImportError:
-                from ._common import send_preview  # type: ignore
-            send_preview(node_id, image_url)
 
         return (prompt_single, prompt_multiline, image_tensor)

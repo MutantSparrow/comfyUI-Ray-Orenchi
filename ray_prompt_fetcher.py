@@ -163,10 +163,6 @@ class RayPromptFetcher:
                     {"default": 15, "min": 2, "max": 60, "step": 1,
                      "tooltip": "CivitAI mode: HTTP timeout per request."},
                 ),
-                "show_preview": ("BOOLEAN", {
-                    "default": True,
-                    "tooltip": "Render the fetched image inline in the node.",
-                }),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
         }
@@ -209,7 +205,6 @@ class RayPromptFetcher:
         local__refresh_listing=False,
         dexter__timeout=10,
         civitai__timeout=15,
-        show_preview=True,
         node_id=None,
     ):
         mode = (scraper_mode or MODE_LOCAL).strip()
@@ -221,7 +216,6 @@ class RayPromptFetcher:
                 prompt_best_try=local__prompt_best_try,
                 seed=seed,
                 refresh_listing=local__refresh_listing,
-                show_preview=show_preview,
                 node_id=node_id,
             )
         if mode == MODE_DEXTER:
@@ -230,7 +224,6 @@ class RayPromptFetcher:
                 category=dexter__category,
                 clear_cache=dexter__clear_cache,
                 timeout=dexter__timeout,
-                show_preview=show_preview,
                 node_id=node_id,
             )
         if mode == MODE_CIVITAI:
@@ -242,7 +235,6 @@ class RayPromptFetcher:
                 sort=civitai__sort,
                 username=civitai__username,
                 timeout=civitai__timeout,
-                show_preview=show_preview,
                 node_id=node_id,
             )
         raise RuntimeError(f"unknown scraper_mode: {scraper_mode!r}")
@@ -259,7 +251,6 @@ class RayPromptFetcher:
         prompt_best_try,
         seed,
         refresh_listing,
-        show_preview,
         node_id,
     ):
         # Delegate verbatim to RayLocalScraper.process — it already returns
@@ -271,17 +262,15 @@ class RayPromptFetcher:
             prompt_best_try=prompt_best_try,
             seed=seed,
             refresh_listing=refresh_listing,
-            show_preview=show_preview,
             node_id=node_id,
         )
 
-    def _run_dexter(self, seed, category, clear_cache, timeout, show_preview, node_id):
+    def _run_dexter(self, seed, category, clear_cache, timeout, node_id):
         single, multi, image = _dexter.RayPromptDexter().process(
             seed=seed,
             category=category,
             clear_cache=clear_cache,
             timeout=timeout,
-            show_preview=show_preview,
             node_id=node_id,
         )
         return self._lift_web(single, multi, image)
@@ -295,7 +284,6 @@ class RayPromptFetcher:
         sort,
         username,
         timeout,
-        show_preview,
         node_id,
     ):
         single, multi, image = _civit.RayCivitAI().process(
@@ -306,7 +294,6 @@ class RayPromptFetcher:
             sort=sort,
             username=username,
             timeout=timeout,
-            show_preview=show_preview,
             node_id=node_id,
         )
         return self._lift_web(single, multi, image)

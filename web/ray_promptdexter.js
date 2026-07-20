@@ -2,7 +2,6 @@ import { app } from "../../scripts/app.js";
 import {
     applyBucketTint,
     findWidget as getWidget,
-    autowireRayPreview,
 } from "./_common.js";
 
 const NODE_NAME = "RayPromptDexter";
@@ -99,7 +98,6 @@ async function bootstrap(node) {
     applyBucketTint(node, "Prompts");
     const statusEl = injectStatusWidget(node);
     injectRefreshButton(node, statusEl);
-    autowireRayPreview(node, { height: 200, label: "promptdexter preview" });
 
     statusEl.textContent = "loading categories…";
     const res = await fetchCategories(false);

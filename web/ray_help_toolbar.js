@@ -16,7 +16,8 @@ import { RAY_HELP_DEFS } from "./help_defs.mjs";
 const CMD_ID = "Ray.ShowHelp";
 const ICON_CLASS = "ray-help-toolbar-icon";
 const CSS_ID = "ray-help-toolbar-css";
-const BRAND = "#c86432";
+// Magenta — matches web/help.mjs.
+const BRAND = "#d43aa8";
 
 function injectIconCSS() {
     if (document.getElementById(CSS_ID)) return;

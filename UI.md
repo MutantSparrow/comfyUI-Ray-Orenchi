@@ -138,22 +138,13 @@ Shared helpers in `web/_common.js`:
 | `applyBucketTint(n, bkt)`  | Assign bg + edge for a node.                   |
 | `shiftTint(hex, deg)`      | Hue-rotate a base hex color.                   |
 | `setWidgetHidden(n, w, h)` | V2-frontend-safe widget hide/show.             |
-| `mountRayPreview(n, opts)` | Attach the inline image-preview DOM widget.    |
 
-## Inline image preview
+## Image output convention
 
-Scrapers, fetchers, and the prompt library render the emitted image inside
-the node itself via `mountRayPreview`. It listens for a `ray-preview` event
-that the Python side dispatches at the end of `process()`:
-
-```python
-from _common import send_preview
-send_preview(node_id, {"filename": ..., "subfolder": ..., "type": "output"})
-```
-
-For local file sources (`RayLocalScraper`), passing an absolute on-disk path
-under `"filename": abs_path, "subfolder": "", "type": "abs"` is a valid
-shortcut — the widget renders it directly rather than via `/api/view`.
+Scrapers, fetchers, and the prompt library expose the emitted image on
+the `image` output pin. Users route it to a downstream Preview Image or
+Save Image node — the pack does not paint an inline preview inside its
+own node bodies.
 
 ## Per-node quality checklist
 
@@ -170,5 +161,3 @@ Every node must:
 - [ ] `RETURN_NAMES` uses snake_case; `OUTPUT_TOOLTIPS` is present.
 - [ ] JS calls `applyBucketTint(node, "<bucket>")`.
 - [ ] JS uses the shared `setWidgetHidden`.
-- [ ] Scraper/fetcher/library nodes: `mountRayPreview` at bootstrap and
-      Python dispatches `send_preview` on execute.

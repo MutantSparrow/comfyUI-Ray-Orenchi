@@ -7,13 +7,9 @@
 //   applyBucketTint(node, key)   — assign bg/edge color for a bucket.
 //   shiftTint(hex, degrees)      — hue-rotate a base hex color (mode tints).
 //   setWidgetHidden(n, w, hide)  — v2-frontend-safe hide/show for a widget.
-//   mountRayPreview(node, opts)  — attach inline image preview widget.
-//   onRayPreview(node, cb)       — subscribe to server-side ray-preview events.
+//   mountDymoLabel(node, opts)   — Dymo embossed label (knob + switch).
 //
 // See UI.md for the canon these helpers implement.
-
-import { app } from "../../scripts/app.js";
-import { api } from "../../scripts/api.js";
 
 export const TWO_PI = Math.PI * 2;
 
@@ -171,186 +167,10 @@ export function findWidget(node, name) {
     return node.widgets.find(w => w.name === name) || null;
 }
 
-// ---------------------------------------------------------------------------
-// Inline preview widget
-// ---------------------------------------------------------------------------
-//
-// Mount a DOM widget on the node that renders whatever image URL the Python
-// side dispatches via the `ray-preview` server event, or whatever the caller
-// hands over directly.
-
-const _PREVIEW_KEY = "_rayPreview";
-
-export function mountRayPreview(node, {
-    height = 220,
-    background = "#0a0a0a",
-    label = "preview",
-    initialUrl = null,
-} = {}) {
-    if (!node || node[_PREVIEW_KEY]) return node[_PREVIEW_KEY] || null;
-
-    const root = document.createElement("div");
-    root.className = "ray-preview";
-    root.style.cssText = `
-        display: flex; align-items: center; justify-content: center;
-        width: 100%;
-        height: ${height}px;
-        background: ${background};
-        border-radius: 4px;
-        overflow: hidden;
-        position: relative;
-    `;
-
-    const img = document.createElement("img");
-    img.alt = label;
-    img.style.cssText = `
-        max-width: 100%; max-height: 100%;
-        object-fit: contain;
-        display: none;
-    `;
-    root.appendChild(img);
-
-    const empty = document.createElement("div");
-    empty.textContent = "no preview yet";
-    empty.style.cssText = `
-        color: #666; font-size: 11px; font-family: monospace;
-        letter-spacing: 0.05em; text-transform: uppercase;
-    `;
-    root.appendChild(empty);
-
-    const widget = node.addDOMWidget("ray_preview", "RAY_PREVIEW", root, {
-        serialize: false,
-        hideOnZoom: false,
-    });
-    if (widget) {
-        widget.computeSize = () => (
-            state && state.hidden ? [0, -4] : [node.size?.[0] || 200, height]
-        );
-    }
-
-    const state = {
-        root, img, empty, widget,
-        hidden: false,
-        setUrl(url) {
-            if (!url) {
-                img.style.display = "none";
-                img.removeAttribute("src");
-                empty.style.display = "";
-                return;
-            }
-            img.onerror = () => {
-                img.style.display = "none";
-                empty.textContent = "preview failed";
-                empty.style.display = "";
-            };
-            img.onload = () => {
-                empty.style.display = "none";
-                img.style.display = "";
-            };
-            img.src = url;
-        },
-        clear() { this.setUrl(null); },
-        setVisible(v) {
-            this.hidden = !v;
-            root.style.display = v ? "" : "none";
-            if (widget) {
-                widget.hidden = !v;
-                widget.type = v ? "RAY_PREVIEW" : "converted-widget";
-            }
-            if (typeof node.setDirtyCanvas === "function") {
-                node.setDirtyCanvas(true, true);
-            }
-            if (typeof node.computeSize === "function" && Array.isArray(node.size)) {
-                const sz = node.computeSize();
-                node.size[1] = sz[1];
-                node.setSize?.([node.size[0] || sz[0], sz[1]]);
-            }
-        },
-    };
-
-    if (initialUrl) state.setUrl(initialUrl);
-    node[_PREVIEW_KEY] = state;
-    return state;
-}
-
-export function getRayPreview(node) {
-    return node?.[_PREVIEW_KEY] || null;
-}
-
-// Build a browser URL from a server-side preview payload.
-export function previewPayloadToUrl(payload) {
-    if (!payload || typeof payload !== "object") return null;
-    if (payload.url) return payload.url;             // pass-through http(s)
-    if (payload.type === "abs" && payload.filename) {
-        // Absolute on-disk path — browsers can't fetch file:// from a served
-        // page. Return null so the caller can decide (usually leaves the
-        // last-rendered image intact).
-        return null;
-    }
-    const params = new URLSearchParams();
-    if (payload.filename)  params.set("filename",  payload.filename);
-    if (payload.subfolder) params.set("subfolder", payload.subfolder);
-    if (payload.type)      params.set("type",      payload.type);
-    if (payload.rand)      params.set("rand",      String(payload.rand));
-    return `/api/view?${params.toString()}`;
-}
-
-// ---------------------------------------------------------------------------
-// Server-side ray-preview event listener
-// ---------------------------------------------------------------------------
-//
-// The Python helper `send_preview(node_id, {...})` dispatches through
-// PromptServer with event name "ray-preview". Payload always carries node_id.
-
-const _API_HANDLERS = new WeakMap();  // node -> callback
-let _API_INITIALIZED = false;
-
-function _ensureApiHook() {
-    if (_API_INITIALIZED) return;
-    _API_INITIALIZED = true;
-    api.addEventListener("ray-preview", ev => {
-        const detail = ev?.detail || {};
-        const nodeId = String(detail.node_id ?? "");
-        if (!nodeId) return;
-        const graph = app.graph;
-        if (!graph) return;
-        const node = graph.getNodeById?.(Number(nodeId))
-                   ?? graph._nodes?.find?.(n => String(n.id) === nodeId);
-        if (!node) return;
-        const cb = _API_HANDLERS.get(node);
-        if (cb) cb(detail);
-    });
-}
-
-export function onRayPreview(node, callback) {
-    if (!node || typeof callback !== "function") return;
-    _ensureApiHook();
-    _API_HANDLERS.set(node, callback);
-}
-
-// Convenience: hook a preview widget on `node` to the ray-preview stream so
-// the image updates every time this node emits. Returns the state object.
-export function autowireRayPreview(node, opts = {}) {
-    const state = mountRayPreview(node, opts);
-    onRayPreview(node, detail => {
-        if (state.hidden) return;
-        const url = previewPayloadToUrl(detail);
-        if (url) state.setUrl(url);
-    });
-    // If the node exposes a `show_preview` BOOLEAN widget, wire it up so
-    // toggling it live shows / hides the preview panel.
-    const w = findWidget(node, "show_preview");
-    if (w) {
-        state.setVisible(!!w.value);
-        const orig = w.callback;
-        w.callback = function (v) {
-            const r = orig?.apply(this, arguments);
-            state.setVisible(!!v);
-            return r;
-        };
-    }
-    return state;
-}
+// Inline preview panel was removed — nodes rely on their IMAGE output
+// wired to a downstream Preview Image / Save Image node instead. See
+// commit history for the deleted mountRayPreview / autowireRayPreview
+// / send_preview implementation if you need to reintroduce something.
 
 // ---------------------------------------------------------------------------
 // Dymo embossed label

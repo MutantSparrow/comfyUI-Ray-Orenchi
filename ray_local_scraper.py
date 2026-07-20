@@ -921,10 +921,6 @@ class RayLocalScraper:
                     "default": False,
                     "tooltip": "Force a re-scan of the folder before selecting.",
                 }),
-                "show_preview": ("BOOLEAN", {
-                    "default": True,
-                    "tooltip": "Render the picked image inline in the node.",
-                }),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
         }
@@ -953,7 +949,6 @@ class RayLocalScraper:
         seed,
         prompt_best_try=False,
         refresh_listing=False,
-        show_preview=True,
         node_id=None,
     ):
         node_key = str(node_id) if node_id is not None else "_default"
@@ -968,7 +963,6 @@ class RayLocalScraper:
         refresh = _coerce_bool(refresh_listing)
         skip_no_prompt = _coerce_bool(skip_no_prompt)
         best_try = _coerce_bool(prompt_best_try)
-        show_preview = _coerce_bool(show_preview)
         paths = _file_list(folder_p, recurse, refresh=refresh)
         if not paths:
             raise RuntimeError(f"no supported images in {folder_p}")
@@ -1087,16 +1081,6 @@ class RayLocalScraper:
         if image_tensor is None:
             image_tensor = _black_tensor()
         path_str = os.fspath(chosen_path)
-
-        try:
-            from _common import send_preview
-        except ImportError:
-            try:
-                from ._common import send_preview  # type: ignore
-            except ImportError:
-                send_preview = None  # type: ignore
-        if send_preview is not None and show_preview:
-            send_preview(node_id, path_str)
 
         if not chosen_prompts:
             return ([""], [""], [image_tensor], [path_str])
