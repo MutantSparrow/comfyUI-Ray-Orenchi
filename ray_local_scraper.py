@@ -835,19 +835,34 @@ def _pil_to_tensor(pil_image: Image.Image):
     return torch.from_numpy(arr)[None, ...]
 
 
-def _select_path(paths: list, recent: deque, rng, deterministic: bool) -> str:
+def _select_path(paths: list, recent: deque, rng, deterministic: bool,
+                 excluded=None) -> str:
+    """Pick one path from `paths`.
+
+    Determinism contract:
+    - When `deterministic` is True, the LRU `recent` queue is IGNORED —
+      freezing the seed must produce the same pick every time this node
+      runs, no matter what previous picks put into the queue. The seeded
+      shuffle order is walked and the first entry NOT in `excluded` is
+      returned. `excluded` is a per-call set the caller uses to advance
+      within one process() invocation (best-try dedup, skip_no_prompt).
+    - When `deterministic` is False (seed=-1), the `recent` LRU is used
+      to avoid immediate consecutive repeats across runs.
+    """
     if not paths:
         raise RuntimeError("no images found in folder")
+    if excluded is None:
+        excluded = set()
     if deterministic:
         indices = list(range(len(paths)))
         rng.shuffle(indices)
         for i in indices:
-            if paths[i] not in recent:
+            if paths[i] not in excluded:
                 return paths[i]
         return paths[indices[0]]
     for _ in range(50):
         pick = rng.choice(paths)
-        if pick not in recent:
+        if pick not in recent and pick not in excluded:
             return pick
     return rng.choice(paths)
 
@@ -976,12 +991,15 @@ class RayLocalScraper:
         while attempts < max_attempts:
             attempts += 1
             try:
-                pick = _select_path(paths, recent, rng, deterministic)
+                pick = _select_path(
+                    paths, recent, rng, deterministic,
+                    excluded=candidates_tried,
+                )
             except RuntimeError:
                 break
 
             if pick in candidates_tried:
-                # LRU forced a fallback repeat — bail rather than spin.
+                # Fallback repeat (pool exhausted) — bail rather than spin.
                 break
             candidates_tried.add(pick)
 
