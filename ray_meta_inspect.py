@@ -483,23 +483,41 @@ class RayMetaInspect:
     """Read or write image metadata. Inspect parses every known chunk; Embed
     writes a tensor + dict back to disk and re-parses for verification."""
 
+    DESCRIPTION = (
+        "Read or write image generation metadata.\n"
+        "  • `Inspect` — parses every known chunk (A1111 parameters, "
+        "ComfyUI prompt / workflow graph, EXIF UserComment, sidecar "
+        "text) and exposes prompt_positive, prompt_negative, seed, "
+        "steps, cfg, sampler, model, LoRAs, dimensions, and the raw "
+        "JSON blob.\n"
+        "  • `Embed`   — writes an IMAGE tensor + `metadata_json` dict "
+        "back to disk at `path`, then re-parses the file for round-trip "
+        "verification.\n\n"
+        "Drag an image onto the inline drop-zone to prefill `path`."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "mode": (MODES, {"default": MODE_INSPECT}),
+                "mode": (MODES, {
+                    "default": MODE_INSPECT,
+                    "tooltip": "Inspect reads metadata; Embed writes a tensor + JSON dict to disk.",
+                }),
                 "path": ("STRING", {
                     "default": "",
                     "multiline": False,
-                    "placeholder": "path to image (Inspect) or output path (Embed)",
+                    "placeholder": "Path to image (Inspect) or output path (Embed)",
+                    "tooltip": "Source file (Inspect) or destination file (Embed).",
                 }),
             },
             "optional": {
-                "image": ("IMAGE",),
+                "image": ("IMAGE", {"tooltip": "Embed mode: tensor to write."}),
                 "metadata_json": ("STRING", {
                     "default": "",
                     "multiline": True,
                     "placeholder": "Embed mode: JSON dict of metadata fields",
+                    "tooltip": "Embed mode: JSON dict of metadata fields to attach.",
                 }),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
@@ -515,8 +533,22 @@ class RayMetaInspect:
         "sampler", "model", "loras_json", "width", "height",
         "raw_metadata_json", "image",
     )
+    OUTPUT_TOOLTIPS = (
+        "Positive prompt extracted from the file's metadata.",
+        "Negative prompt extracted from the file's metadata.",
+        "Seed value if present.",
+        "Sampler step count if present.",
+        "CFG scale if present.",
+        "Sampler name if present.",
+        "Model / checkpoint reference if present.",
+        "LoRAs referenced in the metadata, encoded as JSON.",
+        "Image width in pixels.",
+        "Image height in pixels.",
+        "Full raw metadata as JSON — for debugging or downstream tools.",
+        "Source image tensor.",
+    )
     FUNCTION = "process"
-    CATEGORY = "Ray/Prompts📝"
+    CATEGORY = "👑 Ray/📝 Prompts"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):

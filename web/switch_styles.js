@@ -48,9 +48,12 @@ const chromeRocker = (() => ({
   <rect x="-32" y="-58" width="64" height="116" rx="6" fill="url(#cr-bezel)"/>
   <rect x="-32" y="-58" width="64" height="116" rx="6" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="0.7"/>
   <rect x="-24" y="-48" width="48" height="96" rx="3" fill="#0e0e0e"/>
-  <g data-toggle data-on-transform="rotate(-18)" data-off-transform="rotate(18)">
+  <!-- Physical rocker: LED sits above the top. Pressing the LED end DOWN
+       (top edge goes toward viewer) turns ON, so ON=positive rotate. Also
+       swap the top/bottom shading so the "depressed" edge takes the dark. -->
+  <g data-toggle data-on-transform="rotate(8)" data-off-transform="rotate(-8)">
     <rect x="-20" y="-44" width="40" height="88" rx="3" fill="url(#cr-rocker)"/>
-    <rect x="-18" y="-42" width="36" height="6"  fill="rgba(255,255,255,0.18)"/>
+    <rect x="-18" y="-42" width="36" height="6"  fill="rgba(255,255,255,0.14)"/>
     <rect x="-18" y="36"  width="36" height="6"  fill="rgba(0,0,0,0.45)"/>
     <line x1="-14" y1="0" x2="14" y2="0" stroke="rgba(255,255,255,0.10)" stroke-width="0.6"/>
   </g>
@@ -141,7 +144,9 @@ const bakeliteFlip = (() => ({
   <circle cx="0" cy="0" r="14" fill="url(#bf-well)"/>
   <circle cx="0" cy="0" r="14" fill="none" stroke="rgba(0,0,0,0.85)" stroke-width="1"/>
   <circle cx="0" cy="0" r="13.2" fill="none" stroke="rgba(255,220,180,0.18)" stroke-width="0.6"/>
-  <g data-toggle data-on-transform="rotate(-32)" data-off-transform="rotate(32)">
+  <!-- Physical bat-handle: ON=up, OFF=down. Lever pivots around origin;
+       OFF rotates 180° so the tip (drawn at y=-46) ends up at y=+46. -->
+  <g data-toggle data-on-transform="rotate(0)" data-off-transform="rotate(180)">
     <rect x="-3" y="-44" width="6" height="44" fill="url(#bf-lever)" rx="1.5"/>
     <ellipse cx="0" cy="-46" rx="7" ry="5.5" fill="url(#bf-tip)" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.65));"/>
     <ellipse cx="-1.5" cy="-47.5" rx="2.5" ry="1.6" fill="rgba(255,255,255,0.45)"/>
@@ -180,14 +185,18 @@ const silverPaddle = (() => {
   <rect x="-58" y="-30" width="116" height="60" rx="10" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="0.8"/>
   <rect x="-50" y="-22" width="100" height="44" rx="4" fill="#0e0e0e"/>
   <image href="${radialURL}" x="-50" y="-22" width="100" height="44" preserveAspectRatio="xMidYMid slice" opacity="0.18"/>
-  <text x="-30" y="3" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" font-weight="700"
-        fill="rgba(220,220,220,0.4)" data-off-only-text>OFF</text>
-  <text x="30" y="3"  text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" font-weight="700"
-        fill="rgba(220,220,220,0.4)" data-on-only-text>ON</text>
-  <text x="-30" y="3" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" font-weight="700"
+  <!-- Labels sit outside the paddle's ±28 translation range so the paddle
+       never covers the lit indicator. Bases stay dim, overlays glow when
+       their state is active. -->
+  <text x="-44" y="3" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" font-weight="700"
+        fill="rgba(220,220,220,0.35)">OFF</text>
+  <text x="44" y="3"  text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" font-weight="700"
+        fill="rgba(220,220,220,0.35)">ON</text>
+  <text x="-44" y="3" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" font-weight="700"
         fill="#ff3624" data-off-only style="filter: drop-shadow(0 0 4px #ff3624);">OFF</text>
-  <text x="30" y="3"  text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" font-weight="700"
+  <text x="44" y="3"  text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" font-weight="700"
         fill="#36ff5a" data-on-only style="filter: drop-shadow(0 0 4px #36ff5a);">ON</text>
+  <!-- Physical paddle: points TO the active label. -->
   <g data-toggle data-on-transform="translate(28,0)" data-off-transform="translate(-28,0)">
     <rect x="-18" y="-18" width="36" height="36" rx="4" fill="url(#sp-paddle)" stroke="rgba(0,0,0,0.7)" stroke-width="0.8"/>
     <rect x="-15" y="-15" width="30" height="6" fill="rgba(255,255,255,0.18)"/>
@@ -234,8 +243,9 @@ const brassSlider = (() => ({
   <rect x="-58" y="-25" width="116" height="50" rx="4" fill="none" stroke="rgba(0,0,0,0.6)" stroke-width="0.8"/>
   <rect x="-44" y="-9"  width="88"  height="18" rx="3" fill="url(#bs-track)"/>
   <rect x="-44" y="-9"  width="88"  height="18" rx="3" fill="none" stroke="rgba(0,0,0,0.7)" stroke-width="0.6"/>
-  <text x="-30" y="3"  text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" font-weight="700" fill="rgba(255,210,120,0.45)">OFF</text>
-  <text x="30"  y="3"  text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" font-weight="700" fill="rgba(255,210,120,0.45)">ON</text>
+  <!-- Labels moved outside slider thumb ±28 range so text stays visible. -->
+  <text x="-38"  y="3"  text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" font-weight="700" fill="rgba(255,210,120,0.45)">OFF</text>
+  <text x="38"   y="3"  text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" font-weight="700" fill="rgba(255,210,120,0.45)">ON</text>
   <g data-toggle data-on-transform="translate(28,0)" data-off-transform="translate(-28,0)">
     <rect x="-12" y="-13" width="24" height="26" rx="3" fill="url(#bs-thumb)"/>
     <rect x="-12" y="-13" width="24" height="26" rx="3" fill="url(#bs-knurl)" opacity="0.65"/>

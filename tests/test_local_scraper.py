@@ -15,12 +15,24 @@ from ray_local_scraper import RayLocalScraper
 
 
 @pytest.fixture(autouse=True)
-def reset_globals():
+def reset_globals(monkeypatch):
     rls._FILE_LIST_CACHE.clear()
     rls._RECENT_BY_NODE.clear()
+    rls._LAST_BEST_BY_NODE.clear()
+    # Some CI/dev environments ship a torch stub without `from_numpy`.
+    # Fall back to a placeholder tensor when the stub is incomplete so the
+    # scraper's non-tensor logic (prompt selection, path picking) is still
+    # exercised end-to-end by pytest.
+    if not hasattr(torch, "from_numpy"):
+        class _FakeTensor:
+            def __init__(self, shape=(1, 8, 8, 3)):
+                self.shape = shape
+        monkeypatch.setattr(rls, "_pil_to_tensor", lambda pil: _FakeTensor())
+        monkeypatch.setattr(rls, "_black_tensor", lambda: _FakeTensor((1, 1, 1, 3)))
     yield
     rls._FILE_LIST_CACHE.clear()
     rls._RECENT_BY_NODE.clear()
+    rls._LAST_BEST_BY_NODE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -658,3 +670,283 @@ def test_clear_cache_resets_state(tmp_path):
     rls.clear_cache()
     assert rls._FILE_LIST_CACHE == {}
     assert rls._RECENT_BY_NODE == {}
+
+
+# ---------------------------------------------------------------------------
+# Path-shaped rejection
+# ---------------------------------------------------------------------------
+
+
+def test_looks_like_path_windows_drive():
+    assert rls._looks_like_path(r"C:\models\stable-diffusion\sdxl_base.safetensors")
+
+
+def test_looks_like_path_windows_backslash_run():
+    assert rls._looks_like_path(r"models\loras\extra\my_lora.safetensors")
+
+
+def test_looks_like_path_unix_absolute():
+    assert rls._looks_like_path("/home/user/stable-diffusion/output/foo.png")
+
+
+def test_looks_like_path_relative_dot_slash():
+    assert rls._looks_like_path("./output/2024/foo.png")
+
+
+def test_looks_like_path_bare_safetensors_filename():
+    assert rls._looks_like_path("sdxl_base_1.0.safetensors")
+
+
+def test_looks_like_path_does_not_reject_prompt_with_slash():
+    """A real prompt can contain a slash without being rejected as a path."""
+    prompt = "a woman standing under bright sunlight, 4k / photorealistic"
+    assert not rls._looks_like_path(prompt)
+
+
+def test_looks_like_path_does_not_reject_multiline_prose():
+    prose = "line one about a mountain\nline two about a river\nline three"
+    assert not rls._looks_like_path(prose)
+
+
+def test_valid_prompt_candidate_rejects_bool_and_numbers():
+    assert not rls._valid_prompt_candidate("true")
+    assert not rls._valid_prompt_candidate("false")
+    assert not rls._valid_prompt_candidate("none")
+    assert not rls._valid_prompt_candidate("null")
+    assert not rls._valid_prompt_candidate("42")
+    assert not rls._valid_prompt_candidate("3.14")
+
+
+def test_valid_prompt_candidate_rejects_paths_and_short():
+    assert not rls._valid_prompt_candidate("")
+    assert not rls._valid_prompt_candidate("hi")
+    assert not rls._valid_prompt_candidate(r"C:\loras\foo.safetensors")
+    assert rls._valid_prompt_candidate("a cat in a hat")
+
+
+def test_extract_prompts_rejects_path_shaped_info_key(tmp_path):
+    """A `lora_path` info key with a Windows-style path must not leak
+    through as a prompt."""
+    p = tmp_path / "paths.png"
+    _make_solid_png(p, info={
+        "parameters": "the real prompt here\nNegative prompt: bad\nSteps: 1",
+        "prompt_lora_path": r"C:\loras\my_style.safetensors",
+    })
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    # Only the real A1111 prompt survives.
+    assert prompts == ["the real prompt here"]
+
+
+def test_extract_prompts_rejects_folder_style_in_comfy_string_node(tmp_path):
+    """A ComfyUI String Literal node holding a checkpoint path must not
+    be surfaced as a prompt when no encoder text exists."""
+    graph = {
+        "1": {
+            "class_type": "String Literal",
+            "inputs": {"string": r"models\checkpoints\dreamshaper.safetensors"},
+        },
+    }
+    p = tmp_path / "path_string.png"
+    _make_solid_png(p, info={"prompt": json.dumps(graph)})
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    assert prompts == []
+
+
+# ---------------------------------------------------------------------------
+# Extra info-key + EXIF text extraction
+# ---------------------------------------------------------------------------
+
+
+def test_extract_prompts_from_generic_prompt_info_key(tmp_path):
+    """A tool that writes `caption` or `description` alongside the image
+    should have that text picked up as a prompt candidate."""
+    p = tmp_path / "caption.png"
+    _make_solid_png(p, info={
+        "caption": "a portrait of a person wearing a red hat",
+    })
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    assert "a portrait of a person wearing a red hat" in prompts
+
+
+def test_extract_prompts_from_swarmui_style_json_blob(tmp_path):
+    """SwarmUI writes a JSON metadata blob under `sui_image_params` with
+    a nested `prompt` key. The walker should surface the inner prompt."""
+    blob = json.dumps({
+        "sui_image_params": {
+            "prompt": "a swarm-generated positive prompt",
+            "negativeprompt": "blurry, low quality",
+            "steps": 25,
+        }
+    })
+    p = tmp_path / "sui.png"
+    _make_solid_png(p, info={"sui_image_params": blob})
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    assert "a swarm-generated positive prompt" in prompts
+
+
+def test_extract_prompts_from_novelai_metadata(tmp_path):
+    """NovelAI-style metadata: a JSON string with prompt inside."""
+    blob = json.dumps({"Description": "a novelai style prompt of a fox"})
+    p = tmp_path / "nai.png"
+    _make_solid_png(p, info={"Comment": blob})
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    assert "a novelai style prompt of a fox" in prompts
+
+
+def test_extract_prompts_from_jpeg_image_description(tmp_path):
+    """EXIF ImageDescription (tag 270) should be mined for prompts."""
+    p = tmp_path / "exif_desc.jpg"
+    img = Image.new("RGB", (8, 8), color="green")
+    exif = img.getexif()
+    exif[270] = "a caption via exif image description"
+    img.save(p, "JPEG", exif=exif.tobytes())
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    assert "a caption via exif image description" in prompts
+
+
+def test_extract_prompts_from_a1111_json_variant(tmp_path):
+    """Some pipelines write a JSON blob into the `parameters` chunk
+    instead of the classic newline-separated A1111 format."""
+    blob = json.dumps({
+        "prompt": "a json-shaped a1111 prompt",
+        "negative_prompt": "junk",
+        "steps": 20,
+    })
+    p = tmp_path / "a1111_json.png"
+    _make_solid_png(p, info={"parameters": blob})
+    with Image.open(p) as im:
+        prompts = rls.extract_prompts(p, im)
+    assert "a json-shaped a1111 prompt" in prompts
+
+
+# ---------------------------------------------------------------------------
+# Best-try skip-on-duplicate loop
+# ---------------------------------------------------------------------------
+
+
+def test_best_try_skips_when_next_pick_has_same_prompt(tmp_path):
+    """Two images with the SAME prompt + one with a different prompt.
+    With best_try + deterministic seed, running twice must land on
+    different files (the second call must skip the duplicate)."""
+    same = "the identical prompt appearing twice"
+    diff = "a completely different prompt about a robot"
+    _make_solid_png(tmp_path / "a.png", info={
+        "parameters": f"{same}\nNegative prompt: x\nSteps: 1"
+    })
+    _make_solid_png(tmp_path / "b.png", info={
+        "parameters": f"{same}\nNegative prompt: x\nSteps: 1"
+    })
+    _make_solid_png(tmp_path / "c.png", info={
+        "parameters": f"{diff}\nNegative prompt: x\nSteps: 1"
+    })
+
+    node = RayLocalScraper()
+    out1 = node.process(
+        folder=str(tmp_path),
+        recurse_subfolders=False,
+        skip_no_prompt=False,
+        prompt_best_try=True,
+        seed=1,
+        refresh_listing=True,
+        node_id="dup",
+    )
+    out2 = node.process(
+        folder=str(tmp_path),
+        recurse_subfolders=False,
+        skip_no_prompt=False,
+        prompt_best_try=True,
+        seed=1,
+        refresh_listing=True,
+        node_id="dup",
+    )
+    # Second call sees the same seed, but the recent-pick queue AND the
+    # last-best-prompt memory force it to a different image with a
+    # different prompt.
+    assert out1[0] != out2[0]
+    assert out1[0][0] != out2[0][0]
+
+
+def test_best_try_returns_new_prompt_on_repeat(tmp_path):
+    """Explicit: two calls in a row must produce two distinct best-try
+    prompts as long as the folder holds any."""
+    for i, text in enumerate(("alpha prompt aaa", "beta prompt bbb",
+                              "gamma prompt ccc")):
+        _make_solid_png(tmp_path / f"{i}.png", info={
+            "parameters": f"{text}\nNegative prompt: x\nSteps: 1"
+        })
+    node = RayLocalScraper()
+    seen = set()
+    for run in range(3):
+        out = node.process(
+            folder=str(tmp_path),
+            recurse_subfolders=False,
+            skip_no_prompt=False,
+            prompt_best_try=True,
+            seed=7,
+            refresh_listing=(run == 0),
+            node_id="rot",
+        )
+        assert len(out[0]) == 1
+        seen.add(out[0][0])
+    # All three runs produced distinct prompts.
+    assert len(seen) == 3
+
+
+def test_best_try_raises_when_only_duplicate_remains(tmp_path):
+    """One image, best_try, called twice with the same prompt in memory
+    -> second call has no new prompt to serve and must raise."""
+    _make_solid_png(tmp_path / "a.png", info={
+        "parameters": "the only prompt in town\nNegative prompt: x\nSteps: 1"
+    })
+    node = RayLocalScraper()
+    node.process(
+        folder=str(tmp_path),
+        recurse_subfolders=False,
+        skip_no_prompt=False,
+        prompt_best_try=True,
+        seed=1,
+        refresh_listing=True,
+        node_id="only",
+    )
+    with pytest.raises(RuntimeError, match="new best-try prompt"):
+        node.process(
+            folder=str(tmp_path),
+            recurse_subfolders=False,
+            skip_no_prompt=False,
+            prompt_best_try=True,
+            seed=1,
+            refresh_listing=False,
+            node_id="only",
+        )
+
+
+def test_best_try_off_does_not_skip_duplicates(tmp_path):
+    """Sanity: when best_try is off, the dedup rule must not fire."""
+    _make_solid_png(tmp_path / "a.png", info={
+        "parameters": "same prompt again\nNegative prompt: x\nSteps: 1"
+    })
+    node = RayLocalScraper()
+    # Two calls must both succeed even though the prompt is identical.
+    for _ in range(2):
+        out = node.process(
+            folder=str(tmp_path),
+            recurse_subfolders=False,
+            skip_no_prompt=False,
+            prompt_best_try=False,
+            seed=1,
+            refresh_listing=True,
+            node_id="off",
+        )
+        assert "same prompt again" in out[0]
+
+
+def test_clear_cache_clears_last_best():
+    rls._LAST_BEST_BY_NODE["x"] = "something"
+    rls.clear_cache()
+    assert rls._LAST_BEST_BY_NODE == {}

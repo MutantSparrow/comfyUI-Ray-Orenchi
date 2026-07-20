@@ -1,4 +1,5 @@
 import { app } from "../../scripts/app.js";
+import { applyBucketTint } from "./_common.js";
 
 const NODE_NAME = "RayFilmStock";
 const FOLDER_WIDGET = "assets_folder";
@@ -68,6 +69,7 @@ function wireFolderListener(node) {
 }
 
 function bootstrap(node) {
+    applyBucketTint(node, "VFX");
     wireFolderListener(node);
     refresh(node);
 }

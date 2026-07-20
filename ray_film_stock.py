@@ -832,44 +832,69 @@ class RayFilmStock:
     """Film stock emulation with analytical curves, optional .cube LUT, and
     optional Photoshop / Lightroom XMP develop-setting overlay."""
 
+    DESCRIPTION = (
+        "Analytical film-stock emulation. Applies a per-stock tonal curve "
+        "+ color response (Kodak Portra 400, Ilford HP5+, Cinestill, "
+        "Fujifilm Velvia, and more), plus optional grain and halation.\n\n"
+        "Point `assets_folder` at a directory of `.cube` / `.3dl` LUTs "
+        "and `.xmp` develop-setting files to layer a real graded look on "
+        "top of the analytical baseline. `intensity` scales the whole "
+        "effect; `expose_stops` shifts exposure before the curve."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image": ("IMAGE",),
-                "preset": (STOCK_NAMES, {"default": "Kodak Portra 400"}),
+                "image": ("IMAGE", {"tooltip": "Source image."}),
+                "preset": (STOCK_NAMES, {
+                    "default": "Kodak Portra 400",
+                    "tooltip": "Film-stock analytical curve preset.",
+                }),
                 "intensity": ("FLOAT", {
                     "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01,
+                    "tooltip": "Master mix vs untouched input.",
                 }),
                 "grain_amount": ("FLOAT", {
                     "default": 1.0, "min": 0.0, "max": 4.0, "step": 0.05,
+                    "tooltip": "Grain strength (0 = off).",
                 }),
                 "halation_amount": ("FLOAT", {
                     "default": 1.0, "min": 0.0, "max": 4.0, "step": 0.05,
+                    "tooltip": "Halation bloom strength (0 = off).",
                 }),
                 "expose_stops": ("FLOAT", {
                     "default": 0.0, "min": -4.0, "max": 4.0, "step": 0.05,
+                    "tooltip": "Exposure compensation in stops.",
                 }),
-                "seed": ("INT", {"default": -1, "min": -1, "max": 2**31 - 1}),
+                "seed": ("INT", {
+                    "default": -1, "min": -1, "max": 2**31 - 1,
+                    "tooltip": "-1 for random; any >=0 value is reproducible.",
+                }),
             },
             "optional": {
                 "assets_folder": ("STRING", {
                     "default": "", "multiline": False,
-                    "placeholder": "folder with .cube / .3dl / .xmp (recursed)",
+                    "placeholder": "Folder with .cube / .3dl / .xmp (recursed)",
+                    "tooltip": "Optional asset folder — LUTs and XMP develop presets are picked up recursively.",
                 }),
                 # Declared as a COMBO (list of choices) so both LiteGraph and
                 # the Vue frontend render a real dropdown. The companion JS
                 # repopulates `.options.values` live whenever assets_folder
                 # changes. Default list seeded with the (none) sentinel so the
                 # widget is interactive even before a folder is set.
-                "asset_file": ([NONE_CHOICE], {"default": NONE_CHOICE}),
+                "asset_file": ([NONE_CHOICE], {
+                    "default": NONE_CHOICE,
+                    "tooltip": "LUT / XMP file to overlay on top of the analytical curve.",
+                }),
             },
         }
 
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("image",)
+    OUTPUT_TOOLTIPS = ("Film-stock emulated image.",)
     FUNCTION = "process"
-    CATEGORY = "Ray/VFX✨"
+    CATEGORY = "👑 Ray/✨ VFX"
 
     @classmethod
     def VALIDATE_INPUTS(cls, asset_file=None, **kwargs):

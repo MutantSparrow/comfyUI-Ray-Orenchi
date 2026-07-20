@@ -842,47 +842,69 @@ def _apply_offset_print(
 class RayOffsetPrint:
     """ComfyUI node: image-space offset-print VFX with print-process presets."""
 
+    DESCRIPTION = (
+        "Image-space CMYK / duotone offset-print simulation. Per-plate "
+        "halftone screens at SWOP angles, plate misregistration, dot "
+        "gain, ink bleed, paper substrate (tint + grain + texture), "
+        "optional sepia / vignette / posterize.\n\n"
+        "Presets cover old newspaper, comic-book, chromolithography, "
+        "risograph, silk-screen, xerox, glossy magazine, etc. paper_color "
+        "overrides the preset paper tint; paper_color_mix blends the two."
+    )
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image": ("IMAGE",),
-                "preset": (PRESET_NAMES, {"default": PRESET_NAMES[0]}),
+                "image": ("IMAGE", {"tooltip": "Source frame(s). BHWC accepted."}),
+                "preset": (PRESET_NAMES, {
+                    "default": PRESET_NAMES[0],
+                    "tooltip": "Print-process preset (paper stock, ink, screen).",
+                }),
                 "intensity": (
                     "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01},
+                    {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01,
+                     "tooltip": "Master mix vs untouched input."},
                 ),
                 "ink_strength": (
                     "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05},
+                    {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                     "tooltip": "Per-plate ink density multiplier."},
                 ),
                 "screen_strength": (
                     "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 1.5, "step": 0.05},
+                    {"default": 1.0, "min": 0.0, "max": 1.5, "step": 0.05,
+                     "tooltip": "Halftone screen depth."},
                 ),
                 "paper_strength": (
                     "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05},
+                    {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                     "tooltip": "Paper grain + texture amount."},
                 ),
                 "scale": (
                     "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 4.0, "step": 0.05},
+                    {"default": 1.0, "min": 0.0, "max": 4.0, "step": 0.05,
+                     "tooltip": "Halftone-screen pitch scale."},
                 ),
                 "paper_color": (
                     "STRING",
-                    {"default": "#ffffff"},
+                    {"default": "#ffffff",
+                     "placeholder": "Hex color, e.g. #fffaf0",
+                     "tooltip": "Paper substrate hex color."},
                 ),
                 "paper_color_mix": (
                     "FLOAT",
-                    {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01},
+                    {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01,
+                     "tooltip": "Blend toward paper_color over the preset paper tint."},
                 ),
             },
         }
 
     RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("print_image",)
+    RETURN_NAMES = ("image",)
+    OUTPUT_TOOLTIPS = ("Filtered image with the offset-print effect applied.",)
     FUNCTION = "process"
-    CATEGORY = "Ray/VFX✨"
+    CATEGORY = "👑 Ray/✨ VFX"
 
     def process(
         self,

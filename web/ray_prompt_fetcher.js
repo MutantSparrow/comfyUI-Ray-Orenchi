@@ -1,4 +1,12 @@
 import { app } from "../../scripts/app.js";
+import {
+    applyBucketTint,
+    shiftTint,
+    RAY_PALETTE,
+    setWidgetHidden as commonSetHidden,
+    findWidget as getWidget,
+    autowireRayPreview,
+} from "./_common.js";
 
 const NODE_NAME = "RayPromptFetcher";
 
@@ -16,44 +24,19 @@ const MODE_PREFIX = {
 // Widgets that always stay visible regardless of mode.
 const ALWAYS_VISIBLE = new Set(["scraper_mode", "seed"]);
 
-function getWidget(node, name) {
-    return node.widgets?.find((w) => w.name === name);
-}
-
-function setWidgetHidden(widget, hidden) {
-    if (!widget) return;
-    if (hidden) {
-        if (widget.__rfOrigType === undefined) {
-            widget.__rfOrigType = widget.type;
-            widget.__rfOrigComputeSize = widget.computeSize;
-        }
-        widget.type = "hidden";
-        widget.computeSize = () => [0, -4];
-        widget.hidden = true;
-    } else {
-        if (widget.__rfOrigType !== undefined) {
-            widget.type = widget.__rfOrigType;
-            widget.computeSize = widget.__rfOrigComputeSize;
-            widget.__rfOrigType = undefined;
-            widget.__rfOrigComputeSize = undefined;
-        }
-        widget.hidden = false;
-    }
-}
-
 function applyMode(node, mode) {
     const keep = MODE_PREFIX[mode] || MODE_PREFIX[MODE_LOCAL];
     for (const w of node.widgets || []) {
         if (ALWAYS_VISIBLE.has(w.name)) {
-            setWidgetHidden(w, false);
+            commonSetHidden(node, w, false);
             continue;
         }
+        // Never hide our own DOM widgets (preview, status).
+        if (w.type === "RAY_PREVIEW") { continue; }
         const hide = !w.name?.startsWith(keep);
-        setWidgetHidden(w, hide);
+        commonSetHidden(node, w, hide);
     }
     applyModeStyling(node, mode);
-    // Snap height. node.setSize is the v2-friendly path; node.size[1] is the
-    // LiteGraph mutation path — set both so we cover frontends.
     if (typeof node.computeSize === "function") {
         const sz = node.computeSize();
         if (Array.isArray(node.size)) node.size[1] = sz[1];
@@ -63,17 +46,16 @@ function applyMode(node, mode) {
 }
 
 function applyModeStyling(node, mode) {
-    let bg = "#2a2a3a";
-    let edge = "#5a5a7a";
-    if (mode === MODE_LOCAL) {
-        bg = "#1f3a2a"; edge = "#3aa867";
-    } else if (mode === MODE_DEXTER) {
-        bg = "#1f2a4a"; edge = "#3a73c8";
+    // Prompts bucket base tint, hue-shifted per mode.
+    applyBucketTint(node, "Prompts");
+    if (mode === MODE_DEXTER) {
+        node.bgcolor = shiftTint(RAY_PALETTE.Prompts.bg, 90);
+        node.color = shiftTint(RAY_PALETTE.Prompts.edge, 90);
     } else if (mode === MODE_CIVITAI) {
-        bg = "#3a1f4a"; edge = "#a83aa8";
+        node.bgcolor = shiftTint(RAY_PALETTE.Prompts.bg, -90);
+        node.color = shiftTint(RAY_PALETTE.Prompts.edge, -90);
     }
-    node.bgcolor = bg;
-    node.color = edge;
+    // MODE_LOCAL keeps the canonical Prompts tint.
 }
 
 // PromptDexter category list arrives async via /ray_promptdexter/categories.
@@ -103,6 +85,8 @@ function updateDexterCategoryWidget(node, list, anyLabel) {
 async function bootstrap(node) {
     const modeW = getWidget(node, "scraper_mode");
     if (!modeW) return;
+
+    autowireRayPreview(node, { height: 200, label: "fetcher preview" });
 
     // Populate Dexter categories asynchronously — same source the dedicated
     // node uses. INPUT_TYPES already seeded the dropdown, but the live list

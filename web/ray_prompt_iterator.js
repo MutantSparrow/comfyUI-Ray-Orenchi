@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { injectStylesOnce } from "./chat_styles.js";
+import { applyBucketTint } from "./_common.js";
 
 const NODE_NAME = "RayPromptIterator";
 
@@ -239,7 +240,7 @@ app.registerExtension({
         const orig = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             const r = orig?.apply(this, arguments);
-            try { buildPickerUI(this); }
+            try { buildPickerUI(this); applyBucketTint(this, "LLM"); }
             catch (e) { console.error("[RayPromptIterator] buildPickerUI error:", e); }
             this.size = [380, 300];
             return r;
