@@ -5,8 +5,10 @@ class RaySwitch:
         "Six physical styles (Chrome Rocker, Bakelite Flip, Silver "
         "Paddle, Brass Slider, Minimal Pill, Dark Studio Dome), each "
         "modeled with the correct on/off geometry. Right-click for style "
-        "picker, Compact mode, and Edit label — the Dymo tape above the "
-        "switch is double-click editable and persists with the workflow."
+        "picker, Compact mode (hides the node title so the node looks "
+        "like a bare analog appliance — chrome panel, Dymo label, and "
+        "readout stay), and Edit label — the Dymo tape above the switch "
+        "is double-click editable and persists with the workflow."
     )
 
     @classmethod
