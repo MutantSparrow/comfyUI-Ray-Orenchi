@@ -18,7 +18,7 @@ from ray_local_scraper import RayLocalScraper
 def reset_globals(monkeypatch):
     rls._FILE_LIST_CACHE.clear()
     rls._RECENT_BY_NODE.clear()
-    rls._LAST_BEST_BY_NODE.clear()
+    rls._RECENT_BEST_BY_NODE.clear()
     # Some CI/dev environments ship a torch stub without `from_numpy`.
     # Fall back to a placeholder tensor when the stub is incomplete so the
     # scraper's non-tensor logic (prompt selection, path picking) is still
@@ -32,7 +32,7 @@ def reset_globals(monkeypatch):
     yield
     rls._FILE_LIST_CACHE.clear()
     rls._RECENT_BY_NODE.clear()
-    rls._LAST_BEST_BY_NODE.clear()
+    rls._RECENT_BEST_BY_NODE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -978,7 +978,51 @@ def test_best_try_off_does_not_skip_duplicates(tmp_path):
         assert "same prompt again" in out[0]
 
 
-def test_clear_cache_clears_last_best():
-    rls._LAST_BEST_BY_NODE["x"] = "something"
+def test_clear_cache_clears_recent_best():
+    from collections import deque as _dq
+    rls._RECENT_BEST_BY_NODE["x"] = _dq(["something"], maxlen=20)
     rls.clear_cache()
-    assert rls._LAST_BEST_BY_NODE == {}
+    assert rls._RECENT_BEST_BY_NODE == {}
+
+
+def test_best_try_does_not_flip_flop_with_two_prompts(tmp_path):
+    """Regression: a folder with only two distinct prompts must not
+    ping-pong A/B/A/B/A/B forever when the seed is frozen. The recent-best
+    deque should skip both once emitted."""
+    _make_solid_png(tmp_path / "a.png", info={
+        "parameters": "prompt alpha\nNegative prompt: x\nSteps: 1"
+    })
+    _make_solid_png(tmp_path / "b.png", info={
+        "parameters": "prompt beta\nNegative prompt: x\nSteps: 1"
+    })
+    node = RayLocalScraper()
+
+    def _run():
+        return node.process(
+            folder=str(tmp_path),
+            recurse_subfolders=False,
+            skip_no_prompt=False,
+            prompt_best_try=True,
+            seed=1,
+            refresh_listing=False,
+            node_id="flip",
+        )
+
+    # Prime the cache so refresh_listing=False on subsequent runs works.
+    node.process(
+        folder=str(tmp_path), recurse_subfolders=False,
+        skip_no_prompt=False, prompt_best_try=True,
+        seed=1, refresh_listing=True, node_id="flip",
+    )
+    # Rewind the deques so we start from a clean slate for the sweep.
+    rls._RECENT_BY_NODE["flip"].clear()
+    rls._RECENT_BEST_BY_NODE["flip"].clear()
+
+    first = _run()
+    second = _run()
+    assert first[0][0] != second[0][0], "second run should serve the other prompt"
+
+    # Third call: both prompts are now in recent_best, so the node must
+    # raise 'no new best-try prompt' rather than silently flip-flop.
+    with pytest.raises(RuntimeError, match="new best-try prompt"):
+        _run()
