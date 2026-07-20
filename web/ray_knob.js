@@ -129,35 +129,66 @@ function buildKnobElement(node, kvw) {
     wrap.appendChild(readout);
 
     // Compact mode = pure analog appliance. Strip everything except the
-    // brushed-metal panel + Dymo + knob + readout: title bar, config widget
-    // rows, input pins, output pins, all gone. Outputs are stashed so the
-    // node still exists in the graph but shows nothing but the control.
-    // Toggling back restores the pins + widgets.
+    // brushed-metal panel + Dymo + knob + readout. Uses LiteGraph's own
+    // "advanced widgets" affordance (node.showAdvanced) to hide the numeric
+    // config widgets natively in both legacy and Nodes 2.0 — the base class's
+    // isWidgetVisible() honors `widget.advanced && !node.showAdvanced`.
+    //
+    // Title bar is hidden via a per-instance getter override for `title_mode`
+    // (the base class reads title_mode from `this.constructor.title_mode`, so
+    // writing to node.title_mode without the getter override is a no-op).
+    //
+    // Slots stashed to arrays[] when unwired so no pin dots render.
     const CONFIG_WIDGETS = [
         "min_value", "max_value", "spin_value", "clamp", "allow_negative",
     ];
-    const applyCompact = () => {
-        const c = !!node.properties?.compact;
-        // 1. Hide/show numeric widgets.
+    // Mark config widgets `advanced = true` once so showAdvanced controls
+    // their visibility. Deferred so widgets are all in place first.
+    setTimeout(() => {
         for (const name of CONFIG_WIDGETS) {
             const w = findWidget(node, name);
-            if (w) setWidgetHidden(node, w, c);
+            if (w) w.advanced = true;
         }
-        // 2. Blank the title. Set BOTH title_mode (LiteGraph + Vue read this)
-        //    AND flags.no_title (some Vue builds keep a small header strip
-        //    until this flag is set too). Restore both symmetrically.
+    }, 0);
+    const applyCompact = () => {
+        const c = !!node.properties?.compact;
+        // 1. Widgets: compact => showAdvanced=false => advanced widgets hide.
+        node.showAdvanced = !c;
+        // Also mirror to widget.hidden for the belt-and-suspenders path in
+        // any frontend build that ignores showAdvanced.
+        for (const name of CONFIG_WIDGETS) {
+            const w = findWidget(node, name);
+            if (w) w.hidden = c;
+        }
+        // 2. Title bar via a per-instance getter override. The base-class
+        //    getter reads `this.constructor.title_mode`, so a plain
+        //    `node.title_mode = ...` write is discarded. defineProperty
+        //    clobbers the getter for THIS instance only, leaving siblings
+        //    untouched.
         const LG = (typeof window !== "undefined" && window.LiteGraph) || null;
+        const NO_TITLE = LG?.NO_TITLE ?? -1;
+        const NORMAL_TITLE = LG?.NORMAL_TITLE ?? 0;
         if (c) {
             if (node._rayKnobOrigTitle == null) node._rayKnobOrigTitle = node.title ?? "";
             node.title = "";
-            if (LG) node.title_mode = LG.NO_TITLE;
+            Object.defineProperty(node, "title_mode", {
+                configurable: true,
+                get() { return NO_TITLE; },
+            });
             node.flags = { ...(node.flags || {}), no_title: true };
         } else {
             if (node._rayKnobOrigTitle != null) {
                 node.title = node._rayKnobOrigTitle;
                 node._rayKnobOrigTitle = null;
             }
-            if (LG) node.title_mode = LG.NORMAL_TITLE ?? 0;
+            // Delete the per-instance override so the class getter is
+            // used again → title_mode reverts to the class default.
+            try { delete node.title_mode; } catch (_e) {
+                Object.defineProperty(node, "title_mode", {
+                    configurable: true,
+                    get() { return NORMAL_TITLE; },
+                });
+            }
             if (node.flags) delete node.flags.no_title;
         }
         // 3. Stash / restore input + output pin arrays so no slot dots draw.

@@ -130,6 +130,11 @@ export function shiftTint(hex, degrees = 0) {
 // still respects an explicit `hidden` flag. We stash the original type under
 // a single property so any node can round-trip repeatedly.
 
+// Nodes 2.0 (Vue) checks `widget.hidden` in the base class's
+// `isWidgetVisible()` — that alone filters both layout and rendering.
+// Legacy canvas frontends respect the same flag but historically also
+// wanted `type = "converted-widget"` + zero-height computeSize, so we
+// keep that as a belt-and-braces fallback.
 const _HIDDEN_TYPE = "converted-widget";
 const _ORIG_KEY = "_rayOrigType";
 const _ORIG_COMPUTE = "_rayOrigCompute";
@@ -141,15 +146,15 @@ export function setWidgetHidden(node, widget, hidden) {
         if (widget[_ORIG_COMPUTE] === undefined && typeof widget.computeSize === "function") {
             widget[_ORIG_COMPUTE] = widget.computeSize;
         }
-        widget.type = _HIDDEN_TYPE;
-        widget.hidden = true;
+        widget.hidden = true;             // Nodes 2.0 canonical filter.
+        widget.type = _HIDDEN_TYPE;       // Legacy canvas fallback.
         widget.computeSize = () => [0, -4];
     } else {
+        widget.hidden = false;
         if (widget[_ORIG_KEY] !== undefined) {
             widget.type = widget[_ORIG_KEY];
             delete widget[_ORIG_KEY];
         }
-        widget.hidden = false;
         if (widget[_ORIG_COMPUTE] !== undefined) {
             widget.computeSize = widget[_ORIG_COMPUTE];
             delete widget[_ORIG_COMPUTE];
@@ -160,6 +165,9 @@ export function setWidgetHidden(node, widget, hidden) {
     if (node && typeof node.setDirtyCanvas === "function") {
         node.setDirtyCanvas(true, true);
     }
+    // Vue layout store caches derived widget lists; nudge it so the
+    // freshly hidden widget doesn't linger with a reserved slot.
+    if (node?.graph?.change) node.graph.change();
 }
 
 export function findWidget(node, name) {
