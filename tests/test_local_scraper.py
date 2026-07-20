@@ -638,13 +638,48 @@ def test_process_image_path_is_absolute_string(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_select_path_skips_recent():
+def test_select_path_deterministic_ignores_recent():
+    """Freezing the seed must return the same pick every call, even when
+    it lives in the recent-pick queue. The LRU only guards seed=-1."""
     import random as _r
     paths = [f"/tmp/{i}.png" for i in range(5)]
-    recent = deque([paths[0]], maxlen=20)
-    rng = _r.Random(1)
-    pick = rls._select_path(paths, recent, rng, deterministic=True)
-    assert pick != paths[0]
+    rng_a = _r.Random(1)
+    pick_a = rls._select_path(paths, deque(maxlen=20), rng_a, deterministic=True)
+    # Even with pick_a in the recent queue, the same seed should re-pick it.
+    rng_b = _r.Random(1)
+    pick_b = rls._select_path(
+        paths, deque([pick_a], maxlen=20), rng_b, deterministic=True
+    )
+    assert pick_a == pick_b
+
+
+def test_select_path_random_skips_recent():
+    """Non-deterministic (seed=-1) mode: recent queue should push the RNG
+    to a different pick."""
+    import random as _r
+    paths = [f"/tmp/{i}.png" for i in range(5)]
+    recent = deque(paths[:4], maxlen=20)  # only paths[4] is fresh
+    rng = _r.Random(0)
+    pick = rls._select_path(paths, recent, rng, deterministic=False)
+    assert pick == paths[4]
+
+
+def test_process_same_seed_survives_between_runs(tmp_path):
+    """The reported regression: two runs w/ the same seed must land on the
+    same file even after the first run inserted the pick into the LRU."""
+    for i in range(5):
+        _make_solid_png(tmp_path / f"img{i}.png", info={
+            "parameters": f"prompt {i}\nSteps: 1"
+        })
+    node = RayLocalScraper()
+    out1 = node.process(folder=str(tmp_path), recurse_subfolders=False,
+                        skip_no_prompt=False, seed=42, refresh_listing=True,
+                        node_id="SAME")
+    out2 = node.process(folder=str(tmp_path), recurse_subfolders=False,
+                        skip_no_prompt=False, seed=42, refresh_listing=False,
+                        node_id="SAME")
+    # Same seed + same node_id => same picked file across repeated runs.
+    assert out1[3][0] == out2[3][0]
 
 
 def test_process_same_seed_picks_same_file(tmp_path):
@@ -873,29 +908,26 @@ def test_best_try_skips_when_next_pick_has_same_prompt(tmp_path):
 
 
 def test_best_try_returns_new_prompt_on_repeat(tmp_path):
-    """Explicit: two calls in a row must produce two distinct best-try
-    prompts as long as the folder holds any."""
+    """best_try semantic is 'if the top prompt equals the LAST one this
+    node emitted, advance'. So two consecutive frozen-seed runs must
+    return different prompts."""
     for i, text in enumerate(("alpha prompt aaa", "beta prompt bbb",
                               "gamma prompt ccc")):
         _make_solid_png(tmp_path / f"{i}.png", info={
             "parameters": f"{text}\nNegative prompt: x\nSteps: 1"
         })
     node = RayLocalScraper()
-    seen = set()
-    for run in range(3):
-        out = node.process(
-            folder=str(tmp_path),
-            recurse_subfolders=False,
-            skip_no_prompt=False,
-            prompt_best_try=True,
-            seed=7,
-            refresh_listing=(run == 0),
-            node_id="rot",
-        )
-        assert len(out[0]) == 1
-        seen.add(out[0][0])
-    # All three runs produced distinct prompts.
-    assert len(seen) == 3
+    first = node.process(
+        folder=str(tmp_path), recurse_subfolders=False,
+        skip_no_prompt=False, prompt_best_try=True, seed=7,
+        refresh_listing=True, node_id="rot",
+    )
+    second = node.process(
+        folder=str(tmp_path), recurse_subfolders=False,
+        skip_no_prompt=False, prompt_best_try=True, seed=7,
+        refresh_listing=False, node_id="rot",
+    )
+    assert first[0][0] != second[0][0]
 
 
 def test_best_try_raises_when_only_duplicate_remains(tmp_path):

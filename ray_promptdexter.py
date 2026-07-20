@@ -268,11 +268,11 @@ def _select_url(urls: list, recent: deque, rng, deterministic: bool) -> str:
     if not urls:
         raise RuntimeError("URL pool is empty")
     if deterministic:
+        # Freezing the seed must produce the same URL every run. `recent`
+        # only guards the seed=-1 (OS-random) case against consecutive
+        # repeats.
         indices = list(range(len(urls)))
         rng.shuffle(indices)
-        for i in indices:
-            if urls[i] not in recent:
-                return urls[i]
         return urls[indices[0]]
     for _ in range(50):
         pick = rng.choice(urls)
