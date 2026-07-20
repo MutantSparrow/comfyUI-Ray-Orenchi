@@ -921,6 +921,10 @@ class RayLocalScraper:
                     "default": False,
                     "tooltip": "Force a re-scan of the folder before selecting.",
                 }),
+                "show_preview": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Render the picked image inline in the node.",
+                }),
             },
             "hidden": {"node_id": "UNIQUE_ID"},
         }
@@ -949,6 +953,7 @@ class RayLocalScraper:
         seed,
         prompt_best_try=False,
         refresh_listing=False,
+        show_preview=True,
         node_id=None,
     ):
         node_key = str(node_id) if node_id is not None else "_default"
@@ -963,6 +968,7 @@ class RayLocalScraper:
         refresh = _coerce_bool(refresh_listing)
         skip_no_prompt = _coerce_bool(skip_no_prompt)
         best_try = _coerce_bool(prompt_best_try)
+        show_preview = _coerce_bool(show_preview)
         paths = _file_list(folder_p, recurse, refresh=refresh)
         if not paths:
             raise RuntimeError(f"no supported images in {folder_p}")
@@ -980,12 +986,17 @@ class RayLocalScraper:
             node_key, deque(maxlen=_BEST_HISTORY_MAX)
         )
 
-        # Loop enabled whenever we might need to keep looking:
-        # - skip_no_prompt: keep trying until we find one with a prompt
-        # - best_try:       keep trying while the best-try prompt is in the
-        #                   recent-best deque (not just the very last one —
-        #                   otherwise the node flip-flops A/B/A/B forever
-        #                   when the pool only has two distinct prompts).
+        # HARD RULE: a locked seed produces a locked image. Every time.
+        # skip_no_prompt and prompt_best_try are dedup / fallback rules
+        # that only make sense in random-seed mode (seed = -1). With a
+        # fixed seed the user has told us exactly which pick they want,
+        # so we short-circuit both loops and return that pick as-is.
+        if deterministic:
+            skip_no_prompt = False
+            best_try = False
+
+        # Loop enabled whenever we might need to keep looking. Only ever
+        # applies in random-seed mode now.
         need_loop = skip_no_prompt or best_try
         max_attempts = min(len(paths), 50) if need_loop else 1
         attempts = 0
@@ -1079,7 +1090,7 @@ class RayLocalScraper:
                 from ._common import send_preview  # type: ignore
             except ImportError:
                 send_preview = None  # type: ignore
-        if send_preview is not None:
+        if send_preview is not None and show_preview:
             send_preview(node_id, path_str)
 
         if not chosen_prompts:
