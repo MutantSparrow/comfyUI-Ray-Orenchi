@@ -95,24 +95,55 @@ function buildSwitchElement(node, sw) {
     readout.className = "rs-readout";
     wrap.appendChild(readout);
 
-    // Compact mode = pure analog appliance. The switch has no numeric
-    // config widgets to hide (only the internal `state`, already hidden),
-    // so compact just blanks the node title so the analog panel is the
-    // only visible surface. Chrome, Dymo, readout, and outputs stay.
+    // Compact mode = pure analog appliance. Strip title, config widgets,
+    // input pins, output pins — leave only the brushed panel + Dymo tape +
+    // switch face + readout. When wires exist we keep the pins visible so
+    // the graph doesn't lose them; otherwise the arrays are stashed.
     const applyCompact = () => {
         const c = !!node.properties?.compact;
+        const LG = (typeof window !== "undefined" && window.LiteGraph) || null;
+        // Title.
         if (c) {
             if (node._raySwitchOrigTitle == null) node._raySwitchOrigTitle = node.title ?? "";
             node.title = "";
-        } else if (node._raySwitchOrigTitle != null) {
-            node.title = node._raySwitchOrigTitle;
-            node._raySwitchOrigTitle = null;
+            if (LG) node.title_mode = LG.NO_TITLE;
+        } else {
+            if (node._raySwitchOrigTitle != null) {
+                node.title = node._raySwitchOrigTitle;
+                node._raySwitchOrigTitle = null;
+            }
+            if (LG) node.title_mode = LG.NORMAL_TITLE ?? 0;
+        }
+        // Pins (only stash when unwired).
+        const hasConnections = (arr) => Array.isArray(arr) &&
+            arr.some(s => s && (s.link != null || (Array.isArray(s.links) && s.links.length)));
+        if (c) {
+            if (!hasConnections(node.inputs) && Array.isArray(node.inputs)
+                && node._raySwitchStashInputs == null) {
+                node._raySwitchStashInputs = node.inputs;
+                node.inputs = [];
+            }
+            if (!hasConnections(node.outputs) && Array.isArray(node.outputs)
+                && node._raySwitchStashOutputs == null) {
+                node._raySwitchStashOutputs = node.outputs;
+                node.outputs = [];
+            }
+        } else {
+            if (node._raySwitchStashInputs) {
+                node.inputs = node._raySwitchStashInputs;
+                node._raySwitchStashInputs = null;
+            }
+            if (node._raySwitchStashOutputs) {
+                node.outputs = node._raySwitchStashOutputs;
+                node._raySwitchStashOutputs = null;
+            }
         }
         if (typeof node.computeSize === "function") {
             const sz = node.computeSize();
             if (Array.isArray(node.size)) node.size[1] = sz[1];
             node.setSize?.([Array.isArray(node.size) ? node.size[0] : sz[0], sz[1]]);
         }
+        node.setDirtyCanvas?.(true, true);
     };
     setTimeout(applyCompact, 0);
     node._raySwitchApplyCompact = applyCompact;
