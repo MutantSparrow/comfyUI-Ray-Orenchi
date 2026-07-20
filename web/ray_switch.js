@@ -60,11 +60,6 @@ function injectStylesOnce() {
     padding:6px 6px 4px;
     box-sizing:border-box;
 }
-.ray-switch-wrap.rs-compact {
-    background:transparent;
-    box-shadow:none;
-    padding:0;
-}
 .ray-switch-wrap .rs-host {
     width: 156px;
     height: 156px;
@@ -78,9 +73,7 @@ function injectStylesOnce() {
     text-shadow:0 1px 0 rgba(255,255,255,0.45);
     line-height:1.1;
     letter-spacing:0.08em;
-}
-.ray-switch-wrap.rs-compact .rs-readout { display:none; }
-.ray-switch-wrap.rs-compact .ray-dymo   { display:none; }`;
+}`;
     document.head.appendChild(tag);
 }
 
@@ -102,11 +95,26 @@ function buildSwitchElement(node, sw) {
     readout.className = "rs-readout";
     wrap.appendChild(readout);
 
+    // Compact mode = pure analog appliance. The switch has no numeric
+    // config widgets to hide (only the internal `state`, already hidden),
+    // so compact just blanks the node title so the analog panel is the
+    // only visible surface. Chrome, Dymo, readout, and outputs stay.
     const applyCompact = () => {
         const c = !!node.properties?.compact;
-        wrap.classList.toggle("rs-compact", c);
+        if (c) {
+            if (node._raySwitchOrigTitle == null) node._raySwitchOrigTitle = node.title ?? "";
+            node.title = "";
+        } else if (node._raySwitchOrigTitle != null) {
+            node.title = node._raySwitchOrigTitle;
+            node._raySwitchOrigTitle = null;
+        }
+        if (typeof node.computeSize === "function") {
+            const sz = node.computeSize();
+            if (Array.isArray(node.size)) node.size[1] = sz[1];
+            node.setSize?.([Array.isArray(node.size) ? node.size[0] : sz[0], sz[1]]);
+        }
     };
-    applyCompact();
+    setTimeout(applyCompact, 0);
     node._raySwitchApplyCompact = applyCompact;
 
     let currentStyle = null;
