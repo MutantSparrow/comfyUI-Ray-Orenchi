@@ -1,507 +1,161 @@
 import { app } from "../../scripts/app.js";
-import {
-    KNOB_STYLES,
-    DEFAULT_STYLE,
-    listStyles,
-    getBrushedAluminumURL,
-    getAllStyleCSS,
-} from "./knob_styles.js";
-import { TWO_PI, mountDymoLabel, findWidget } from "./_common.js";
+import { KNOB_STYLES, DEFAULT_STYLE, getAllStyleCSS } from "./knob_styles.js";
+import { findWidget, TWO_PI } from "./_common.js";
+import { createPanel, changeValue, editNode, isLinked, mountControlSVG, registerAnalog } from "./analog_common.js";
 
-const STYLE_ID = "ray-knob-styles";
-
-function wrapPi(a) {
-    while (a >  Math.PI) a -= TWO_PI;
-    while (a < -Math.PI) a += TWO_PI;
-    return a;
+function number(node, name, fallback) {
+    const value = Number(findWidget(node, name)?.value);
+    return Number.isFinite(value) ? value : fallback;
 }
 
-function getPropFloat(node, name, fallback) {
-    const w = node.widgets?.find(w => w.name === name);
-    const v = w ? Number(w.value) : NaN;
-    return Number.isFinite(v) ? v : fallback;
+export function bounds(node) {
+    const min = number(node, "min_value", -100);
+    const lo = findWidget(node, "allow_negative")?.value === false ? Math.max(0, min) : min;
+    return [lo, Math.max(lo, number(node, "max_value", 100))];
 }
 
-function getPropBool(node, name, fallback) {
-    const w = node.widgets?.find(w => w.name === name);
-    return w ? !!w.value : fallback;
+export function boundValue(node, raw) {
+    const [lo, hi] = bounds(node);
+    const value = Number(raw);
+    return Math.max(lo, Math.min(hi, Number.isFinite(value) ? value : 0));
 }
 
-function applyBounds(node, raw) {
-    const minV = getPropFloat(node, "min_value", -100);
-    const maxV = getPropFloat(node, "max_value",  100);
-    const allowNeg = getPropBool(node, "allow_negative", true);
-    let lo = allowNeg ? minV : Math.max(0, minV);
-    let hi = maxV;
-    if (hi < lo) hi = lo;
-    return Math.max(lo, Math.min(hi, raw));
+export function quantizeInt(node, value) {
+    const step = number(node, "clamp", 0);
+    return Math.trunc(step > 0 ? Math.floor(value / step) * step : value);
 }
 
-function quantizeInt(node, f) {
-    const c = getPropFloat(node, "clamp", 0);
-    if (c <= 0) return Math.trunc(f);
-    return Math.floor(f / c) * c;
-}
-
-function styleList() {
-    const ks = listStyles();
-    return ks.length ? ks : [DEFAULT_STYLE];
-}
-
-// Single global pointerdown/mousedown capture-phase listener. Iterates all live
-// .ray-knob-wrap elements at click time and dispatches to their stashed onDown.
-// Robust to Vue/Legacy mode switches — no stale closures.
-let _globalDispatcherInstalled = false;
-function installGlobalKnobDispatcher() {
-    if (_globalDispatcherInstalled) return;
-    _globalDispatcherInstalled = true;
-    const handler = (e) => {
-        if (e.button !== undefined && e.button !== 0) return;
-        const wraps = document.querySelectorAll(".ray-knob-wrap");
-        for (const w of wraps) {
-            if (!w.isConnected || typeof w._rayKnobOnDown !== "function") continue;
-            const r = w.getBoundingClientRect();
-            if (r.width === 0 || r.height === 0) continue;
-            if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) continue;
-            w._rayKnobOnDown(e);
-            return;
-        }
-    };
-    document.addEventListener("pointerdown", handler, true);
-    document.addEventListener("mousedown",   handler, true);
-}
-
-function injectStylesOnce() {
-    if (document.getElementById(STYLE_ID)) return;
-    const tag = document.createElement("style");
-    tag.id = STYLE_ID;
-    tag.textContent = getAllStyleCSS() + `
-.ray-knob-wrap {
-    width:100%;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    user-select:none;
-    touch-action:none;
-    border-radius:4px;
-    background-color:#b6b8bb;
-    background-image:url("${getBrushedAluminumURL()}");
-    background-repeat:repeat;
-    background-size:256px 256px;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.35);
-    padding:6px 6px 4px;
-    box-sizing:border-box;
-}
-.ray-knob-wrap .rk-host {
-    width: 156px;
-    height: 156px;
-    max-width: 100%;
-}
-.ray-knob-wrap .rk-readout {
-    color:#1a1a1a;
-    font:11px ui-monospace, monospace;
-    margin-top:4px;
-    text-align:center;
-    text-shadow:0 1px 0 rgba(255,255,255,0.45);
-    line-height:1.1;
-}`;
-    document.head.appendChild(tag);
-}
-
-function buildKnobElement(node, kvw) {
-    injectStylesOnce();
-
-    const wrap = document.createElement("div");
-    wrap.className = "ray-knob-wrap";
-
-    // Dymo label sits above the knob face. Mount before the host so it
-    // stacks visually on top; still hidden in compact mode via CSS.
-    const dymo = mountDymoLabel(node, { placeholder: "LABEL" });
-    if (dymo?.root) wrap.appendChild(dymo.root);
-
-    const host = document.createElement("div");
-    host.className = "rk-host";
-    wrap.appendChild(host);
-
-    const readout = document.createElement("div");
-    readout.className = "rk-readout";
-    wrap.appendChild(readout);
-
-    // Compact mode = pure analog appliance. Strip everything except the
-    // brushed-metal panel + Dymo + knob + readout. Uses LiteGraph's own
-    // "advanced widgets" affordance (node.showAdvanced) to hide the numeric
-    // config widgets natively in both legacy and Nodes 2.0 — the base class's
-    // isWidgetVisible() honors `widget.advanced && !node.showAdvanced`.
-    //
-    // Title bar is hidden via a per-instance getter override for `title_mode`
-    // (the base class reads title_mode from `this.constructor.title_mode`, so
-    // writing to node.title_mode without the getter override is a no-op).
-    //
-    // Slots stashed to arrays[] when unwired so no pin dots render.
-    const CONFIG_WIDGETS = [
-        "min_value", "max_value", "spin_value", "clamp", "allow_negative",
-    ];
-    // Mark config widgets `advanced = true` once so showAdvanced controls
-    // their visibility. Deferred so widgets are all in place first.
-    setTimeout(() => {
-        for (const name of CONFIG_WIDGETS) {
-            const w = findWidget(node, name);
-            if (w) w.advanced = true;
-        }
-    }, 0);
-    const applyCompact = () => {
-        const c = !!node.properties?.compact;
-        // 1. Widgets: compact => showAdvanced=false => advanced widgets hide.
-        node.showAdvanced = !c;
-        // Also mirror to widget.hidden for the belt-and-suspenders path in
-        // any frontend build that ignores showAdvanced.
-        for (const name of CONFIG_WIDGETS) {
-            const w = findWidget(node, name);
-            if (w) w.hidden = c;
-        }
-        // 2. Title bar via a per-instance getter override. The base-class
-        //    getter reads `this.constructor.title_mode`, so a plain
-        //    `node.title_mode = ...` write is discarded. defineProperty
-        //    clobbers the getter for THIS instance only, leaving siblings
-        //    untouched.
-        const LG = (typeof window !== "undefined" && window.LiteGraph) || null;
-        const NO_TITLE = LG?.NO_TITLE ?? -1;
-        const NORMAL_TITLE = LG?.NORMAL_TITLE ?? 0;
-        if (c) {
-            if (node._rayKnobOrigTitle == null) node._rayKnobOrigTitle = node.title ?? "";
-            node.title = "";
-            Object.defineProperty(node, "title_mode", {
-                configurable: true,
-                get() { return NO_TITLE; },
-            });
-            node.flags = { ...(node.flags || {}), no_title: true };
-        } else {
-            if (node._rayKnobOrigTitle != null) {
-                node.title = node._rayKnobOrigTitle;
-                node._rayKnobOrigTitle = null;
-            }
-            // Delete the per-instance override so the class getter is
-            // used again → title_mode reverts to the class default.
-            try { delete node.title_mode; } catch (_e) {
-                Object.defineProperty(node, "title_mode", {
-                    configurable: true,
-                    get() { return NORMAL_TITLE; },
-                });
-            }
-            if (node.flags) delete node.flags.no_title;
-        }
-        // 3. Stash / restore input + output pin arrays so no slot dots draw.
-        //    We only do this when the node isn't wired (compact assumes a
-        //    standalone appliance). If wires exist, keep the pins visible.
-        const hasConnections = (arr) => Array.isArray(arr) &&
-            arr.some(s => s && (s.link != null || (Array.isArray(s.links) && s.links.length)));
-        let pinsChanged = false;
-        if (c) {
-            if (!hasConnections(node.inputs) && Array.isArray(node.inputs)
-                && node._rayKnobStashInputs == null && node.inputs.length) {
-                node._rayKnobStashInputs = node.inputs;
-                node.inputs = [];
-                pinsChanged = true;
-            }
-            if (!hasConnections(node.outputs) && Array.isArray(node.outputs)
-                && node._rayKnobStashOutputs == null && node.outputs.length) {
-                node._rayKnobStashOutputs = node.outputs;
-                node.outputs = [];
-                pinsChanged = true;
-            }
-        } else {
-            if (node._rayKnobStashInputs) {
-                node.inputs = node._rayKnobStashInputs;
-                node._rayKnobStashInputs = null;
-                pinsChanged = true;
-            }
-            if (node._rayKnobStashOutputs) {
-                node.outputs = node._rayKnobStashOutputs;
-                node._rayKnobStashOutputs = null;
-                pinsChanged = true;
-            }
-        }
-        // 4. Snap the size to fit the new content.
-        if (typeof node.computeSize === "function") {
-            const sz = node.computeSize();
-            if (Array.isArray(node.size)) node.size[1] = sz[1];
-            node.setSize?.([Array.isArray(node.size) ? node.size[0] : sz[0], sz[1]]);
-        }
-        // 5. Nudge Vue Nodes 2.0 — its layout store caches slot counts, so a
-        //    changed array reference needs an explicit graph-change beat.
-        if (pinsChanged) {
-            app?.graph?.change?.();
-            app?.graph?.setDirtyCanvas?.(true, true);
-        }
-        node.setDirtyCanvas?.(true, true);
-    };
-    // Defer first apply so the widgets are all in place.
-    setTimeout(applyCompact, 0);
-    node._rayKnobApplyCompact = applyCompact;
-
-    let currentStyle = null;
-    let pointerEl = null;
-    let arcEl = null;
-
-    const swapStyle = (key) => {
-        const entry = KNOB_STYLES[key] || KNOB_STYLES[DEFAULT_STYLE];
-        host.innerHTML = entry.svg;
-        currentStyle = key;
-        pointerEl = host.querySelector("[data-rotate]");
-        arcEl     = host.querySelector("[data-arc]");
-    };
-
+function buildKnob(node, widget) {
+    const ui = createPanel(node, "knob", getAllStyleCSS());
+    const { element, host, readout, hint } = ui;
+    host.setAttribute("role", "slider");
+    host.title = "Drag around the dial. Shift = fine adjustment. Arrow keys = step. Home / End = limits.";
+    const input = document.createElement("input");
+    input.className = "ray-analog-value";
+    input.type = "text";
+    input.inputMode = "decimal";
+    input.setAttribute("aria-label", "Knob value");
+    input.title = "Enter an exact value";
+    readout.appendChild(input);
+    const intReadout = document.createElement("span");
+    intReadout.className = "ray-analog-int";
+    readout.appendChild(intReadout);
+    let currentStyle;
+    let rotating = [], arc, slide;
+    let drag = null;
+    let lastText = "";
+    const format = value => String(Number(value.toPrecision(8)));
+    const disabled = () => isLinked(node, "knob_value") || !!widget.disabled || !!widget.computedDisabled;
     const render = () => {
-        const styleKey = node.properties?.style || DEFAULT_STYLE;
-        if (styleKey !== currentStyle) swapStyle(styleKey);
-
-        const kv = Number(kvw?.value) || 0;
-        const sv = getPropFloat(node, "spin_value", 20);
-
-        // pointer rotation: full revolution per spin_value
-        const angleFrac = sv > 0 ? (kv / sv) : 0;
-        const deg = angleFrac * 360;
-        // SVG attribute transform rotates around (0,0) — the knob center in our viewBox.
-        if (pointerEl) pointerEl.setAttribute("transform", `rotate(${deg.toFixed(3)})`);
-
-        // arc fill: 0..100 of pathLength, fraction of current revolution
-        if (arcEl) {
-            const f = ((angleFrac % 1) + 1) % 1;
-            arcEl.setAttribute("stroke-dasharray", `${(f * 100).toFixed(2)} 100`);
+        const key = Object.hasOwn(KNOB_STYLES, node.properties.style) ? node.properties.style : DEFAULT_STYLE;
+        const style = KNOB_STYLES[key];
+        if (key !== currentStyle) {
+            mountControlSVG(host, style.svg);
+            currentStyle = key;
+            rotating = [...host.querySelectorAll("[data-rotate]")];
+            arc = host.querySelector("[data-arc]");
+            slide = host.querySelector("[data-slide]");
+            element.dataset.panel = style.panel || "silver";
         }
-
-        const f = applyBounds(node, kv);
-        const i = quantizeInt(node, f);
-        readout.textContent = `${f.toFixed(2)}  →  ${i}`;
+        const [lo, hi] = bounds(node);
+        const value = boundValue(node, widget.value);
+        const fraction = hi > lo ? (value - lo) / (hi - lo) : 0;
+        const turns = value / Math.max(.0001, number(node, "spin_value", 20));
+        const angle = style.sweep ? -135 + fraction * 270 : (turns % 1) * 360;
+        for (const el of rotating) el.setAttribute("transform", `rotate(${angle.toFixed(3)})`);
+        if (arc) arc.setAttribute("stroke-dasharray", `${(((turns % 1) + 1) % 1 * 100).toFixed(2)} 100`);
+        if (slide) slide.setAttribute("transform", `translate(0,${(43 - fraction * 86).toFixed(3)})`);
+        const text = format(value);
+        if (document.activeElement !== input && input.value !== text) input.value = text;
+        const integerText = `INT ${quantizeInt(node, value)}`;
+        if (lastText !== integerText) { intReadout.textContent = integerText; lastText = integerText; }
+        host.setAttribute("aria-label", node.properties.ray_label || "Analog knob");
+        host.setAttribute("aria-valuemin", String(lo));
+        host.setAttribute("aria-valuemax", String(hi));
+        host.setAttribute("aria-valuenow", String(value));
+        host.setAttribute("aria-valuetext", `${text}; ${integerText}`);
+        host.setAttribute("aria-disabled", String(disabled()));
+        input.disabled = disabled();
+        hint.textContent = disabled() ? "EXTERNAL CONTROL" : `${format(lo)} … ${format(hi)}  /  SHIFT · FINE`;
     };
-
-    let lastAngle = null;
-    let activePointerId = null;
-
-    const knobCenter = () => {
-        const r = host.getBoundingClientRect();
-        return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
-    };
-
-    const onDocMove = (e) => {
-        if (lastAngle === null) return;
-        const { cx, cy } = knobCenter();
-        const cur = Math.atan2(e.clientY - cy, e.clientX - cx);
-        const delta = wrapPi(cur - lastAngle);
-        lastAngle = cur;
-        const sv = getPropFloat(node, "spin_value", 20);
-        const raw = (Number(kvw.value) || 0) + (delta / TWO_PI) * sv;
-        kvw.value = applyBounds(node, raw);
+    ui.render = render;
+    const setValue = (value, event) => {
+        if (disabled()) return;
+        changeValue(node, widget, boundValue(node, value), event);
         render();
-        e.preventDefault();
-        e.stopPropagation();
     };
-    const onDocUp = (e) => {
-        if (lastAngle === null) return;
-        lastAngle = null;
-        activePointerId = null;
-        wrap.style.cursor = "grab";
-        document.removeEventListener("pointermove",  onDocMove, true);
-        document.removeEventListener("pointerup",    onDocUp,   true);
-        document.removeEventListener("pointercancel", onDocUp,  true);
-        document.removeEventListener("mousemove",    onDocMoveMouse, true);
-        document.removeEventListener("mouseup",      onDocUp, true);
+    input.addEventListener("change", event => {
+        const value = input.value.trim() === "" ? NaN : Number(input.value);
+        if (Number.isFinite(value)) editNode(node, () => setValue(value, event));
+        input.value = format(boundValue(node, widget.value));
+    });
+    input.addEventListener("keydown", event => {
+        if (event.key === "Enter") { event.preventDefault(); input.blur(); }
+        if (event.key === "Escape") {
+            event.preventDefault(); input.value = format(boundValue(node, widget.value)); input.blur();
+        }
+    });
+    host.addEventListener("keydown", event => {
+        const [lo, hi] = bounds(node);
+        const step = Math.max(.0001, number(node, "spin_value", 20) / 100) * (event.shiftKey ? .1 : 1);
+        const increments = { ArrowUp: step, ArrowRight: step, ArrowDown: -step, ArrowLeft: -step, PageUp: step * 10, PageDown: -step * 10 };
+        let value;
+        if (event.key === "Home") value = lo;
+        else if (event.key === "End") value = hi;
+        else if (Object.hasOwn(increments, event.key)) value = boundValue(node, widget.value) + increments[event.key];
+        else return;
+        event.preventDefault();
+        editNode(node, () => setValue(value, event));
+    });
+    const endDrag = event => {
+        if (!drag || (event?.pointerId != null && event.pointerId !== drag.id)) return;
+        const previous = drag;
+        drag = null;
+        element.dataset.dragging = "false";
+        if (host.hasPointerCapture?.(previous.id)) host.releasePointerCapture(previous.id);
+        window.removeEventListener("blur", cancelDrag);
+        previous.graph?.afterChange?.();
     };
-    // Mouse fallback in case pointer events are blocked upstream
-    const onDocMoveMouse = (e) => {
-        if (lastAngle === null) return;
-        const { cx, cy } = knobCenter();
-        const cur = Math.atan2(e.clientY - cy, e.clientX - cx);
-        const delta = wrapPi(cur - lastAngle);
-        lastAngle = cur;
-        const sv = getPropFloat(node, "spin_value", 20);
-        const raw = (Number(kvw.value) || 0) + (delta / TWO_PI) * sv;
-        kvw.value = applyBounds(node, raw);
-        render();
-        e.preventDefault();
-        e.stopPropagation();
-    };
-
-    const onDown = (e) => {
-        if (e.button !== undefined && e.button !== 0) return;
-        const { cx, cy } = knobCenter();
-        lastAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
-        activePointerId = e.pointerId;
-        wrap.style.cursor = "grabbing";
-        document.addEventListener("pointermove",  onDocMove,      true);
-        document.addEventListener("pointerup",    onDocUp,        true);
-        document.addEventListener("pointercancel", onDocUp,       true);
-        document.addEventListener("mousemove",    onDocMoveMouse, true);
-        document.addEventListener("mouseup",      onDocUp,        true);
-        e.preventDefault();
-        e.stopPropagation();
-    };
-
-    // Stash the per-knob onDown on the wrap itself. A single global capture listener finds
-    // any live .ray-knob-wrap whose rect contains the click and dispatches. This survives
-    // Vue/Legacy mode switches because nothing closes over a stale wrap reference.
-    wrap._rayKnobOnDown = onDown;
-
-    wrap.addEventListener("wheel",        (e) => e.stopPropagation(), { passive: true });
-    wrap.addEventListener("contextmenu",  (e) => e.stopPropagation());
-    installGlobalKnobDispatcher();
-
-    swapStyle(node.properties?.style || DEFAULT_STYLE);
-    render();
-
-    return { element: wrap, render };
+    const cancelDrag = () => endDrag();
+    ui.cancelDrag = cancelDrag;
+    host.addEventListener("pointerdown", event => {
+        if (event.button !== 0 || event.isPrimary === false || disabled() || drag) return;
+        event.preventDefault(); event.stopPropagation();
+        host.focus({ preventScroll: true });
+        const rect = host.getBoundingClientRect();
+        drag = { id: event.pointerId, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2,
+            lastX: event.clientX, lastY: event.clientY, height: rect.height, graph: node.graph };
+        drag.graph?.beforeChange?.();
+        host.setPointerCapture(event.pointerId);
+        element.dataset.dragging = "true";
+        window.addEventListener("blur", cancelDrag);
+    });
+    host.addEventListener("pointermove", event => {
+        if (!drag || event.pointerId !== drag.id) return;
+        event.preventDefault(); event.stopPropagation();
+        if (!host.isConnected || disabled()) { cancelDrag(); return; }
+        let delta;
+        if (slide) {
+            const [lo, hi] = bounds(node);
+            delta = (drag.lastY - event.clientY) / Math.max(1, drag.height * 86 / 140) * (hi - lo);
+        } else {
+            const prev = Math.atan2(drag.lastY - drag.y, drag.lastX - drag.x);
+            const next = Math.atan2(event.clientY - drag.y, event.clientX - drag.x);
+            delta = Math.atan2(Math.sin(next - prev), Math.cos(next - prev)) / TWO_PI * number(node, "spin_value", 20);
+            // Ignore the unstable angle close to the spindle.
+            if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 8 ||
+                Math.hypot(drag.lastX - drag.x, drag.lastY - drag.y) < 8) delta = 0;
+        }
+        drag.lastX = event.clientX; drag.lastY = event.clientY;
+        setValue(boundValue(node, widget.value) + delta * (event.shiftKey ? .1 : 1), event);
+    });
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) host.addEventListener(type, endDrag);
+    return ui;
 }
 
-app.registerExtension({
-    name: "Ray.Knob",
-
-    async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        if (nodeData.name !== "RayKnob") return;
-
-        const onNodeCreated = nodeType.prototype.onNodeCreated;
-        nodeType.prototype.onNodeCreated = function () {
-            const r = onNodeCreated?.apply(this, arguments);
-
-            // black node body — brushed aluminium lives only under the knob widget
-            this.bgcolor = "#000000";
-            this.color   = "#000000";
-
-            this.properties = this.properties || {};
-            const styles = styleList();
-            if (!styles.includes(this.properties.style)) {
-                this.properties.style = DEFAULT_STYLE;
-            }
-            if (typeof this.properties.compact !== "boolean") {
-                this.properties.compact = false;
-            }
-            if (typeof this.properties.ray_label !== "string") {
-                this.properties.ray_label = "";
-            }
-            if (typeof this.addProperty === "function") {
-                this.addProperty("style", this.properties.style, "enum", { values: styles });
-                this.addProperty("compact", this.properties.compact, "boolean");
-                this.addProperty("ray_label", this.properties.ray_label, "string");
-            }
-
-            const kvw = this.widgets?.find(w => w.name === "knob_value");
-            if (kvw) {
-                kvw.type = "hidden";
-                kvw.computeSize = () => [0, -4];
-                kvw.hidden = true;
-                kvw.visible = false;
-                kvw.advanced = true;
-                if (kvw.options) kvw.options.hidden = true;
-            }
-
-            const node = this;
-            const { element, render } = buildKnobElement(node, kvw);
-
-            if (typeof this.addDOMWidget === "function") {
-                element.style.minHeight = "184px";
-                this.addDOMWidget("knob_ui", "RAY_KNOB", element, {
-                    serialize: false,
-                    hideOnZoom: false,
-                    getMinHeight: () => 184,
-                    getMaxHeight: () => 220,
-                    getHeight: () => 184,
-                });
-            } else {
-                console.warn("[RayKnob] addDOMWidget unavailable — knob requires modern ComfyUI frontend.");
-            }
-
-            node._knobRender = render;
-
-            for (const name of ["min_value", "max_value", "allow_negative", "clamp", "spin_value"]) {
-                const w = this.widgets?.find(w => w.name === name);
-                if (!w) continue;
-                const orig = w.callback;
-                w.callback = function (v) {
-                    if (kvw) kvw.value = applyBounds(node, Number(kvw.value) || 0);
-                    render();
-                    node.setDirtyCanvas?.(true, true);
-                    return orig?.apply(this, arguments);
-                };
-            }
-
-            this.size = this.computeSize ? this.computeSize() : this.size;
-            requestAnimationFrame(render);
-            return r;
-        };
-
-        const getExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
-        nodeType.prototype.getExtraMenuOptions = function (canvas, options) {
-            const node = this;
-            const styles = styleList();
-            const compact = !!node.properties?.compact;
-            options.unshift(
-                {
-                    content: "Knob Style",
-                    has_submenu: true,
-                    submenu: {
-                        options: styles.map(s => ({
-                            content: (node.properties?.style === s ? "● " : "  ") + (KNOB_STYLES[s]?.label || s),
-                            callback: () => {
-                                node.properties = node.properties || {};
-                                node.properties.style = s;
-                                node._knobRender?.();
-                                node.setDirtyCanvas?.(true, true);
-                            },
-                        })),
-                    },
-                },
-                {
-                    content: (compact ? "● " : "  ") + "Compact mode",
-                    callback: () => {
-                        node.properties = node.properties || {};
-                        node.properties.compact = !node.properties.compact;
-                        node._rayKnobApplyCompact?.();
-                        node.setDirtyCanvas?.(true, true);
-                    },
-                },
-                {
-                    content: "Edit label…",
-                    callback: () => { node._rayDymo?.beginEdit?.(); },
-                },
-            );
-            return getExtraMenuOptions?.apply(this, arguments);
-        };
-
-        const onPropertyChanged = nodeType.prototype.onPropertyChanged;
-        nodeType.prototype.onPropertyChanged = function (name, value) {
-            if (name === "style") {
-                if (!styleList().includes(value)) {
-                    this.properties.style = DEFAULT_STYLE;
-                }
-                this._knobRender?.();
-                this.setDirtyCanvas?.(true, true);
-            } else if (name === "compact") {
-                this._rayKnobApplyCompact?.();
-                this.setDirtyCanvas?.(true, true);
-            }
-            return onPropertyChanged?.apply(this, arguments);
-        };
-
-        const onConfigure = nodeType.prototype.onConfigure;
-        nodeType.prototype.onConfigure = function () {
-            const r = onConfigure?.apply(this, arguments);
-            // Restore label + compact after workflow load.
-            setTimeout(() => {
-                if (this._rayDymo && typeof this.properties?.ray_label === "string") {
-                    this._rayDymo.setText(this.properties.ray_label);
-                }
-                this._rayKnobApplyCompact?.();
-                this._knobRender?.();
-            }, 0);
-            return r;
-        };
-
-        // Node body stays black; brushed aluminium is rendered only inside the knob widget DOM.
-        const onDrawBackground = nodeType.prototype.onDrawBackground;
-        nodeType.prototype.onDrawBackground = function (ctx) {
-            this.bgcolor = "#000000";
-            this.color   = "#000000";
-            return onDrawBackground?.apply(this, arguments);
-        };
-    },
+registerAnalog(app, {
+    kind: "knob", name: "RayKnob", title: "🎛️ Ray's Analog: Knob",
+    styles: KNOB_STYLES, defaultStyle: DEFAULT_STYLE, valueName: "knob_value",
+    configNames: ["min_value", "max_value", "spin_value", "clamp", "allow_negative"],
+    outputs: [["int", "INT"], ["float", "FLOAT"]], build: buildKnob,
 });

@@ -141,6 +141,10 @@ const _ORIG_COMPUTE = "_rayOrigCompute";
 
 export function setWidgetHidden(node, widget, hidden) {
     if (!widget) return;
+    // Nodes 2.0 reads options.hidden when constructing Vue widget rows.
+    // Keep it in sync with LiteGraph's widget.hidden flag.
+    widget.options ||= {};
+    widget.options.hidden = hidden;
     if (hidden) {
         if (widget[_ORIG_KEY] === undefined) widget[_ORIG_KEY] = widget.type;
         if (widget[_ORIG_COMPUTE] === undefined && typeof widget.computeSize === "function") {
@@ -293,6 +297,10 @@ export function mountDymoLabel(node, {
 
     const root = document.createElement("div");
     root.className = "ray-dymo";
+    root.tabIndex = 0;
+    root.setAttribute("role", "button");
+    root.setAttribute("aria-label", "Edit control label");
+    root.title = "Double-click or press Enter to edit label";
 
     const text = document.createElement("div");
     text.className = "ray-dymo-text";
@@ -302,14 +310,20 @@ export function mountDymoLabel(node, {
     text.textContent = node.properties.ray_label || "";
     root.appendChild(text);
 
+    let editing = false;
     const finishEdit = (commit) => {
+        if (!editing) return;
+        editing = false;
         text.contentEditable = "false";
         root.dataset.editing = "";
         if (commit) {
             let v = (text.textContent || "").replace(/\s+/g, " ").trim();
             if (v.length > maxLength) v = v.slice(0, maxLength);
             text.textContent = v;
+            if (v !== node.properties.ray_label) node.graph?.beforeChange?.();
+            const changed = v !== node.properties.ray_label;
             node.properties.ray_label = v;
+            if (changed) node.graph?.afterChange?.();
         } else {
             text.textContent = node.properties.ray_label || "";
         }
@@ -317,7 +331,8 @@ export function mountDymoLabel(node, {
     };
 
     const beginEdit = () => {
-        text.contentEditable = "true";
+        editing = true;
+        text.contentEditable = "plaintext-only";
         root.dataset.editing = "1";
         text.focus();
         // Select all so a single keystroke replaces the old label.
@@ -336,21 +351,35 @@ export function mountDymoLabel(node, {
     root.addEventListener("mousedown",   (e) => e.stopPropagation());
     root.addEventListener("wheel",       (e) => e.stopPropagation(), { passive: true });
     root.addEventListener("contextmenu", (e) => e.stopPropagation());
+    root.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (!editing && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault(); beginEdit();
+        }
+    });
+    root.addEventListener("keyup", (e) => e.stopPropagation());
 
     text.addEventListener("keydown", (e) => {
+        e.stopPropagation();
         if (e.key === "Enter") { e.preventDefault(); text.blur(); return; }
         if (e.key === "Escape") { e.preventDefault(); finishEdit(false); text.blur(); return; }
-        if (text.textContent && text.textContent.length >= maxLength &&
-            e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
-            e.preventDefault();
-        }
     });
     text.addEventListener("blur", () => finishEdit(true));
     text.addEventListener("paste", (e) => {
         e.preventDefault();
         const raw = (e.clipboardData || window.clipboardData)?.getData?.("text") || "";
         const clean = raw.replace(/\s+/g, " ").slice(0, maxLength);
-        document.execCommand?.("insertText", false, clean);
+        const selection = window.getSelection?.();
+        if (!selection?.rangeCount) return;
+        const range = selection.getRangeAt(0);
+        if (!text.contains(range.commonAncestorContainer)) return;
+        range.deleteContents();
+        const fragment = document.createTextNode(clean);
+        range.insertNode(fragment);
+        range.setStartAfter(fragment);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
     });
 
     const state = {
