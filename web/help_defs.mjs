@@ -9,6 +9,60 @@
 // selection-toolbar ? button lights up for free.
 
 export const RAY_HELP_DEFS = {
+    RayVLMFolder: {
+        title: "Ray's LLM: Folder Captioner",
+        tagline: "Caption each image in a folder with a local vision-language model on GPU.",
+        sections: [
+            {
+                heading: "Model and folder widgets",
+                defs: [
+                    ["`clip_name`", "Select a full generative vision-language checkpoint from ComfyUI's text_encoders model list, such as Qwen3-VL. Ordinary text-only CLIP encoders cannot caption images. The node loads the model once per run and keeps its image template enabled."],
+                    ["`folder`", "Enter the source image folder. Files are sorted alphabetically by their path relative to this folder, not by modification time. The folder is scanned again on every run."],
+                    ["`recurse_subfolders`", "Off: inspect only the chosen folder. On: also include images in nested folders, in the same relative-path ordering."],
+                    ["`start_index`", "Zero-based position in the sorted image list. 0 starts at the first image; 10 skips the first ten. Applied before limit."],
+                    ["`limit`", "Maximum number of images to caption after start_index. -1 means all remaining images. 0 or a range beyond the last image produces a no-images error. Use a small positive limit for a test."],
+                    ["`user_prompt`", "Write the instruction sent independently with each image. Paragraphs are preserved. There is no conversation history between images. Use plain instructions; do not add manual chat-template or image-token markers."],
+                ],
+            },
+            {
+                heading: "Inference widgets",
+                defs: [
+                    ["`max_length`", "Maximum generated tokens per image, not characters or words. Default: 1024. The model can finish earlier; reaching this cap may truncate an answer. Thinking, when supported, can use part of this budget."],
+                    ["`temperature`", "Controls sampling randomness. Lower positive values favor predictable answers; higher values allow more variation. Default: 0.25. Set 0 for greedy decoding, which chooses the most likely token instead of sampling."],
+                    ["`top_k`", "Restricts sampling to the k most likely next tokens. Default: 40. Set 0 to disable this filter. Smaller values narrow the choices."],
+                    ["`top_p`", "Restricts sampling to the smallest set of likely tokens whose combined probability reaches this threshold. Default: 0.9. Set 1 to keep the full probability range before other filters."],
+                    ["`min_p`", "Drops tokens whose probability is below this fraction of the most likely token's probability. Default: 0.05. Set 0 to disable. Higher values exclude more unlikely choices."],
+                    ["`repetition_penalty`", "Adjusts the scores of already generated tokens. Default: 1.05. 1 leaves scores unchanged; values above 1 discourage repetition, while values between 0 and 1 favor it. Excessive penalties can distort wording."],
+                    ["`seed`", "-1 chooses a new random seed for each image. A value of 0 or greater reuses that seed for every image, helping repeat runs with the same model and settings. It does not reuse captions: each image is encoded separately. Greedy decoding does not sample from the seed."],
+                    ["`thinking`", "Requests the model's thinking mode when supported. It does not add that capability to models without it. Decoded reasoning, if the model emits any, remains in the text output; it is not stripped."],
+                ],
+                body: "top_k, top_p and min_p apply together during sampling. At temperature 0, these sampling filters do not control greedy token selection.",
+            },
+            {
+                heading: "Output sockets",
+                defs: [
+                    ["`text` · STRING list", "One decoded VLM answer per image, preserving its plain text and line breaks. This is the answer, not the input instruction. Connect it to a text display, a text saver, or a downstream prompt input."],
+                    ["`image` · IMAGE list", "The source image examined for each answer, converted to RGB with EXIF orientation applied. Each file is a separate one-image tensor, so different image sizes are supported. Source resolution is preserved in this output. Connect it to Preview Image or other image nodes."],
+                    ["`image_path` · STRING list", "The absolute source file path, including filename and extension, for each image. This is not a sidecar path or a generated output filename. Use it to identify the source or build a save path downstream."],
+                ],
+                body: "All three lists have the same length and ordering: text[0], image[0] and image_path[0] describe the same file. ComfyUI maps list entries into downstream nodes automatically. Outputs become available when the selected range completes, not as a live stream. Connect at least one output to an output/display node to execute this node. No sidecars or source files are written.",
+            },
+            {
+                heading: "Formats, GPU and batch size",
+                body: "Supported files: JPEG, PNG, WebP, BMP, TIFF and GIF. Animated or multipage files use their first frame. HEIC is not included.\n\nInference requires a GPU. ComfyUI may stage/offload weights in CPU memory, but the execution device stays on the GPU; CPU fallback causes an error. Unreadable images, missing image tokens or empty answers also stop the run.\n\nFull-resolution output images accumulate in RAM. For large folders, use a bounded limit and advance start_index. For example, start_index 0 and limit 20 examines the first 20 images; start_index 20 and limit 20 examines the next 20.",
+            },
+        ],
+    },
+    RayTextFolder: {
+        title: "Ray's Prompts: TXT Folder",
+        tagline: "One complete prompt and matching save prefix per text file.",
+        sections: [
+            { heading: "Connect", body: "Connect prompt to the sampler text input, filename_prefix to Save Image, and the sampler image to Save Image. Lists are paired automatically. Keep image batch size at 1." },
+            { heading: "Range", body: "Files are alphabetical, without subfolders. start_index is zero-based; limit -1 reads all remaining files. Empty files count toward the range but are skipped." },
+            { heading: "Text and saving", body: "UTF-8 text is passed through without rewriting or splitting paragraphs. output_prefix receives each source filename stem. Save Image adds its usual counter. Files refresh each run." },
+            { heading: "Test", body: "Set limit to 3 for a small run, then -1 for the whole folder. If no non-empty files remain, execution stops with an error." },
+        ],
+    },
 
     // ── ✨ VFX ─────────────────────────────────────────────────────────
     RayCRT: {
@@ -56,25 +110,14 @@ export const RAY_HELP_DEFS = {
 
     RayPixelArtDetector: {
         title: "Ray's VFX: Pixel Art",
-        tagline: "Pixel-art downscale + palette reduction with palette preview.",
+        tagline: "Repair a pixel grid or abstract an illustration while keeping its exact aspect ratio.",
         sections: [
-            {
-                heading: "About",
-                body: "Downscales (manual target size or auto pixel-size detection), reduces palette (kmeans-Lab, kmeans-RGB, quantize, or OkLab hue-ramps), optional dithering, silhouette outline, and highlight protection.",
-            },
-            {
-                heading: "Fixed palette",
-                body: "Attach `palette_image` to force a fixed palette — snaps to {2}∪{4·k} colors and bypasses source clustering.",
-            },
-            {
-                heading: "Dither kernels",
-                bullets: [
-                    "`bayer_2x2` / `bayer_4x4` / `bayer_8x8` — deterministic screen patterns.",
-                    "`blue_noise` — perceptually smooth stochastic dither.",
-                    "`riemersma` — Hilbert-curve error-diffusion.",
-                    "`knoll` — pattern dither on kmeans centroids.",
-                ],
-            },
+            { heading: "Choose the source", body: "Use repair_pixel_art for enlarged or damaged pixel-like images. Use illustration_photo for local region abstraction. grid_snap enables that processing; nearest and area remain direct sampling alternatives." },
+            { heading: "Size and preview", body: "image is the actual pixel-resolution result; preview is its nearest-neighbor enlargement to input dimensions. Exact aspect ratio can limit feasible sizes: 1001×667 cannot shrink exactly. In illustration mode, auto uses target_resolution." },
+            { heading: "Palette", body: "For 8-color palettes, try color_families: preserve distinct hue/lightness groups and neutrals before buying extra shades, and retain hue identity during assignment. Highlights use spare slots. This is a color heuristic, not semantic recognition. Other choices are Lab, simple RGB buckets, RGB, OkLab source colors or chroma/lightness ramps. area_preserving favors broad coherent color areas over busy texture; frequency gives ordinary fitting. Highlight protection reserves neutral and warm bright colors within the budget. Threshold uses CIE Lab lightness, default 90. Supplied palettes remain exact up to 256 colors and override generated-palette controls." },
+            { heading: "Dither", body: "Start with none. Ordered and error diffusion are restricted to coherent ramps where palette mixing improves lost tone. Flat fills, noisy texture and strong boundaries are protected. Increasing strength does not force dithering into protected regions." },
+            { heading: "Outlines", body: "silhouette gives a dark inner contour; selective chooses colored outlines using nearby shading. Connect foreground_mask for complex backgrounds: 1 is subject, 0 is background. Invert Load Image alpha masks first. No outside halo is added." },
+            { heading: "Artistic limits", body: "Readable forms and deliberate color clusters matter more than an indiscriminate effect stack. This node does not redesign characters or invent lighting. Inspect at native size; thin details and purposeful internal antialiasing are not automatically mistakes." },
         ],
     },
 

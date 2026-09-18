@@ -31,6 +31,9 @@ try:
     from .ray_promptdexter import RayPromptDexter
     from .ray_civitai import RayCivitAI
     from .ray_local_scraper import RayLocalScraper
+    from .ray_txt_folder import RayTextFolder
+    from .ray_vlm_folder import RayVLMFolder
+    from .ray_fast_vlm import RayFastQwen3VL
     from .ray_prompt_fetcher import RayPromptFetcher
     from .ray_meta_inspect import RayMetaInspect
     from .ray_prompt_library import RayPromptLibrary
@@ -52,6 +55,9 @@ except ImportError:
     from ray_promptdexter import RayPromptDexter
     from ray_civitai import RayCivitAI
     from ray_local_scraper import RayLocalScraper
+    from ray_txt_folder import RayTextFolder
+    from ray_vlm_folder import RayVLMFolder
+    from ray_fast_vlm import RayFastQwen3VL
     from ray_prompt_fetcher import RayPromptFetcher
     from ray_meta_inspect import RayMetaInspect
     from ray_prompt_library import RayPromptLibrary
@@ -92,6 +98,9 @@ NODE_CLASS_MAPPINGS = {
     "RayPromptDexter":     RayPromptDexter,
     "RayCivitAI":          RayCivitAI,
     "RayLocalScraper":     RayLocalScraper,
+    "RayTextFolder":       RayTextFolder,
+    "RayVLMFolder":        RayVLMFolder,
+    "RayFastQwen3VL":     RayFastQwen3VL,
     "RayPromptFetcher":    RayPromptFetcher,
     "RayMetaInspect":      RayMetaInspect,
     "RayPromptLibrary":    RayPromptLibrary,
@@ -113,12 +122,15 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayOllamaChat":       "💬 Ray's LLM: Ollama Chat",
     "RayPromptIterator":   "💬 Ray's LLM: Prompt Iterator",
     "RayPromptLibrary":    "💬 Ray's LLM: Prompt Library",
+    "RayVLMFolder":        "💬 Ray's LLM: Folder Captioner",
+    "RayFastQwen3VL":     "💬 Ray's LLM: Fast Qwen3-VL Infer",
     # 👑 Ray/📝 Prompts
     "RayPromptDexter":     "📝 Ray's Prompts: PromptDexter Scraper",
     "RayCivitAI":          "📝 Ray's Prompts: CivitAI Gallery Scraper",
     "RayLocalScraper":     "📝 Ray's Prompts: Folder Image Scraper",
     "RayPromptFetcher":    "📝 Ray's Prompts: Prompt Fetcher",
     "RayMetaInspect":      "📝 Ray's Prompts: Metadata Inspector",
+    "RayTextFolder":       "📝 Ray's Prompts: TXT Folder",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]

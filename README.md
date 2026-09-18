@@ -6,7 +6,7 @@ A small pack of ComfyUI custom nodes: image VFX, pixel-art tooling, analog-style
 |------|--------|---------|
 | ✨ Ray's VFX: CRT | VFX | CRT display simulation (phosphor mask, scanlines, halation, NTSC bleed, barrel warp) |
 | ✨ Ray's VFX: Offset Print | VFX | CMYK / duotone halftone print simulation with paper substrate |
-| ✨ Ray's VFX: Pixel Art | VFX | Pixel-art downscale + palette reduction (kmeans / OkLab ramps), dithering, palette-image input, palette preview |
+| ✨ Ray's VFX: Pixel Art | VFX | Pixel-grid repair or illustration abstraction, perceptual palettes, restrained dithering, mask-aware outlines and original-size preview ([guide](PIXEL_ART.md)) |
 | ✨ Ray's VFX: Film Stock | VFX | Film-stock emulation with LUT / XMP asset dropdown, grain, halation |
 | ✨ Ray's VFX: VHS / Tape | VFX | Analog videotape degradation with OSD overlay |
 | 🎛️ Ray's Analog: Knob | Analog | Float knob widget with min/max/spin/clamp |
@@ -19,6 +19,10 @@ A small pack of ComfyUI custom nodes: image VFX, pixel-art tooling, analog-style
 | 📝 Ray's Prompts: Folder Image Scraper | Prompts | Random image + extracted prompt from a local folder |
 | 📝 Ray's Prompts: Prompt Fetcher | Prompts | All-in-one wrapper over the three scrapers above |
 | 📝 Ray's Prompts: Metadata Inspector | Prompts | Read or embed generation metadata on a specific image |
+
+| 📝 Ray's Prompts: TXT Folder | Prompts | Complete .txt prompts and paired save prefixes from a local folder, alphabetically |
+
+| 💬 Ray's LLM: Folder Captioner | LLM | GPU VLM captions for a folder, with paired answer, image, and path outputs |
 
 See [Node Documentation](NODES.md) for inputs / controls / outputs per node.
 
