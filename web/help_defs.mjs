@@ -186,9 +186,10 @@ export const RAY_HELP_DEFS = {
             {
                 heading: "Right-click menu",
                 bullets: [
-                    "**Knob Style** — brushed-metal, black-plastic, bakelite, brass, and more.",
-                    "**Compact mode** — strips everything except the brushed panel + Dymo + knob face + readout. Title bar, config widgets, and unwired pins are all hidden.",
-                    "**Edit label…** — Dymo tape above the face (double-click also enters edit).",
+                    "**Knob Style** — console rotary, broadcast ivory, mastering aluminium, linear fader, plus the original legacy faces.",
+                    "**Compact mode** — hides only unlinked setup controls while preserving real slots and workflow data.",
+                    "Drag around a rotary control, hold Shift for fine movement, or use Arrow/Home/End keys. Enter exact values in the readout.",
+                    "**Edit label…** — Dymo tape above the face (double-click or Enter also enters edit).",
                 ],
             },
             { heading: "Persistence", body: "Style, compact flag, and label all serialize with the workflow." },
@@ -213,9 +214,10 @@ export const RAY_HELP_DEFS = {
             {
                 heading: "Right-click menu",
                 bullets: [
-                    "**Switch Style** — pick a style.",
-                    "**Compact mode** — strips everything except the brushed panel + Dymo + switch face + readout. Title bar and unwired pins are hidden.",
-                    "**Edit label…** — Dymo tape (double-click also enters edit).",
+                    "**Switch Style** — rack power rocker, broadcast steel lever, illuminated console key, plus the original six faces.",
+                    "**Compact mode** — hides only unlinked setup controls and preserves the real output slot.",
+                    "Click the face, or focus it and press Space/Enter. The controls work in Legacy and Nodes 2.0 frontends.",
+                    "**Edit label…** — Dymo tape (double-click or Enter also enters edit).",
                 ],
             },
         ],
