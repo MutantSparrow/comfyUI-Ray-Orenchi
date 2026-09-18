@@ -38,9 +38,11 @@ def oklab(rgb):
 try:
     from .ray_pixel_palette import build_palette, cie_lab
     from .ray_pixel_families import family_indices, family_features
+    from .ray_pixel_mapping import mapping_space
 except ImportError:
     from ray_pixel_palette import build_palette, cie_lab
     from ray_pixel_families import family_indices, family_features
+    from ray_pixel_mapping import mapping_space
 
 
 def exact_size(h, w, longest):
@@ -82,13 +84,18 @@ def sample_image(rgb, size, sampling):
     return reconstruct(rgb, size, oklab, make_palette, nearest_indices)
 
 
-def quantize(rgb, palette, dither, strength, preserve_families=False):
-    lab, plab = oklab(rgb), oklab(palette)
+def quantize(rgb, palette, dither, strength, preserve_families=False, mapping_strategy="auto"):
+    strategy = ("color_families" if preserve_families else "oklab") if mapping_strategy == "auto" else mapping_strategy
+    preserve_families = strategy == "color_families"
+    def metric(colors):
+        return mapping_space(colors, strategy, oklab, cie_lab)
+    lab, plab = metric(rgb), metric(palette)
+    perceptual, palette_perceptual = oklab(rgb), oklab(palette)
     ids = family_indices(rgb, palette, oklab, cie_lab) if preserve_families else nearest_indices(lab, plab)
     pf = family_features(palette, cie_lab) if preserve_families else None
     if dither == "none" or strength <= 0 or len(palette) < 2:
         return palette[ids]
-    smooth = dither_regions(lab)
+    smooth = dither_regions(perceptual)
     # A source ramp must actually lose a visible amount of tone to quantization.
     loss = np.linalg.norm(lab-plab[ids], axis=-1)
     smooth *= np.clip((loss-.008)/.02, 0, 1)
@@ -102,7 +109,8 @@ def quantize(rgb, palette, dither, strength, preserve_families=False):
             delta = plab-base
             t = np.clip(((lab[y, x]-base)*delta).sum(-1)/np.maximum((delta*delta).sum(-1), 1e-10), 0, 1)
             error = ((base+t[:, None]*delta-lab[y, x])**2).sum(-1)
-            compatible = np.linalg.norm(delta[:, 1:], axis=-1) <= np.maximum(.04, np.abs(delta[:, 0])*.65)
+            color_delta = palette_perceptual-palette_perceptual[anchors[y, x]]
+            compatible = np.linalg.norm(color_delta[:, 1:], axis=-1) <= np.maximum(.04, np.abs(color_delta[:, 0])*.65)
             if pf is not None:
                 compatible &= np.linalg.norm(pf[:, 1:]-pf[anchors[y, x], 1:], axis=-1) < .25
             error += .02*t*(1-t)*(delta*delta).sum(-1)
@@ -124,7 +132,7 @@ def quantize(rgb, palette, dither, strength, preserve_families=False):
                                        (1, 0, 5/16), (1, direction, 1/16)):
                     yy, xx = y + dy, x + dx
                     if (yy < h and 0 <= xx < w and
-                            np.linalg.norm(lab[yy, xx]-lab[y, x]) < .045):
+                            np.linalg.norm(perceptual[yy, xx]-perceptual[y, x]) < .045):
                         work[yy, xx] += err * weight * smooth[yy, xx]
         return palette[ids]
     bayer = np.array([[0, 8, 2, 10], [12, 4, 14, 6],
@@ -146,9 +154,9 @@ def quantize(rgb, palette, dither, strength, preserve_families=False):
         mix = base[:, None] + t[..., None] * delta
         srgb = np.where(mix <= .0031308, mix * 12.92, 1.055 * np.maximum(mix, 0)**(1/2.4) - .055)
         # Penalize distant pairs so a near color isn't replaced with salt/pepper.
-        error = ((oklab(srgb) - z[:, None])**2).sum(-1)
+        error = ((metric(srgb) - z[:, None])**2).sum(-1)
         error += .02 * t * (1 - t) * ((plab[None] - plab[first, None])**2).sum(-1)
-        pair = plab[None] - plab[first, None]
+        pair = palette_perceptual[None] - palette_perceptual[first, None]
         # Avoid mixing unrelated hues merely because their average fits.
         compatible = np.linalg.norm(pair[..., 1:], axis=-1) <= np.maximum(.04, np.abs(pair[..., 0])*.65)
         if pf is not None:
@@ -254,6 +262,7 @@ class RayPixelArtDetector:
             "color_grid": ("BOOLEAN", {"default": False, "tooltip": "Replace only preview with a labeled 3-by-3 grid: the exact current image output followed by all six generated color methods. Uses max_colors and the same seed/effects. Main image stays unchanged. Integer nearest-neighbor tile scaling; extra processing required."}),
             "ramp_levels": ("INT", {"default": 4, "min": 2, "max": 8, "tooltip": "Lightness bands per chroma family for ramps_oklab; total palette still respects max_colors."}),
             "palette_allocation": (["area_preserving", "frequency"], {"tooltip": "Favor coherent color areas and spend fewer shades on busy texture, or use ordinary color frequency. Highlight protection applies to both. No semantic recognition."}),
+            "palette_mapping": (["auto", "legacy_oklab", "oklab", "lab", "rgb", "color_families"], {"tooltip": "How pixels choose from the palette, including connected palettes. auto preserves existing behavior; legacy_oklab restores the original node's near-black handling; oklab/Lab use perceptual distance; rgb uses channel distance; color_families adds hue-family preference. Does not change the palette's colors."}),
             "seed": ("INT", {"default": -1, "min": -1, "max": 2**31-1, "tooltip": "-1 for random; any >=0 value is reproducible."}),
         }, "optional": {"palette_image": ("IMAGE", {"tooltip": "Connect clean color swatches. Preserve up to 256 exact RGB colors; larger images are reduced to max_colors."}),
             "foreground_mask": ("MASK", {"tooltip": "Optional outline mask: 1 is subject, 0 is background. Invert Load Image alpha masks before connecting."})}}
@@ -264,7 +273,7 @@ class RayPixelArtDetector:
                 input_kind="repair_pixel_art", foreground_mask=None, palette_style="source",
                 palette_strategy="kmeans_lab", protect_highlights=True,
                 highlight_threshold=90, ramp_levels=4, palette_allocation="area_preserving",
-                color_grid=False):
+                color_grid=False, palette_mapping="auto"):
         batch = torch.nan_to_num(normalize_image(image).detach().cpu()).numpy()
         if min(batch.shape[:3]) < 1:
             raise ValueError("Connect a nonempty image batch.")
@@ -322,7 +331,7 @@ class RayPixelArtDetector:
             masks = F.interpolate(masks[:, None], size=size, mode="nearest")[:, 0].numpy()
         outputs = []
         for index, rgb in enumerate(sampled):
-            result = quantize(rgb, palette, dither, dither_strength, palette_strategy == "color_families" and palette_image is None) if palette is not None else rgb
+            result = quantize(rgb, palette, dither, dither_strength, palette_strategy == "color_families" and palette_image is None, palette_mapping) if palette is not None else rgb
             if palette is not None and palette_image is None and palette_style == "distinct" and palette_strategy != "color_families" and input_kind == "illustration_photo" and dither == "none":
                 result = clean_clusters(result, rgb, palette, oklab, nearest_indices)
             if outline != "none":
@@ -352,7 +361,7 @@ class RayPixelArtDetector:
                         input_kind=input_kind, foreground_mask=foreground_mask, palette_style=palette_style,
                         palette_strategy=method, protect_highlights=protect_highlights,
                         highlight_threshold=highlight_threshold, ramp_levels=ramp_levels,
-                        palette_allocation=palette_allocation, color_grid=False)
+                        palette_allocation=palette_allocation, color_grid=False, palette_mapping=palette_mapping)
                     comparisons.append(result)
                 labels.append(method)
                 notes.append(f"{max_colors} colors max")

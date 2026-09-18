@@ -104,6 +104,11 @@ for region abstraction. Palette methods include `color_families`, `kmeans_lab`,
 budgets; other methods offer different tradeoffs between clean clusters, source
 colors, and shading. Supplied palette images remain supported.
 
+**Palette mapping** independently controls how pixels choose from either a
+generated or supplied palette: automatic, original near-black-aware OkLab,
+standard OkLab, CIE Lab, RGB, or color-family matching. It changes assignment
+without adding colors to the palette.
+
 Dithering is restricted to coherent ramps where palette mixing improves lost
 tone; flat fills, strong edges, and noisy texture are protected. The full workflow,
 recommended settings, limitations, engine attribution, and benchmark methodology
