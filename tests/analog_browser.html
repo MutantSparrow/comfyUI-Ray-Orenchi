@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Ray Analog — regression & material review</title>
+<style>
+body{background:#171c1d;color:#e4e7dc;font:14px system-ui;margin:32px}h1{font-size:24px;font-weight:500;margin:0 0 8px}p{color:#a4b1ab;max-width:850px}#results{white-space:pre-wrap;font:12px/1.5 monospace;padding:16px;background:#202928}#gallery{display:grid;grid-template-columns:repeat(auto-fit,230px);gap:22px;margin-top:28px}.card>header{font:11px monospace;color:#b3bcb0;margin-bottom:9px}.card .ray-analog-panel{height:232px}button{font:inherit}.card{min-width:0}
+</style>
+<h1>Ray’s Analog / hardware study</h1><p>Original console-inspired controls. All legacy style IDs remain available. Drag knobs, try Shift, type an exact value, or Tab to a switch and press Space. This harness checks DOM behavior; use ComfyUI for renderer integration.</p>
+<details><summary>Regression results</summary><pre id="results">Running…</pre></details><div id="gallery"></div>
+<script>window.addEventListener('error',e=>{document.querySelector('#results').textContent=e.message+' '+e.filename+':'+e.lineno+':'+e.colno;document.querySelector('details').open=true;});</script>
+<script type="module" src="/tests/analog_browser.js"></script></html>

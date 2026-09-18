@@ -102,7 +102,7 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | **Output** `int` | INT | Quantized via `clamp`. |
 | **Output** `float` | FLOAT | Raw clamped float in `[min, max]`. |
 
-**Right-click menu.** Style picker (brushed-metal, black-plastic, bakelite, brass, and more), **Compact mode** (strips everything but the brushed panel, Dymo label, knob face, and readout: title bar via a per-instance `title_mode` override, config widgets via `advanced = true` + `node.showAdvanced` toggle, and unwired input/output pin arrays stashed so no slot dots draw), **Edit label…** (Dymo tape above the face). Double-clicking the Dymo tape also enters edit mode. Style, compact flag, and label text persist with the workflow.
+**Right-click menu.** Style picker with console rotary, broadcast ivory, mastering aluminium, linear fader, and the original legacy faces. **Compact mode** hides only unlinked setup controls while preserving real slots and workflow data. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Drag around a rotary control, use Shift for fine movement, or use Arrow/Home/End keys. Exact values can be entered in the readout. Style, compact flag, and label text persist with the workflow.
 
 ---
 
@@ -117,7 +117,7 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | **Control** `state` | bool | Toggle. |
 | **Output** `bool` | BOOLEAN | Mirror of `state`. |
 
-**Right-click menu.** Style picker (Chrome Rocker, Bakelite Flip, Silver Paddle, Brass Slider, Minimal Pill, Dark Studio Dome), **Compact mode** (strips everything but the brushed panel, Dymo label, switch face, and readout: title bar via a per-instance `title_mode` override and unwired pin arrays stashed), **Edit label…** (Dymo tape). Double-clicking the Dymo tape also enters edit mode. Style, compact flag, and label text persist with the workflow.
+**Right-click menu.** Style picker with rack power rocker, broadcast steel lever, illuminated console key, and the original Chrome Rocker, Bakelite Flip, Silver Paddle, Brass Slider, Minimal Pill, and Dark Studio Dome faces. **Compact mode** hides only unlinked setup controls and keeps the real output slot available. Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
 
 ---
 

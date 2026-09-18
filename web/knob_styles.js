@@ -13,6 +13,7 @@
 //
 // To add a style: append an entry to KNOB_STYLES below. No edits required to ray_knob.js.
 
+import { STUDIO_KNOBS } from "./analog_hardware.js";
 import { TWO_PI, getRadialBrushedURL } from "./_common.js";
 
 // ─────────────────────────── helpers (SVG fragment builders) ───────────────────────────
@@ -432,6 +433,7 @@ const minimalFlat = (() => {
 // ─────────────────────────── registry ───────────────────────────
 
 export const KNOB_STYLES = {
+    ...STUDIO_KNOBS,
     chrome_notched:       chromeNotched,
     dark_studio_led:      darkStudioLED,
     bakelite_chickenhead: bakeliteChickenhead,
@@ -441,7 +443,7 @@ export const KNOB_STYLES = {
     // my_new_knob:       myNewKnob,
 };
 
-export const DEFAULT_STYLE = "chrome_notched";
+export const DEFAULT_STYLE = "console_rotary";
 
 export function listStyles() {
     return Object.keys(KNOB_STYLES);

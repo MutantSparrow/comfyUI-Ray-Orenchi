@@ -14,6 +14,7 @@
 //
 // To add a style: append an entry to SWITCH_STYLES below. No edits to ray_switch.js.
 
+import { STUDIO_SWITCHES } from "./analog_hardware.js";
 import { TWO_PI, getRadialBrushedURL } from "./_common.js";
 
 // ─────────────────────────── style: chrome_rocker ───────────────────────────
@@ -346,6 +347,7 @@ const minimalPill = (() => ({
 // ─────────────────────────── registry ───────────────────────────
 
 export const SWITCH_STYLES = {
+    ...STUDIO_SWITCHES,
     chrome_rocker:     chromeRocker,
     dark_studio_dome:  darkStudioDome,
     bakelite_flip:     bakeliteFlip,
@@ -355,7 +357,7 @@ export const SWITCH_STYLES = {
     // my_new_switch: myNewSwitch,
 };
 
-export const DEFAULT_SWITCH_STYLE = "chrome_rocker";
+export const DEFAULT_SWITCH_STYLE = "console_rocker";
 
 export function listSwitchStyles() {
     return Object.keys(SWITCH_STYLES);
