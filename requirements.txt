@@ -6,3 +6,5 @@ Pillow
 aiohttp
 requests
 beautifulsoup4
+scipy
+opencv-python>=4.6
