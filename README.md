@@ -93,8 +93,9 @@ release them; use `start_index` and `limit` for large folders.
 
 - `image`: the actual pixel-resolution result, preserving the exact source aspect
   ratio without cropping or stretching.
-- `preview`: a nearest-neighbor view at the original input size, or a labeled 3×2
-  method comparison when **color grid** is enabled.
+- `preview`: a nearest-neighbor view at the original input size, or a labeled grid
+  containing the exact current output plus all six palette methods when
+  **color grid** is enabled.
 
 Use `repair_pixel_art` for enlarged or damaged pixel art and `illustration_photo`
 for region abstraction. Palette methods include `color_families`, `kmeans_lab`,
