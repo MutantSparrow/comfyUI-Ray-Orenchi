@@ -1,0 +1,7 @@
+.references/
+fixtures/
+baseline_outputs/
+baseline_results.json
+jobs.json
+snapper_jobs.json
+__pycache__/
