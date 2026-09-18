@@ -58,31 +58,28 @@ than pick a bespoke one.
 
 ## ✨ Ray's VFX: Pixel Art (`RayPixelArtDetector`)
 
-**Purpose.** Pixel-art conversion: downscale (manual or auto pixel-size detection), optional dithering, palette reduction (kmeans Lab / kmeans RGB / quantize / OkLab hue ramps), solid-background isolation, optional silhouette outline, plus a hue-sorted palette preview.
+**Purpose.** Repair an existing pixel grid or abstract illustrations/photos into readable regions. Preserve exact aspect ratio, fit perceptual palettes and optionally add restrained dithering or colored outlines. See [PIXEL_ART.md](PIXEL_ART.md).
 
 **Category:** `👑 Ray/✨ VFX`
 
-| Pin | Type | Notes |
-|-----|------|-------|
-| **Input** `image` | IMAGE | Source. |
-| **Input** `palette_image` (optional) | IMAGE | Fixed palette source. Snaps palette size to {2}∪{4·k}; bypasses source-derived clustering. |
-| **Control** `mode` | enum | `manual_resize`, `auto_downscale_loose`, `auto_downscale_strict`, `auto_pixel_size` |
-| **Control** `target_resolution` | int 32–2048 | Target longest side (manual_resize). |
-| **Control** `max_downscale_factor` | int 2–64 | Cap for auto modes. |
-| **Control** `reduce_palette` | bool | Run palette reduction. |
-| **Control** `max_colors` | int 2–256 | Palette size target. |
-| **Control** `palette_strategy` | enum | `kmeans_lab`, `kmeans_rgb`, `quantize_simple`, `ramps_oklab` |
-| **Control** `ramp_levels` | enum 3/4/5 | L\* levels per hue/chroma cluster (`ramps_oklab`). |
-| **Control** `protect_highlights` | bool | Reserve a slot for near-white highlights. |
-| **Control** `highlight_threshold` | int 50–100 | L\* cutoff for highlight protection. |
-| **Control** `dither` | enum | `none`, `bayer_2x2`, `bayer_4x4`, `bayer_8x8`, `blue_noise`, `riemersma`, `knoll` |
-| **Control** `selective_dither` | bool | Restrict dither to non-smooth regions. |
-| **Control** `dither_smooth_threshold` | float 0–0.30 | OkLab L\* std cutoff for smooth-region detection. |
-| **Control** `silhouette_outline` | bool | Darken silhouette edges by N palette ranks. |
-| **Control** `outline_steps` | int 1–3 | Palette-rank steps for the outline. |
-| **Control** `seed` | int | RNG seed (affects kmeans, blue noise). |
-| **Output** `pixel_art` | IMAGE | Reduced image. |
-| **Output** `palette_preview` | IMAGE | Hue-sorted swatch grid. |
+| Pin / control | Notes |
+|---|---|
+| `image` | Source image or batch. |
+| `input_kind` | `repair_pixel_art` or `illustration_photo`. |
+| `mode` | `manual_resize`, `auto_pixel_size`, `pixel_size`. Illustration auto uses target_resolution. |
+| `target_resolution`, `pixel_size` | Desired longest side or source pixels per output pixel; exact-aspect dimensions only. |
+| `sampling` | `grid_snap` structural processing, `nearest` sampling, `area` averaging. |
+| `reduce_palette`, `max_colors` | Fit a generated palette within its color budget. |
+| `palette_style` | `source` shading or `distinct` colors; distinct also consolidates weak isolated shades in undithered illustrations. |
+| `palette_image` (optional) | Preserve up to 256 exact swatch colors; larger references are reduced to max_colors. Overrides generated palette settings. |
+| `dither`, `dither_strength` | `none`, `ordered`, `error_diffusion`; protect flat fills, strong edges and busy texture. |
+| `outline` | `none`, dark `silhouette`, or shading-guided colored `selective`. |
+| `foreground_mask` (optional) | One means subject, zero means background; enables outlines on complex backgrounds. |
+| `seed` | -1 for random; nonnegative values reproduce palette/reconstruction choices. |
+| Output `image` | Actual pixel-resolution result. |
+| Output `preview` | Nearest-neighbor preview at input dimensions. |
+
+Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally. No model or server is required. Irrelevant controls are hidden. See [benchmark methodology](benchmarks/pixel_art/README.md) and [results](benchmarks/pixel_art/RESULTS.md); these development results do not establish SOTA quality.
 
 ---
 
@@ -397,3 +394,67 @@ Each slider defaults to `-1.0` (meaning "use the preset value") and `0..1` overr
 | **Output** `image_path` | STRING (list) | Path to the associated image on disk, if any. |
 
 **Browse panel.** Full-text search, tag + source filters, and multiple sort orders (most recent, longest, similarity by embedding). Click a row to select — the node then serves that row on every subsequent run.
+
+## 📝 Ray's Prompts: TXT Folder (`RayTextFolder`)
+
+**Category:** `👑 Ray/📝 Prompts`
+
+Read UTF-8 .txt files from one folder, alphabetically by filename; subfolders
+are excluded. Each non-empty file is one prompt, including its paragraphs
+and whitespace. A UTF-8 BOM is removed. Files are re-read on every execution.
+
+| Control / output | Behavior |
+|---|---|
+| `directory` | Folder containing prompt files |
+| `start_index` | Zero-based starting file in alphabetical order |
+| `limit` | Maximum files examined; -1 means all remaining files |
+| `output_prefix` | Save Image prefix; the source filename stem is appended |
+| `prompt` | List of complete, unchanged prompts |
+| `filename_prefix` | Equally sized list of matching output prefixes |
+
+Empty files are skipped, but still count toward start_index and limit.
+No usable prompts produces an actionable error instead of a blank generation.
+Read/decode failures stop execution before any prompt list is emitted.
+
+Connect `prompt` to RayKrea2Sampler's text input and `filename_prefix` to
+Save Image's filename_prefix input. Connect the sampler image to Save Image.
+ComfyUI maps the paired lists automatically; no extra loop is needed.
+Keep the sampler batch size at 1 for one image per file. Save Image adds its
+normal counter suffix. Use limit 3 for a small test, then -1 for the folder.
+
+## 💬 Ray's LLM: Folder Captioner (`RayVLMFolder`)
+
+**Category:** `👑 Ray/💬 LLM`
+
+Load one full vision-language checkpoint from ComfyUI's `text_encoders`
+model list and caption each selected image independently on GPU. The node
+uses native `CLIP.tokenize/generate/decode` with the image template enabled,
+and preserves the supplied instruction and decoded answer. It does not write
+sidecars, resize source images, or add a conversation history.
+
+| Control | Behavior |
+|---|---|
+| `clip_name` | Full generative VLM, e.g. Qwen3-VL; ordinary text-only CLIP is unsuitable |
+| `folder`, `recurse_subfolders` | Source folder and optional recursive scan |
+| `start_index`, `limit` | Zero-based alphabetical relative-path range; -1 means all remaining files |
+| `user_prompt` | Multiline instruction used independently for each image |
+| `max_length` | Maximum generated tokens per image |
+| `temperature` | Sampling temperature; 0 selects greedy decoding |
+| `top_k`, `top_p`, `min_p` | Native token sampling filters |
+| `repetition_penalty` | Native repetition penalty; 1 is neutral |
+| `seed` | -1 selects a random seed per image; a fixed seed is reused per image for repeatability |
+| `thinking` | Requests model-supported thinking; any decoded reasoning is retained in text |
+
+Outputs `text`, `image`, and `image_path` are aligned lists. Each image is
+a separate RGB tensor with EXIF orientation applied, so mixed sizes work.
+Connect an output to a display, save, or downstream processing node to run.
+
+Supported formats: JPEG, PNG, WebP, BMP, TIFF, GIF. Animated/multipage files use
+their first frame. HEIC is not included. Folder contents are rescanned each run.
+Unreadable files, absent vision tokens, CPU fallback, and empty answers stop the
+run with an error rather than emitting misleading captions. No files are modified.
+
+All outputs become available after the selected range finishes. Full-resolution
+images accumulate in RAM; use a small `limit` and advance `start_index` for
+large folders. ComfyUI manages model offloading; CPU staging is allowed, but
+the inference device must be a GPU. The checkpoint must fit the available resources.
