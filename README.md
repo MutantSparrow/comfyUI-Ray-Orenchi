@@ -1,63 +1,142 @@
 # comfyUI-Ray-Orenchi
 
-A small pack of ComfyUI custom nodes: image VFX, pixel-art tooling, analog-style UI widgets, an Ollama / CLIP chat node, a prompt iterator, and a web prompt scraper.
+A collection of 18 ComfyUI custom nodes for image effects, pixel-art conversion,
+native local vision-language inference, prompt workflows, metadata, and compact
+analog controls. Nodes appear under the `👑 Ray` category in four groups:
+`✨ VFX`, `🎛️ Analog`, `📝 Prompts`, and `💬 LLM`.
 
-| Node | Bucket | Purpose |
-|------|--------|---------|
-| ✨ Ray's VFX: CRT | VFX | CRT display simulation (phosphor mask, scanlines, halation, NTSC bleed, barrel warp) |
-| ✨ Ray's VFX: Offset Print | VFX | CMYK / duotone halftone print simulation with paper substrate |
-| ✨ Ray's VFX: Pixel Art | VFX | Pixel-grid repair or illustration abstraction, perceptual palettes, restrained dithering, mask-aware outlines and original-size preview ([guide](PIXEL_ART.md)) |
-| ✨ Ray's VFX: Film Stock | VFX | Film-stock emulation with LUT / XMP asset dropdown, grain, halation |
-| ✨ Ray's VFX: VHS / Tape | VFX | Analog videotape degradation with OSD overlay |
-| 🎛️ Ray's Analog: Knob | Analog | Float knob widget with min/max/spin/clamp |
-| 🎛️ Ray's Analog: Switch | Analog | Boolean toggle widget |
-| 💬 Ray's LLM: Ollama Chat | LLM | Chat node — Ollama backend or CLIP text-encoder backend, image + audio attachments |
-| 💬 Ray's LLM: Prompt Iterator | LLM | Score image-vs-prompt match and propose a revised prompt via Ollama |
-| 💬 Ray's LLM: Prompt Library | LLM | Save prompts to a local SQLite library with tag / source filters; browse in an inline table |
-| 📝 Ray's Prompts: PromptDexter Scraper | Prompts | Random prompt + image from [promptdexter.com](https://promptdexter.com/) |
-| 📝 Ray's Prompts: CivitAI Gallery Scraper | Prompts | Random prompt + image from [civitai.com](https://civitai.com/) via the public REST API. Blue (SFW) / Red (NSFW) toggle |
-| 📝 Ray's Prompts: Folder Image Scraper | Prompts | Random image + extracted prompt from a local folder |
-| 📝 Ray's Prompts: Prompt Fetcher | Prompts | All-in-one wrapper over the three scrapers above |
-| 📝 Ray's Prompts: Metadata Inspector | Prompts | Read or embed generation metadata on a specific image |
+## Highlights
 
-| 📝 Ray's Prompts: TXT Folder | Prompts | Complete .txt prompts and paired save prefixes from a local folder, alphabetically |
+- **Fast Qwen3-VL Infer** reuses an existing native Qwen3-VL `CLIP` object and
+  checkpoint. It does not convert to GGUF, start a server, or load a second model
+  copy. It retains ComfyUI loading, FP8-scaled weights, offloading, vision
+  preprocessing, sampling, and ComfyKitchen decode support where available.
+- **Pixel Art** repairs enlarged pixel grids or converts illustrations and photos
+  while preserving the exact source aspect ratio. It includes perceptual and
+  color-family palettes, highlight protection, restrained ramp-aware dithering,
+  optional outlines, supplied palettes, and a labeled six-method comparison grid.
+- **Folder Captioner** and **TXT Folder** support local batch workflows with
+  aligned list outputs, stable ordering, ranges, and actionable errors.
 
-| 💬 Ray's LLM: Folder Captioner | LLM | GPU VLM captions for a folder, with paired answer, image, and path outputs |
+## Nodes
 
-See [Node Documentation](NODES.md) for inputs / controls / outputs per node.
+| Node | Group | Purpose |
+|---|---|---|
+| Ray's VFX: CRT | VFX | CRT display simulation with phosphor masks, scanlines, halation, NTSC bleed, and barrel distortion |
+| Ray's VFX: Offset Print | VFX | CMYK or duotone halftone printing with paper simulation |
+| Ray's VFX: Pixel Art | VFX | Pixel-grid repair and illustration abstraction with palette reduction, selective dithering, outlines, native-size output, and comparison preview |
+| Ray's VFX: Film Stock | VFX | Film response, grain, halation, and optional LUT/XMP assets |
+| Ray's VFX: VHS / Tape | VFX | YUV tape degradation, tracking faults, dropouts, noise, and OSD |
+| Ray's Analog: Knob | Analog | Float control with min/max, spin, and clamp behavior |
+| Ray's Analog: Switch | Analog | Boolean toggle control |
+| Ray's LLM: Fast Qwen3-VL Infer | LLM | Fast image-to-text generation through an already loaded native Qwen3-VL CLIP, with no duplicate model |
+| Ray's LLM: Folder Captioner | LLM | Caption a sorted local image range with a full GPU VLM and return aligned text, image, and path lists |
+| Ray's LLM: Ollama Chat | LLM | Ollama or ComfyUI CLIP chat with image and audio attachments |
+| Ray's LLM: Prompt Iterator | LLM | Score image/prompt agreement and propose a revised prompt through Ollama |
+| Ray's LLM: Prompt Library | LLM | Store and browse prompts in a local SQLite library with tags and source filters |
+| Ray's Prompts: TXT Folder | Prompts | Read complete UTF-8 text prompts alphabetically and emit matching Save Image prefixes |
+| Ray's Prompts: PromptDexter Scraper | Prompts | Retrieve a random prompt and image from PromptDexter |
+| Ray's Prompts: CivitAI Gallery Scraper | Prompts | Retrieve prompt/image metadata from the CivitAI API with SFW/NSFW selection |
+| Ray's Prompts: Folder Image Scraper | Prompts | Select a local image and extract its generation prompt |
+| Ray's Prompts: Prompt Fetcher | Prompts | Unified local, PromptDexter, and CivitAI prompt source |
+| Ray's Prompts: Metadata Inspector | Prompts | Read generation metadata or embed supplied metadata into an image |
+
+Detailed references are linked in the documentation section below.
 
 ## Install
 
-Clone into your ComfyUI `custom_nodes` directory:
+Clone the pack into `ComfyUI/custom_nodes`:
 
-```
+```shell
 cd ComfyUI/custom_nodes
 git clone https://github.com/MutantSparrow/comfyUI-Ray-Orenchi.git
-```
-
-Install Python dependencies (from the node-pack directory):
-
-```
+cd comfyUI-Ray-Orenchi
 pip install -r requirements.txt
 ```
 
-Restart ComfyUI. Nodes appear under the `👑 Ray/` top-level category, split
-into four bucket sub-categories: `✨ VFX`, `🎛️ Analog`, `📝 Prompts`, and
-`💬 LLM`. See [UI.md](UI.md) for the pack-wide UI/UX canon and [NODES.md](NODES.md)
-for per-node reference.
+Use the Python environment that launches ComfyUI when installing requirements.
+Restart ComfyUI and refresh the browser after installing or updating the pack.
 
-### Optional runtime dependencies
+Core dependencies include PyTorch, NumPy, Pillow, scikit-learn, SciPy, OpenCV,
+aiohttp, Requests, Beautiful Soup, and the Ollama Python client. ComfyUI already
+provides several of these in common installations; `requirements.txt` is the
+authoritative list.
 
-- **Ollama** — required for `Ray's LLM: Ollama Chat` (Ollama mode) and `Ray's LLM: Prompt Iterator`. Install from [ollama.com](https://ollama.com) and pull a model. Recommended: [`qwen3.6`](https://ollama.com/library/qwen3.6) — fast, vision-capable, plays well with the prompt iterator (`ollama pull qwen3.6`).
-- **CLIP** — `Ray's LLM: Ollama Chat` (CLIP mode) reuses the text encoder of any ComfyUI-loaded CLIP model; nothing extra to install.
+## Native Qwen3-VL inference
+
+For **Fast Qwen3-VL Infer**, load a full native Qwen3-VL 4B or 8B checkpoint with
+ComfyUI's standard `CLIPLoader` using the Qwen Image-compatible model type
+(`qwen_image`, or `krea2` for the shared 4B/Krea workflow). Connect the resulting
+`CLIP`, an `IMAGE`, and a plain prompt to the node. The same CLIP output can branch
+to Qwen Image/Krea conditioning and VLM inference.
+
+`fast` mode enables the optimized request-local decode path; `native` is an A/B
+baseline. Temperature, top-p, top-k, seed, thinking, repetition/presence penalties,
+stop-check interval, and an optional repeated-phrase guard are exposed. Image
+batches form one multi-image conversation rather than independent captions.
+
+The optimization keeps one model copy and request-local KV/graph buffers. It does
+not use Transformers, llama.cpp, vLLM, or a model conversion. Acceleration depends
+on the installed ComfyUI/ComfyKitchen capabilities and GPU. See
+[FAST_VLM.md](FAST_VLM.md) for architecture, measurements, constraints, and exact
+validation, and [FAST_VLM_RELIABILITY.md](FAST_VLM_RELIABILITY.md) for prompt
+attachment and repetition safeguards.
+
+**Folder Captioner** instead selects and loads a full generative checkpoint from
+ComfyUI's `text_encoders` list, then processes a bounded alphabetical image range.
+It requires a GPU and holds selected output images in RAM until downstream nodes
+release them; use `start_index` and `limit` for large folders.
+
+## Pixel Art
+
+**Pixel Art** returns two images:
+
+- `image`: the actual pixel-resolution result, preserving the exact source aspect
+  ratio without cropping or stretching.
+- `preview`: a nearest-neighbor view at the original input size, or a labeled 3×2
+  method comparison when **color grid** is enabled.
+
+Use `repair_pixel_art` for enlarged or damaged pixel art and `illustration_photo`
+for region abstraction. Palette methods include `color_families`, `kmeans_lab`,
+`quantize_simple`, `kmeans_rgb`, `oklab_source`, and `ramps_oklab`.
+`color_families` prioritizes distinct hue/lightness groups at very small palette
+budgets; other methods offer different tradeoffs between clean clusters, source
+colors, and shading. Supplied palette images remain supported.
+
+Dithering is restricted to coherent ramps where palette mixing improves lost
+tone; flat fills, strong edges, and noisy texture are protected. The full workflow,
+recommended settings, limitations, engine attribution, and benchmark methodology
+are documented in [PIXEL_ART.md](PIXEL_ART.md) and
+[benchmarks/pixel_art/README.md](benchmarks/pixel_art/README.md).
+
+## Ollama and network-backed nodes
+
+- Install and run [Ollama](https://ollama.com/) for **Ollama Chat** in Ollama mode
+  and **Prompt Iterator**, then select a locally installed model in the node.
+- **PromptDexter**, **CivitAI**, and the corresponding **Prompt Fetcher** modes
+  require network access. CivitAI can optionally read a local `civitai.secret`
+  file for authenticated access; secret files are ignored by Git.
+- Ollama Chat's CLIP mode uses an already loaded compatible ComfyUI CLIP and does
+  not require Ollama.
+
+## Documentation
+
+- [NODES.md](NODES.md) — node-by-node inputs, outputs, and behavior
+- [PIXEL_ART.md](PIXEL_ART.md) — Pixel Art workflow, algorithms, and limits
+- [FAST_VLM.md](FAST_VLM.md) — Fast Qwen3-VL implementation and measurements
+- [FAST_VLM_RELIABILITY.md](FAST_VLM_RELIABILITY.md) — attachment and repetition handling
+- [UI.md](UI.md) — shared frontend and node UI conventions
 
 ## Compatibility
 
-These nodes were originally built against the **legacy ComfyUI frontend**. Compatibility work for the **v2 frontend** is centralized in `web/_common.js` — every node calls the same `setWidgetHidden` / `applyBucketTint` helpers, so the two frontends run through a single code path. If you hit a glitch on either, please open an issue with the workflow / repro steps — feedback welcome.
-
-Class names are frozen: saved workflows keep loading across UI/UX refreshes.
-See [UI.md](UI.md) for the pack-wide styleguide.
+The pack supports ComfyUI's legacy and v2 frontends through shared helpers in
+`web/_common.js`. Registered class names remain stable so existing workflows keep
+loading. The Fast Qwen3-VL path follows native ComfyUI internals and is therefore
+more sensitive to upstream decoder changes than ordinary image nodes; consult its
+validation notes when updating ComfyUI.
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE).
+The node pack is licensed under Apache License 2.0; see [LICENSE](LICENSE).
+The vendored Pixel Art Fixer grid detector is MIT-licensed and retains its own
+[license](ray_pixel_fixer/LICENSE) and [notice](ray_pixel_fixer/NOTICE.md).
