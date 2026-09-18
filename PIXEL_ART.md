@@ -197,11 +197,13 @@ report and reproduction instructions for exact scope and limitations.
 ## Color grid preview
 
 Enable **color grid**, immediately below highlight_threshold, to replace preview
-with a labeled 3-column, 2-row comparison of all six palette methods. The main
-image output is unchanged. Each tile runs the method with the same resolved
-resolution, seed, and effect settings. Comparison tiles always generate palettes
-using max_colors, even when reduce_palette is off or palette_image is connected;
-those controls still apply normally to the main output.
+with a labeled 3-column grid. The first tile is **current output** and exactly
+matches the main image output, including a supplied palette or disabled palette
+reduction. The next six tiles compare every generated palette method. The main
+image output is unchanged. Each method tile uses the same resolved resolution,
+seed, and effect settings. Method tiles always generate palettes using max_colors,
+even when reduce_palette is off or palette_image is connected; the current-output
+tile makes that intentional difference visible.
 
 Tiles use integer nearest-neighbor enlargement, targeting at most 512 pixels on
 their longest side unless the native pixel output is already larger. Small tiles
