@@ -21,10 +21,14 @@ class ColorGridTests(unittest.TestCase):
         self.assertEqual(grid.shape[0],2)
         self.assertTrue(torch.isfinite(grid).all())
         methods=node.INPUT_TYPES()['required']['palette_strategy'][0]
+        # Tile zero is always the exact main output.
+        current=grid[:,60:76,120:144]
+        torch.testing.assert_close(current,torch.round(actual*255)/255,rtol=0,atol=0)
         for i,method in enumerate(methods):
             expected,_=node.process(image,palette_strategy=method,**settings)
-            x=12+(i%3)*252+(240-24)//2
-            y=12+(i//3)*(16+48+12)+48
+            tile=i+1
+            x=12+(tile%3)*252+(240-24)//2
+            y=12+(tile//3)*(16+48+12)+48
             pixels=grid[:,y:y+16,x:x+24]
             torch.testing.assert_close(pixels,torch.round(expected*255)/255,rtol=0,atol=0)
         self.assertGreater(torch.unique(grid[0,12:60,:]).numel(),1)  # labels are rendered
@@ -39,7 +43,9 @@ class ColorGridTests(unittest.TestCase):
         out,grid=node.process(image,color_grid=True,**settings)
         torch.testing.assert_close(out,normal,rtol=0,atol=0)
         self.assertTrue(((out==0)|(out==1)).all())
-        tile=grid[:,60:68,120:128]
-        self.assertTrue(((tile>0)&(tile<1)).any())
+        current=grid[:,60:68,128:136]
+        self.assertTrue(((current==0)|(current==1)).all())
+        generated=grid[:,60:68,380:388]
+        self.assertTrue(((generated>0)&(generated<1)).any())
 
 if __name__=='__main__': unittest.main()

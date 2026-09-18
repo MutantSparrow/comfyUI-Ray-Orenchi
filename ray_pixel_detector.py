@@ -251,7 +251,7 @@ class RayPixelArtDetector:
             "palette_strategy": (["color_families", "kmeans_lab", "quantize_simple", "kmeans_rgb", "oklab_source", "ramps_oklab"], {"tooltip": "color_families prioritizes distinct hue/lightness groups and neutral colors before extra shades; assignment also protects family identity. Other methods retain their previous behavior. This is not semantic material recognition."}),
             "protect_highlights": ("BOOLEAN", {"default": True, "tooltip": "Reserve bright source colors inside the color budget. color_families preserves main families first and protects neutral glints only with spare slots. Other methods can reserve neutral and warm highlights. Supplied palettes are unchanged."}),
             "highlight_threshold": ("INT", {"default": 90, "min": 50, "max": 100, "tooltip": "CIE Lab lightness cutoff, matching the original node. Lower this if important highlights are less bright."}),
-            "color_grid": ("BOOLEAN", {"default": False, "tooltip": "Replace only preview with a labeled 3-by-2 comparison of all six color methods. Uses max_colors and the same seed/settings; forces generated palettes in comparison tiles even if reduction is off or a palette is connected. Main image stays unchanged. Integer nearest-neighbor tile scaling; extra processing required."}),
+            "color_grid": ("BOOLEAN", {"default": False, "tooltip": "Replace only preview with a labeled 3-by-3 grid: the exact current image output followed by all six generated color methods. Uses max_colors and the same seed/effects. Main image stays unchanged. Integer nearest-neighbor tile scaling; extra processing required."}),
             "ramp_levels": ("INT", {"default": 4, "min": 2, "max": 8, "tooltip": "Lightness bands per chroma family for ramps_oklab; total palette still respects max_colors."}),
             "palette_allocation": (["area_preserving", "frequency"], {"tooltip": "Favor coherent color areas and spend fewer shades on busy texture, or use ordinary color frequency. Highlight protection applies to both. No semantic recognition."}),
             "seed": ("INT", {"default": -1, "min": -1, "max": 2**31-1, "tooltip": "-1 for random; any >=0 value is reproducible."}),
@@ -332,33 +332,43 @@ class RayPixelArtDetector:
         output = torch.stack(outputs)
         if color_grid:
             methods = self.INPUT_TYPES()["required"]["palette_strategy"][0]
-            comparisons = []
+            comparisons = [output]
+            labels = ["current output"]
+            if palette_image is not None:
+                current_note = "supplied palette"
+            elif not reduce_palette:
+                current_note = "palette reduction off"
+            else:
+                current_note = f"{palette_strategy} · selected"
+            notes = [current_note]
             for method in methods:
                 if method == palette_strategy and reduce_palette and palette_image is None:
                     comparisons.append(output)
-                    continue
-                result, _ = self.process(
-                    image, mode="manual_resize", target_resolution=max(size), pixel_size=pixel_size,
-                    sampling=sampling, reduce_palette=True, max_colors=max_colors,
-                    dither=dither, dither_strength=dither_strength, outline=outline, seed=seed,
-                    input_kind=input_kind, foreground_mask=foreground_mask, palette_style=palette_style,
-                    palette_strategy=method, protect_highlights=protect_highlights,
-                    highlight_threshold=highlight_threshold, ramp_levels=ramp_levels,
-                    palette_allocation=palette_allocation, color_grid=False)
-                comparisons.append(result)
-            return output, color_grid_preview(comparisons, methods, (h, w), max_colors)
+                else:
+                    result, _ = self.process(
+                        image, mode="manual_resize", target_resolution=max(size), pixel_size=pixel_size,
+                        sampling=sampling, reduce_palette=True, max_colors=max_colors,
+                        dither=dither, dither_strength=dither_strength, outline=outline, seed=seed,
+                        input_kind=input_kind, foreground_mask=foreground_mask, palette_style=palette_style,
+                        palette_strategy=method, protect_highlights=protect_highlights,
+                        highlight_threshold=highlight_threshold, ramp_levels=ramp_levels,
+                        palette_allocation=palette_allocation, color_grid=False)
+                    comparisons.append(result)
+                labels.append(method)
+                notes.append(f"{max_colors} colors max")
+            return output, color_grid_preview(comparisons, labels, notes, (h, w))
         preview = F.interpolate(output.permute(0, 3, 1, 2), size=(h, w), mode="nearest").permute(0, 2, 3, 1)
         return output, preview
 
 
-def color_grid_preview(comparisons, methods, source_size, max_colors):
-    """One labeled contact sheet per input; exact-aspect integer pixel zoom."""
+def color_grid_preview(comparisons, labels, notes, source_size):
+    """One labeled contact sheet per input; first tile is the exact main output."""
     from PIL import Image, ImageDraw, ImageFont
     ph, pw = comparisons[0].shape[1:3]
     zoom = max(1, min(512, max(source_size)) // max(ph, pw))
     tw, th = pw * zoom, ph * zoom
     cell_w, header, gap = max(240, tw), 48, 12
-    cols, rows = 3, (len(methods)+2)//3
+    cols, rows = 3, (len(labels)+2)//3
     try:
         font = ImageFont.load_default(size=16)
     except TypeError:
@@ -367,10 +377,10 @@ def color_grid_preview(comparisons, methods, source_size, max_colors):
     for index in range(len(comparisons[0])):
         sheet = Image.new("RGB", (cols*cell_w+(cols+1)*gap, rows*(th+header)+(rows+1)*gap), (24,24,24))
         draw = ImageDraw.Draw(sheet)
-        for tile, method, pixels in zip(range(len(methods)), methods, comparisons):
+        for tile, label, note, pixels in zip(range(len(labels)), labels, notes, comparisons):
             x, y = gap+(tile%cols)*(cell_w+gap), gap+(tile//cols)*(th+header+gap)
-            draw.text((x+8, y+4), method, font=font, fill=(245,245,245))
-            draw.text((x+8, y+25), f"{max_colors} colors max", font=font, fill=(175,175,175))
+            draw.text((x+8, y+4), label, font=font, fill=(245,245,245))
+            draw.text((x+8, y+25), note, font=font, fill=(175,175,175))
             array = np.round(np.clip(pixels[index].numpy(), 0, 1)*255).astype(np.uint8)
             panel = Image.fromarray(array).resize((tw, th), Image.Resampling.NEAREST)
             sheet.paste(panel, (x+(cell_w-tw)//2, y+header))
