@@ -13,6 +13,7 @@ function refresh(node) {
     show("pixel_size", value("mode") === "pixel_size");
     show("target_resolution", value("mode") !== "pixel_size");
     show("max_colors", value("reduce_palette") || paletteConnected || grid);
+    show("palette_mapping", value("reduce_palette") || paletteConnected || grid);
     const families = value("palette_strategy") === "color_families" && !grid;
     const generated = (value("reduce_palette") && !paletteConnected) || grid;
     show("palette_style", generated && !families);
@@ -33,10 +34,12 @@ app.registerExtension({
             let v = node.widgets_values;
             if (!Array.isArray(v)) continue;
             let restored = ["kmeans_lab", true, 90, 4, "area_preserving"];
+            let mapping = "auto";
             if (v.length >= 15 && !["repair_pixel_art", "illustration_photo"].includes(v[0])) {
                 const mode = v[0] === "manual_resize" ? "manual_resize" : "auto_pixel_size";
                 const dither = v[9] === "none" ? "none" : v[9] === "riemersma" ? "error_diffusion" : "ordered";
                 const old = v;
+                mapping = "legacy_oklab";
                 restored = [["kmeans_lab", "kmeans_rgb", "ramps_oklab", "quantize_simple"].includes(old[5]) ? old[5] : "kmeans_lab", old[7], old[8], old[6], "area_preserving"];
                 v = [mode, old[1], 8, "grid_snap", old[3], old[4], dither,
                      .7, old[12] ? "silhouette" : "none", old[14]];
@@ -55,6 +58,10 @@ app.registerExtension({
             if (["repair_pixel_art", "illustration_photo"].includes(v[0]) && typeof v[14] === "number") {
                 v = [...v.slice(0, 14), false, ...v.slice(14)];
             }
+            // Add mapping before seed; numeric seed distinguishes previous schema.
+            if (["repair_pixel_art", "illustration_photo"].includes(v[0]) && typeof v[17] === "number") {
+                v = [...v.slice(0, 17), mapping, ...v.slice(17)];
+            }
             node.widgets_values = v;
             if (node.outputs?.[0]) node.outputs[0].name = "image";
             if (node.outputs?.[1]) node.outputs[1].name = "preview";
@@ -68,6 +75,7 @@ app.registerExtension({
             applyBucketTint(this, "VFX");
             for (const w of this.widgets || []) {
                 if (w.name === "color_grid") w.label = "color grid";
+                if (w.name === "palette_mapping") w.label = "palette mapping";
                 if (!["mode", "reduce_palette", "dither", "palette_strategy", "protect_highlights", "color_grid"].includes(w.name)) continue;
                 const callback = w.callback;
                 w.callback = (...args) => {
