@@ -71,6 +71,8 @@ than pick a bespoke one.
 | `sampling` | `grid_snap` structural processing, `nearest` sampling, `area` averaging. |
 | `reduce_palette`, `max_colors` | Fit a generated palette within its color budget. |
 | `palette_style` | `source` shading or `distinct` colors; distinct also consolidates weak isolated shades in undithered illustrations. |
+| `palette_strategy` | Build a generated palette with color_families, Lab/RGB clustering, simple quantization, OkLab source colors, or ramps. |
+| `palette_mapping` | Choose assignment independently: auto, legacy_oklab, oklab, lab, rgb, or color_families. Applies to supplied palettes too. |
 | `palette_image` (optional) | Preserve up to 256 exact swatch colors; larger references are reduced to max_colors. Overrides generated palette settings. |
 | `dither`, `dither_strength` | `none`, `ordered`, `error_diffusion`; protect flat fills, strong edges and busy texture. |
 | `outline` | `none`, dark `silhouette`, or shading-guided colored `selective`. |

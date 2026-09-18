@@ -127,6 +127,34 @@ this helps color consistency but does not guarantee animation stability.
 
 ## Dither and outline
 
+### Palette mapping
+
+`palette_strategy` builds a palette. `palette_mapping` chooses which palette entry
+each source pixel uses, including when `palette_image` is connected. It remains
+visible for supplied palettes, whereas palette-building controls do not apply.
+
+| Mapping | Behavior |
+|---|---|
+| `auto` | Preserve the recent node behavior: family matching for generated color_families palettes, standard OkLab otherwise. |
+| `legacy_oklab` | Restore the original node's custom OkLab mapping with a CIE linear segment near black and rescaled lightness. |
+| `oklab` | Nearest entry using standard OkLab distance. |
+| `lab` | Nearest entry using Euclidean CIE Lab distance. |
+| `rgb` | Nearest entry using sRGB channel distance. |
+| `color_families` | OkLab distance plus a hue-family preference; also available for supplied palettes. |
+
+All choices emit only palette colors. Dithering starts from the chosen assignment
+and uses its distance space to evaluate mixtures or diffuse errors. The existing
+perceptual edge/texture protections still apply. Outlining and distinct-style
+cleanup are subsequent effects that can reassign pixels within the same palette.
+The color grid uses the chosen mapping for every generated-method tile, and its
+current-output tile remains a copy of the main output.
+
+Original pre-rewrite workflows migrate to legacy_oklab; recent workflows migrate
+to auto. This restores the original base mapping, not the old reconstruction or
+Riemersma/Knoll dithering algorithms. With a supplied palette, start with
+legacy_oklab to compare the original near-black handling or lab/oklab for standard
+perceptual matching. No mapping can reproduce a color absent from that palette.
+
 Dithering now requires a coherent directional source ramp, visible quantization
 error and a useful palette-pair mixture. Flat fields, slight random noise,
 strong boundaries and texture do not qualify just because colors vary. Ordered
