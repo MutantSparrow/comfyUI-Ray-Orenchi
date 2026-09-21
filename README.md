@@ -29,10 +29,6 @@ analog controls. Nodes appear under the `👑 Ray` category in four groups:
 | Ray's VFX: VHS / Tape | VFX | YUV tape degradation, tracking faults, dropouts, noise, and OSD |
 | Ray's Analog: Knob | Analog | Float control with min/max, spin, and clamp behavior |
 | Ray's Analog: Switch | Analog | Boolean toggle control |
-
-Analog controls include ten knob and nine switch themes inspired by studio hardware.
-The original twelve themes have refreshed metal, Bakelite, and indicator artwork;
-existing workflows keep their style selections and value behavior.
 | Ray's LLM: Fast Qwen3-VL Infer | LLM | Fast image-to-text generation through an already loaded native Qwen3-VL CLIP, with no duplicate model |
 | Ray's LLM: Folder Captioner | LLM | Caption a sorted local image range with a full GPU VLM and return aligned text, image, and path lists |
 | Ray's LLM: Ollama Chat | LLM | Ollama or ComfyUI CLIP chat with image and audio attachments |
@@ -118,6 +114,24 @@ tone; flat fills, strong edges, and noisy texture are protected. The full workfl
 recommended settings, limitations, engine attribution, and benchmark methodology
 are documented in [PIXEL_ART.md](PIXEL_ART.md) and
 [benchmarks/pixel_art/README.md](benchmarks/pixel_art/README.md).
+
+## Analog controls
+
+**Knob** outputs both a raw float and a quantized integer; **Switch** outputs a
+boolean. Both provide vintage studio hardware faces, editable tape labels, and
+compact mode, which hides unlinked setup widgets while preserving connections
+and saved values. The controls support Legacy and Nodes 2.0 frontends.
+
+Choose a theme from the right-click menu: ten knob themes include rotary dials,
+a chickenhead, and a linear fader; nine switch themes include rockers, levers,
+sliders, and an illuminated key. The original twelve themes have refreshed
+metal, Bakelite, and indicator artwork with their existing style IDs preserved.
+
+Drag a knob, hold Shift for fine adjustment, or enter an exact value in its
+readout. Arrow keys adjust values and Home/End reach the configured limits.
+Click a switch or focus it and press Space/Enter. Double-click the tape label
+(or focus it and press Enter) to rename it. Refresh the ComfyUI frontend after
+updating to load the new artwork.
 
 ## Ollama and network-backed nodes
 
