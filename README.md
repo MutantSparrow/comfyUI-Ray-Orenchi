@@ -1,6 +1,6 @@
 # comfyUI-Ray-Orenchi
 
-A collection of 18 ComfyUI custom nodes for image effects, pixel-art conversion,
+A collection of 19 ComfyUI custom nodes for image effects, pixel-art conversion,
 native local vision-language inference, prompt workflows, metadata, and compact
 analog controls. Nodes appear under the `👑 Ray` category in four groups:
 `✨ VFX`, `🎛️ Analog`, `📝 Prompts`, and `💬 LLM`.
@@ -22,6 +22,7 @@ analog controls. Nodes appear under the `👑 Ray` category in four groups:
 
 | Node | Group | Purpose |
 |---|---|---|
+| Ray Save Image | VFX | Save either or both image inputs as PNGs, or preview them with a draggable comparison divider |
 | Ray's VFX: CRT | VFX | CRT display simulation with phosphor masks, scanlines, halation, NTSC bleed, and barrel distortion |
 | Ray's VFX: Offset Print | VFX | CMYK or duotone halftone printing with paper simulation |
 | Ray's VFX: Pixel Art | VFX | Pixel-grid repair and illustration abstraction with palette reduction, selective dithering, outlines, native-size output, and comparison preview |
@@ -114,6 +115,30 @@ tone; flat fills, strong edges, and noisy texture are protected. The full workfl
 recommended settings, limitations, engine attribution, and benchmark methodology
 are documented in [PIXEL_ART.md](PIXEL_ART.md) and
 [benchmarks/pixel_art/README.md](benchmarks/pixel_art/README.md).
+
+## Ray Save Image
+
+Connect `image_1` and optionally `image_2`. The second input enables a draggable
+left/right comparison; images keep their aspect ratios, with letterboxing when
+needed. Batch arrows step through pairs; a single image can be compared against
+every image in the other batch.
+
+The **Save Image** slider selects **None**, **1** (default), **2**, or **Both**.
+The selection takes effect when the workflow executes. None creates temporary
+previews only. Both saves every connected input image, with unique filenames to
+avoid overwrites. Files are PNGs at their input resolution, including alpha.
+
+**Browse…** opens a folder picker for the computer running ComfyUI. The arrow next
+to it recalls the last three successfully used save folders, stored locally in
+that browser. You can also type an absolute destination or a path relative to
+ComfyUI's output directory; a blank path uses the output directory. A new typed
+folder is created on save.
+
+Right-click the node and toggle **Save without metadata** to omit prompt/workflow
+metadata. ComfyUI's global metadata-disable setting is also respected. The save
+selector and metadata choice are serialized with the workflow. The custom
+controls use shared Legacy/Nodes 2.0 DOM-widget support; frontends without DOM
+widgets retain the standard save-selection and metadata inputs.
 
 ## Analog controls
 

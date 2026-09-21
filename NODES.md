@@ -460,3 +460,25 @@ All outputs become available after the selected range finishes. Full-resolution
 images accumulate in RAM; use a small `limit` and advance `start_index` for
 large folders. ComfyUI manages model offloading; CPU staging is allowed, but
 the inference device must be a GPU. The checkpoint must fit the available resources.
+
+
+## Ray Save Image (`RaySaveImage`)
+
+**Category:** `👑 Ray/✨ VFX`. Output node; no output sockets.
+
+| Input | Purpose |
+|---|---|
+| `image_1` | Required IMAGE batch. |
+| `image_2` | Optional IMAGE batch; enables comparison. |
+| `save_image` | `none`, `1` (default), `2`, or `both`; presented as a four-position slider. |
+| `directory` | Blank for ComfyUI output, relative to output, or an absolute destination. Browse lists folders on the ComfyUI host. |
+| `filename_prefix` | Filename-only prefix; input number, batch index, and a unique ID are appended. |
+| `save_without_metadata` | Right-click toggle; removes prompt/workflow PNG text metadata. Defaults to false. |
+
+Saving happens on execution. Selecting 2 without image_2 gives an actionable
+error; Both with only image_1 saves that input. Preview-only mode writes only to
+ComfyUI's temporary folder. All saved images retain resolution and alpha. The
+comparison fits each image without stretching; a singleton repeats across the
+other batch, and unequal non-singleton batches show unpaired trailing images.
+Drag the divider or focus it and use Left/Right/Home/End. Folder history holds
+three successful destinations per browser, independently of workflow values.
