@@ -20,9 +20,10 @@ try {
         card.append(document.createElement('h2'), root); card.firstChild.textContent = accessor ? 'Prototype-backed widgets / Nodes 2.0' : 'Plain widgets / Legacy';
         document.querySelector('#gallery').append(card);
         check(find('save_image').value === '1', 'Default saves input 1');
-        const range = root.querySelector('input[type=range]');
-        range.value='3';range.dispatchEvent(new Event('input'));
-        check(find('save_image').value === 'both', 'Slider writes native serialized value');
+        const choices = root.querySelector('.ray-save-stops');
+        choices.children[3].click();
+        check(node.color === '#000000' && node.bgcolor === '#000000', 'Node defaults to black');
+        check(find('save_image').value === 'both', 'Save buttons write native serialized value');
         const menu=[];node.getExtraMenuOptions(null,menu); menu[0].callback();
         check(find('save_without_metadata').value === true, 'Context toggle writes native metadata input');
         check(menu.find(item => item.content === 'Open image location in Explorer').disabled, 'Explorer action disabled before first save');
@@ -53,9 +54,9 @@ try {
         root.querySelector('[aria-label="Next image pair"]').click();root.querySelector('[aria-label="Next image pair"]').click();
         check(root.querySelector('.ray-save-overlay').hidden && !root.querySelector('.ray-save-stage > img').hidden, 'Unpaired second image remains visible');
         find('save_image').value='none';node.onConfigure();
-        check(range.value === '0', 'Workflow restore synchronizes selector');
+        check(choices.children[0].getAttribute('aria-pressed') === 'true', 'Workflow restore synchronizes selector');
         node.inputs=[{name:'save_image',link:1}];node.onConnectionsChange();
-        check(range.disabled,'Linked selection disables local slider');
+        check([...choices.children].every(b => b.disabled),'Linked selection disables local buttons');
         node.inputs=[];node.onConnectionsChange();
         node.onExecuted({...msg,ray_images_2:[...msg.ray_images_2,...msg.ray_images_2]});
         root.querySelector('[aria-label="Next image pair"]').click();

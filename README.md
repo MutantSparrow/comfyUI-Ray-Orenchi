@@ -123,7 +123,7 @@ left/right comparison; images keep their aspect ratios, with letterboxing when
 needed. Batch arrows step through pairs; a single image can be compared against
 every image in the other batch.
 
-The **Save Image** slider selects **None**, **1** (default), **2**, or **Both**.
+The **Save Image** button group selects **None**, **1** (default), **2**, or **Both**.
 The selection takes effect when the workflow executes. None creates temporary
 previews only. Both saves every connected input image, with unique filenames to
 avoid overwrites. Files are PNGs at their input resolution, including alpha.
