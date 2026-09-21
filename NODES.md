@@ -470,7 +470,7 @@ the inference device must be a GPU. The checkpoint must fit the available resour
 |---|---|
 | `image_1` | Required IMAGE batch. |
 | `image_2` | Optional IMAGE batch; enables comparison. |
-| `save_image` | `none`, `1` (default), `2`, or `both`; presented as a four-position slider. |
+| `save_image` | `none`, `1` (default), `2`, or `both`; presented as compact segmented buttons. |
 | `directory` | Blank for ComfyUI output, relative to output, or an absolute destination. Browse lists folders on the ComfyUI host. |
 | `filename_prefix` | Filename-only prefix; input number, batch index, and a unique ID are appended. |
 | `save_without_metadata` | Right-click toggle; removes prompt/workflow PNG text metadata. Defaults to false. |
