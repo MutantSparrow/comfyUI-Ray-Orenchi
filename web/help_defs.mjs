@@ -9,6 +9,20 @@
 // selection-toolbar ? button lights up for free.
 
 export const RAY_HELP_DEFS = {
+    RaySaveImage: {
+        title: "Ray Save Image",
+        tagline: "Save PNGs or compare two image inputs in a compact black preview.",
+        sections: [{
+            heading: "Save and compare",
+            defs: [
+                ["Save Image", "None previews only; 1 saves the first input; 2 saves the second; Both saves all connected input images. Saving happens when the workflow executes."],
+                ["Comparison", "Connect image_2 and drag the divider. Dimensions appear below on the left; batch arrows are on the right. Images fit without stretching."],
+                ["Browse and history", "Choose a folder on the ComfyUI host. The arrow recalls the last three successful save destinations in this browser. Blank directory uses ComfyUI output; relative paths are resolved inside it."],
+                ["Right-click options", "Save without metadata omits workflow and prompt metadata. Open image location in Explorer opens the latest successful save folder on a Windows host."],
+                ["PNG output", "Saves 8-bit PNGs with original dimensions and alpha, using unique filenames. Preview-only images live in ComfyUI's temporary folder."],
+            ],
+        }],
+    },
     RayVLMFolder: {
         title: "Ray's LLM: Folder Captioner",
         tagline: "Caption each image in a folder with a local vision-language model on GPU.",
