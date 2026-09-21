@@ -146,6 +146,11 @@ the `image` output pin. Users route it to a downstream Preview Image or
 Save Image node — the pack does not paint an inline preview inside its
 own node bodies.
 
+**Ray Save Image** is the dedicated output-node exception: it embeds an image
+comparison preview, keeps its requested display name, and defaults to a black
+node and preview background. Its segmented save buttons share a row with Browse
+and recent folders; dimensions and batch navigation sit below the preview.
+
 ## Per-node quality checklist
 
 Every node must:
