@@ -7,6 +7,9 @@ analog controls. Nodes appear under the `👑 Ray` category in four groups:
 
 ## Highlights
 
+- **Ray Save Image** combines PNG saving and a two-input comparison preview,
+  with compact save buttons, folder browsing/history, and an Explorer shortcut.
+
 - **Fast Qwen3-VL Infer** reuses an existing native Qwen3-VL `CLIP` object and
   checkpoint. It does not convert to GGUF, start a server, or load a second model
   copy. It retains ComfyUI loading, FP8-scaled weights, offloading, vision
@@ -118,6 +121,9 @@ are documented in [PIXEL_ART.md](PIXEL_ART.md) and
 
 ## Ray Save Image
 
+The compact black panel shows image dimensions below the preview on the left
+and batch navigation on the right. Preview backgrounds are solid black.
+
 Connect `image_1` and optionally `image_2`. The second input enables a draggable
 left/right comparison; images keep their aspect ratios, with letterboxing when
 needed. Batch arrows step through pairs; a single image can be compared against
@@ -126,7 +132,7 @@ every image in the other batch.
 The **Save Image** button group selects **None**, **1** (default), **2**, or **Both**.
 The selection takes effect when the workflow executes. None creates temporary
 previews only. Both saves every connected input image, with unique filenames to
-avoid overwrites. Files are PNGs at their input resolution, including alpha.
+avoid overwrites. Files are 8-bit PNGs at their input resolution, including alpha.
 
 **Browse…** opens a folder picker for the computer running ComfyUI. The arrow next
 to it recalls the last three successfully used save folders, stored locally in
