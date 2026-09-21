@@ -29,6 +29,10 @@ analog controls. Nodes appear under the `👑 Ray` category in four groups:
 | Ray's VFX: VHS / Tape | VFX | YUV tape degradation, tracking faults, dropouts, noise, and OSD |
 | Ray's Analog: Knob | Analog | Float control with min/max, spin, and clamp behavior |
 | Ray's Analog: Switch | Analog | Boolean toggle control |
+
+Analog controls include ten knob and nine switch themes inspired by studio hardware.
+The original twelve themes have refreshed metal, Bakelite, and indicator artwork;
+existing workflows keep their style selections and value behavior.
 | Ray's LLM: Fast Qwen3-VL Infer | LLM | Fast image-to-text generation through an already loaded native Qwen3-VL CLIP, with no duplicate model |
 | Ray's LLM: Folder Captioner | LLM | Caption a sorted local image range with a full GPU VLM and return aligned text, image, and path lists |
 | Ray's LLM: Ollama Chat | LLM | Ollama or ComfyUI CLIP chat with image and audio attachments |
