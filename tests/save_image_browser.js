@@ -1,4 +1,5 @@
 import {app, nodeClass} from '/scripts/app.js';
+import {api} from '/scripts/api.js';
 import '/extensions/ray/ray_save_image.js';
 let passes = 0;
 const check = (value, message) => { if (!value) throw new Error(message); passes++; document.querySelector('#results').textContent += `PASS ${message}\n`; };
@@ -24,6 +25,7 @@ try {
         check(find('save_image').value === 'both', 'Slider writes native serialized value');
         const menu=[];node.getExtraMenuOptions(null,menu); menu[0].callback();
         check(find('save_without_metadata').value === true, 'Context toggle writes native metadata input');
+        check(menu.find(item => item.content === 'Open image location in Explorer').disabled, 'Explorer action disabled before first save');
         const msg={ray_images_1:[{filename:'first.png',type:'temp'}],ray_images_2:[{filename:'second.png',type:'temp'}],ray_saved:[]};
         node.onExecuted(msg);
         check(!root.querySelector('.ray-save-divider').hidden, 'Two images enable comparison');
@@ -41,6 +43,12 @@ try {
             const recent=root.querySelector('select');recent.value='D';recent.dispatchEvent(new Event('change'));
             check(find('directory').value === 'D', 'History selection writes destination widget');
         } finally { if(oldHistory===null)localStorage.removeItem(historyKey);else localStorage.setItem(historyKey,oldHistory); }
+        node.onExecuted(msg);
+        const savedMenu=[];node.getExtraMenuOptions(null,savedMenu);
+        const openLocation=savedMenu.find(item => item.content === 'Open image location in Explorer');
+        check(!openLocation.disabled, 'Preview-only execution retains last saved location');
+        await openLocation.callback();
+        check(api.lastRequest.options.method === 'POST' && JSON.parse(api.lastRequest.options.body).path === 'B', 'Explorer uses last successful save rather than edited destination');
         node.onExecuted({...msg,ray_images_1:[...msg.ray_images_1,...msg.ray_images_1],ray_images_2:[...msg.ray_images_2,...msg.ray_images_2,...msg.ray_images_2]});
         root.querySelector('[aria-label="Next image pair"]').click();root.querySelector('[aria-label="Next image pair"]').click();
         check(root.querySelector('.ray-save-overlay').hidden && !root.querySelector('.ray-save-stage > img').hidden, 'Unpaired second image remains visible');
