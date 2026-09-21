@@ -108,7 +108,7 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 
 ## 🎛️ Ray's Analog: Switch (`RaySwitch`)
 
-**Purpose.** Boolean toggle widget. Six physical styles, each with correct on/off geometry (Chrome Rocker press-LED-down = ON; Bakelite Flip bat-handle up = ON; Silver Paddle points to the lit label; Brass Slider slides toward the lit label).
+**Purpose.** Boolean toggle widget with nine studio-hardware themes. Rockers and illuminated keys show their active state; lever handles point up for ON, and horizontal paddles/sliders move toward the ON label.
 
 **Category:** `👑 Ray/🎛️ Analog`
 
