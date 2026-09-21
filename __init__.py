@@ -21,6 +21,8 @@ Web assets live under ./web and are served at /extensions/comfyUI-Ray-Orenchi/.
 
 # Tolerate standalone import (e.g. pytest collection) where relative imports fail.
 try:
+    from .ray_save_image import RaySaveImage
+    from .ray_save_image import register_routes as register_save_image_routes
     from .ray_crt import RayCRT
     from .ray_offset_print import RayOffsetPrint
     from .ray_pixel_detector import RayPixelArtDetector
@@ -45,6 +47,8 @@ try:
     from . import prompt_library_routes  # noqa: F401
     from . import film_stock_routes  # noqa: F401
 except ImportError:
+    from ray_save_image import RaySaveImage
+    from ray_save_image import register_routes as register_save_image_routes
     from ray_crt import RayCRT
     from ray_offset_print import RayOffsetPrint
     from ray_pixel_detector import RayPixelArtDetector
@@ -85,9 +89,16 @@ except ImportError:
         pass
 
 
+try:
+    register_save_image_routes()
+except ImportError:
+    pass
+
+
 WEB_DIRECTORY = "./web"
 
 NODE_CLASS_MAPPINGS = {
+    "RaySaveImage": RaySaveImage,
     "RayCRT":              RayCRT,
     "RayOffsetPrint":      RayOffsetPrint,
     "RayPixelArtDetector": RayPixelArtDetector,
@@ -109,6 +120,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "RaySaveImage": "Ray Save Image",
     # 👑 Ray/✨ VFX
     "RayCRT":              "✨ Ray's VFX: CRT",
     "RayOffsetPrint":      "✨ Ray's VFX: Offset Print",
