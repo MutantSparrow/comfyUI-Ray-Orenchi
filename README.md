@@ -140,6 +140,11 @@ selector and metadata choice are serialized with the workflow. The custom
 controls use shared Legacy/Nodes 2.0 DOM-widget support; frontends without DOM
 widgets retain the standard save-selection and metadata inputs.
 
+Right-click **Ray Save Image → Open image location in Explorer** to open the
+folder from its latest successful save. The option becomes available after a
+save in the current session and stays tied to that folder if you edit the next
+destination or run preview-only. Explorer opens on the Windows ComfyUI host.
+
 ## Analog controls
 
 **Knob** outputs both a raw float and a quantized integer; **Switch** outputs a

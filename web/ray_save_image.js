@@ -224,14 +224,30 @@ app.registerExtension({
             proto[event] = function () { const result = prior?.apply(this, arguments); this._raySave?.sync(); return result; };
         }
         const executed = proto.onExecuted;
-        proto.onExecuted = function (message) { const result = executed?.apply(this, arguments); this._raySave?.executed(message); return result; };
+        proto.onExecuted = function (message) {
+            const result = executed?.apply(this, arguments);
+            if (message.ray_saved?.length && message.ray_directory?.[0]) this._raySavedDirectory = message.ray_directory[0];
+            this._raySave?.executed(message); return result;
+        };
         const removed = proto.onRemoved;
         proto.onRemoved = function () { this._raySave?.destroy(); return removed?.apply(this, arguments); };
         const menu = proto.getExtraMenuOptions;
         proto.getExtraMenuOptions = function (canvas, options) {
             const result = menu?.apply(this, arguments), widget = findWidget(this, "save_without_metadata");
             options.unshift({content: `${widget?.value ? "✓ " : ""}Save without metadata`, disabled: linked(this, "save_without_metadata"),
-                callback: () => update(this, "save_without_metadata", !widget?.value)});
+                callback: () => update(this, "save_without_metadata", !widget?.value)},
+            {content: "Open image location in Explorer", disabled: !this._raySavedDirectory,
+                callback: async () => {
+                    if (!this._raySavedDirectory) return;
+                    try {
+                        const response = await api.fetchApi("/ray/save-image/open-location", {
+                            method: "POST", headers: {"Content-Type": "application/json"},
+                            body: JSON.stringify({path: this._raySavedDirectory}),
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || "Cannot open image location.");
+                    } catch (error) { window.alert(error.message); }
+                }});
             return result;
         };
     },
