@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { applyBucketTint, findWidget, setWidgetHidden } from "./_common.js";
+import { findWidget, setWidgetHidden } from "./_common.js";
 
 const modes = ["none", "1", "2", "both"];
 const historyKey = "ray.saveImage.paths.v1";
@@ -38,21 +38,21 @@ function styles() {
     if (document.getElementById("ray-save-style")) return;
     const css = element("style"); css.id = "ray-save-style";
     css.textContent = `
-.ray-save {box-sizing:border-box;width:100%;height:100%;padding:8px;display:flex;flex-direction:column;gap:8px;background:#202126;color:#eee;font:12px system-ui;border-radius:8px;overflow:hidden}
+.ray-save {box-sizing:border-box;width:100%;height:100%;padding:5px;display:flex;flex-direction:column;gap:4px;background:#000;color:#eee;font:12px system-ui;border-radius:8px;overflow:hidden}
 .ray-save *, .ray-save-dialog * {box-sizing:border-box}
-.ray-save button,.ray-save select,.ray-save-dialog button,.ray-save-dialog input,.ray-save-dialog select {font:inherit;color:inherit;background:#33353d;border:1px solid #51535e;border-radius:5px;padding:5px 8px;min-width:0}
+.ray-save button,.ray-save select,.ray-save-dialog button,.ray-save-dialog input,.ray-save-dialog select {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:4px;padding:3px 6px;min-width:0}
 .ray-save button:disabled {opacity:.4}
 .ray-save button:hover:not(:disabled),.ray-save-dialog button:hover {background:#454753}
 .ray-save :focus-visible,.ray-save-dialog :focus-visible {outline:2px solid #b9a4fa;outline-offset:2px}
 .ray-save-toolbar {display:flex;gap:5px;align-items:center;flex-shrink:0}
-.ray-save-toolbar label {margin-right:auto}
-.ray-save-range {width:100%;accent-color:#b7a2ef;margin:0;cursor:pointer}
-.ray-save-stops {display:flex;justify-content:space-between;gap:4px}
-.ray-save-stops button {flex:1;padding:3px;font-size:11px;background:transparent;border-color:transparent}
-.ray-save-stops button[aria-pressed=true] {background:#534570;border-color:#a48bce}
-.ray-save-stage {position:relative;flex:1;min-height:140px;overflow:hidden;border-radius:5px;background:repeating-conic-gradient(#24252a 0% 25%,#2e3035 0% 50%) 50%/16px 16px;touch-action:none}
+.ray-save-toolbar label {white-space:nowrap;font-size:11px}
+.ray-save > .ray-save-toolbar {gap:4px}
+.ray-save-stops {display:flex;flex-shrink:0;gap:0;margin-right:auto;border:1px solid #444;border-radius:4px;overflow:hidden}
+.ray-save-stops button {flex:0 0 auto;padding:3px 6px;font-size:11px;background:transparent;border:0;border-radius:0}
+.ray-save-stops button[aria-pressed=true] {background:#ddd;color:#111}
+.ray-save-stage {position:relative;flex:1;min-height:140px;overflow:hidden;border-radius:5px;background:#000;touch-action:none}
 .ray-save-stage img {position:absolute;width:100%;height:100%;object-fit:contain;inset:0;pointer-events:none}
-.ray-save-overlay {position:absolute;inset:0;pointer-events:none;background:repeating-conic-gradient(#24252a 0% 25%,#2e3035 0% 50%) 50%/16px 16px}
+.ray-save-overlay {position:absolute;inset:0;pointer-events:none;background:#000}
 .ray-save-divider {position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 2px #000;pointer-events:none}
 .ray-save-divider::after {content:'‹ ›';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#f5f3fa;color:#222;border-radius:12px;padding:6px 4px;white-space:nowrap;font:bold 13px system-ui;box-shadow:0 1px 5px #0008}
 .ray-save-empty {position:absolute;inset:0;display:grid;place-items:center;color:#bbb;text-align:center;padding:24px;pointer-events:none}
@@ -122,15 +122,14 @@ function build(node) {
         recent.replaceChildren(element("option", "", ""), ...history().map(p => { const o = element("option", "", p); o.value = p; return o; }));
         recent.selectedIndex = 0;
     }
-    recent.style.maxWidth = "42px"; recentOptions();
+    recent.style.width = "25px"; recentOptions();
     recent.addEventListener("pointerdown", recentOptions);
     recent.onchange = () => { if (recent.selectedIndex > 0) update(node, "directory", recent.value); recent.selectedIndex = 0; };
     const label = element("label", "", "Save Image"), state = element("span", "ray-save-status");
-    toolbar.append(label, browse, recent);
-    const range = element("input", "ray-save-range"); range.type = "range"; range.min = "0"; range.max = "3"; range.step = "1";
-    range.setAttribute("aria-label", "Save Image"); range.oninput = () => update(node, "save_image", modes[Number(range.value)]);
     const stops = element("div", "ray-save-stops");
+    stops.setAttribute("role", "group"); stops.setAttribute("aria-label", "Save Image");
     modes.forEach(mode => stops.append(button(mode === "none" ? "None" : mode === "both" ? "Both" : mode, () => update(node, "save_image", mode))));
+    toolbar.append(label, stops, browse, recent);
     const stage = element("div", "ray-save-stage"), first = element("img"), second = element("img"), overlay = element("div", "ray-save-overlay");
     first.alt = "Image 1"; second.alt = "Image 2"; overlay.append(first);
     const divider = element("div", "ray-save-divider"), empty = element("div", "ray-save-empty", "Queue the workflow to preview images");
@@ -193,15 +192,13 @@ function build(node) {
         updateSizes();
     }
     [first, second].forEach(img => img.addEventListener("error", () => { state.textContent = "Preview expired. Queue again to refresh."; }));
-    root.append(toolbar, range, stops, stage, footer, state);
+    root.append(toolbar, stage, footer, state);
     for (const event of ["pointerdown", "mousedown", "click", "dblclick", "keydown", "keyup", "wheel"]) root.addEventListener(event, e => e.stopPropagation());
     const ui = {
         root,
         sync() {
             const mode = findWidget(node, "save_image")?.value || "1";
-            range.value = String(Math.max(0, modes.indexOf(mode))); range.setAttribute("aria-valuetext", mode);
-            range.disabled = linked(node, "save_image");
-            [...stops.children].forEach((b, i) => { b.disabled = range.disabled; b.setAttribute("aria-pressed", String(mode === modes[i])); });
+            [...stops.children].forEach((b, i) => { b.disabled = linked(node, "save_image"); b.setAttribute("aria-pressed", String(mode === modes[i])); });
             browse.disabled = recent.disabled = linked(node, "directory");
         },
         executed(message) {
@@ -222,19 +219,21 @@ app.registerExtension({
         if (nodeData.name !== "RaySaveImage") return;
         const proto = nodeType.prototype, created = proto.onNodeCreated;
         proto.onNodeCreated = function () {
-            const result = created?.apply(this, arguments); applyBucketTint(this, "VFX");
+            const result = created?.apply(this, arguments); this.color = this.bgcolor = "#000000";
             if (!this.addDOMWidget) return result;
             this._raySave = build(this);
             for (const name of ["save_image", "save_without_metadata"]) setWidgetHidden(this, findWidget(this, name), true);
             this.addDOMWidget("ray_save_preview", "RAY_SAVE_IMAGE", this._raySave.root, {
-                serialize: false, hideOnZoom: false, getMinHeight: () => 330, getMaxHeight: () => 600, getHeight: () => 380,
+                serialize: false, hideOnZoom: false, getMinHeight: () => 220, getMaxHeight: () => 600, getHeight: () => 300,
             });
-            this.setSize?.([Math.max(this.size?.[0] || 0, 350), Math.max(this.size?.[1] || 0, 490)]);
+            this.setSize?.([Math.max(this.size?.[0] || 0, 320), Math.max(this.size?.[1] || 0, 400)]);
             return result;
         };
         for (const event of ["onConfigure", "onConnectionsChange"]) {
             const prior = proto[event];
-            proto[event] = function () { const result = prior?.apply(this, arguments); this._raySave?.sync(); return result; };
+            proto[event] = function () { const result = prior?.apply(this, arguments);
+                if (event === "onConfigure" && this.bgcolor === "#2a1f3a" && this.color === "#8a3ac8") this.color = this.bgcolor = "#000000";
+                this._raySave?.sync(); return result; };
         }
         const executed = proto.onExecuted;
         proto.onExecuted = function (message) {
