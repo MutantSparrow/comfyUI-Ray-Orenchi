@@ -58,6 +58,9 @@ function styles() {
 .ray-save-empty {position:absolute;inset:0;display:grid;place-items:center;color:#bbb;text-align:center;padding:24px;pointer-events:none}
 .ray-save-badge {position:absolute;top:8px;background:#111b;padding:3px 6px;border-radius:3px;pointer-events:none;font-size:10px}
 .ray-save-status {font-size:11px;color:#c0bdc8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:15px}
+.ray-save-footer {display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;min-height:16px}
+.ray-save-sizes {font-size:11px;line-height:1.4;color:#c0bdc8;min-width:0;white-space:pre-line}
+.ray-save-footer .ray-save-toolbar {margin-left:auto;flex-shrink:0}
 .ray-save-dialog {width:min(620px,90vw);max-height:80vh;background:#24252b;color:#eee;border:1px solid #62616d;border-radius:10px;padding:16px;font:13px system-ui}
 .ray-save-dialog::backdrop {background:#0008}
 .ray-save-dialog h3 {margin:0 0 12px;font-size:16px}
@@ -138,6 +141,15 @@ function build(node) {
     stage.setAttribute("aria-valuemin", "0"); stage.setAttribute("aria-valuemax", "100");
     let fraction = .5, arrays = [[], []], index = 0, comparing = false, activePointer = null;
     const batch = element("div", "ray-save-toolbar"), count = element("span", "ray-save-status");
+    const footer = element("div", "ray-save-footer"), sizes = element("span", "ray-save-sizes");
+    footer.append(sizes, batch);
+    function updateSizes() {
+        sizes.textContent = [first, second].flatMap((img, n) =>
+            !img.hidden && img.complete && img.naturalWidth
+                ? [`${arrays[1].length ? `${n + 1}: ` : ""}${img.naturalWidth} × ${img.naturalHeight}`] : []
+        ).join("\n");
+    }
+    [first, second].forEach(img => img.addEventListener("load", updateSizes));
     const previous = button("‹", () => { index--; show(); }), next = button("›", () => { index++; show(); });
     previous.setAttribute("aria-label", "Previous image pair"); next.setAttribute("aria-label", "Next image pair");
     batch.append(previous, count, next);
@@ -178,9 +190,10 @@ function build(node) {
         count.textContent = `${index + 1} / ${total}${!comparing && arrays[1].length ? " · Unpaired image" : ""}`;
         previous.disabled = index === 0; next.disabled = index >= total - 1;
         position(fraction);
+        updateSizes();
     }
     [first, second].forEach(img => img.addEventListener("error", () => { state.textContent = "Preview expired. Queue again to refresh."; }));
-    root.append(toolbar, range, stops, stage, batch, state);
+    root.append(toolbar, range, stops, stage, footer, state);
     for (const event of ["pointerdown", "mousedown", "click", "dblclick", "keydown", "keyup", "wheel"]) root.addEventListener(event, e => e.stopPropagation());
     const ui = {
         root,
