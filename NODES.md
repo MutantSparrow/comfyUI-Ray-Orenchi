@@ -482,3 +482,8 @@ comparison fits each image without stretching; a singleton repeats across the
 other batch, and unequal non-singleton batches show unpaired trailing images.
 Drag the divider or focus it and use Left/Right/Home/End. Folder history holds
 three successful destinations per browser, independently of workflow values.
+
+Right-click **Ray Save Image → Open image location in Explorer** to open the
+folder from its latest successful save. The option becomes available after a
+save in the current session and stays tied to that folder if you edit the next
+destination or run preview-only. Explorer opens on the Windows ComfyUI host.

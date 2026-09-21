@@ -6,6 +6,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import Mock, patch
 
 import numpy as np
 from PIL import Image
@@ -107,6 +108,21 @@ class SaveTests(unittest.TestCase):
         result = module.list_directories("")
         self.assertEqual([f["name"] for f in result["folders"]], ["Child"])
         self.assertEqual(result["path"], str((self.root / "output").resolve()))
+
+    def test_explorer_opens_only_existing_folder(self):
+        self.run_save()
+        launch = Mock()
+        with patch.object(module, "os", types.SimpleNamespace(name="nt", startfile=launch)):
+            module.open_image_location(str(self.root / "output"))
+            launch.assert_called_once_with(str((self.root / "output").resolve()), "explore")
+
+    def test_explorer_rejects_files_missing_and_empty_paths(self):
+        saved = self.run_save()["ray_saved"][0]
+        launch = Mock()
+        with patch.object(module, "os", types.SimpleNamespace(name="nt", startfile=launch)):
+            for value in (saved, str(self.root / "missing"), "", None):
+                with self.assertRaises(ValueError): module.open_image_location(value)
+            launch.assert_not_called()
 
 
 if __name__ == "__main__":

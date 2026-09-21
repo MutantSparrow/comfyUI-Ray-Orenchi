@@ -104,6 +104,18 @@ def list_directories(value):
     return {"path": str(path), "parent": str(path.parent), "folders": sorted(children, key=lambda item: item["name"].casefold()), "roots": roots}
 
 
+def open_image_location(value):
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("Save an image before opening its location.")
+    path = destination_path(value)
+    if not path.is_dir():
+        raise ValueError("The saved image folder no longer exists.")
+    if os.name != "nt":
+        raise ValueError("Open in Explorer is available on Windows hosts.")
+    # Open only a verified directory, never an arbitrary file or shell command.
+    os.startfile(str(path), "explore")
+
+
 def register_routes():
     import asyncio
     from aiohttp import web
@@ -113,5 +125,18 @@ def register_routes():
     async def folders(request):
         try:
             return web.json_response(await asyncio.to_thread(list_directories, request.query.get("path", "")))
+        except (OSError, ValueError) as error:
+            return web.json_response({"error": str(error)}, status=400)
+
+    @PromptServer.instance.routes.post("/ray/save-image/open-location")
+    async def open_location(request):
+        if request.content_type != "application/json":
+            return web.json_response({"error": "Expected a JSON request."}, status=415)
+        try:
+            data = await request.json()
+            if not isinstance(data, dict):
+                raise ValueError("Expected a folder path.")
+            await asyncio.to_thread(open_image_location, data.get("path"))
+            return web.json_response({"ok": True})
         except (OSError, ValueError) as error:
             return web.json_response({"error": str(error)}, status=400)
