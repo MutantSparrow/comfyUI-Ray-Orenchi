@@ -112,6 +112,10 @@ try {
             card.append(heading,node._rayAnalog.element);document.querySelector('#gallery').append(card);
         }
     }
+    check([...document.querySelectorAll('svg *')].every(el =>
+        [...el.attributes].every(attr => [...attr.value.matchAll(/url\(#([^)]+)\)/g)]
+            .every(match => document.getElementById(match[1])))),
+        'All mounted SVG material references resolve, including masks and strokes');
     const ids=[...document.querySelectorAll('svg [id]')].map(el=>el.id);
     check(new Set(ids).size===ids.length,'All simultaneously mounted SVG resource IDs are unique');
     check([...document.querySelectorAll('svg [fill^="url(#"]')].every(el=>document.getElementById(el.getAttribute('fill').slice(5,-1))), 'SVG gradient references resolve');
