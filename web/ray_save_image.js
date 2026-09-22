@@ -115,6 +115,11 @@ function folderPicker(node) {
 
 function build(node) {
     styles();
+    const navigation = new AbortController();
+    let spaceHeld = false, panClick = false;
+    window.addEventListener("keydown", e => { if (e.code === "Space" || e.key === " ") spaceHeld = true; }, {capture: true, signal: navigation.signal});
+    window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") spaceHeld = false; }, {capture: true, signal: navigation.signal});
+    window.addEventListener("blur", () => { spaceHeld = false; }, {signal: navigation.signal});
     const root = element("div", "ray-save"), toolbar = element("div", "ray-save-toolbar");
     const browse = button("Browse…", () => folderPicker(node));
     const recent = element("select"); recent.title = "Last three save folders"; recent.setAttribute("aria-label", "Recent save folders");
@@ -162,7 +167,7 @@ function build(node) {
         const rect = stage.getBoundingClientRect();
         if (rect.width) position((e.clientX - rect.left) / rect.width);
     }
-    stage.onpointerdown = e => { if (!comparing || e.button !== 0) return; activePointer = e.pointerId; stage.setPointerCapture(e.pointerId); drag(e); e.preventDefault(); };
+    stage.onpointerdown = e => { if (spaceHeld || !comparing || e.button !== 0) return; activePointer = e.pointerId; stage.setPointerCapture(e.pointerId); drag(e); e.preventDefault(); };
     stage.onpointermove = e => { if (activePointer === e.pointerId) drag(e); };
     stage.onpointerup = stage.onpointercancel = e => { if (stage.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId); activePointer = null; };
     stage.onlostpointercapture = () => { activePointer = null; };
@@ -193,7 +198,19 @@ function build(node) {
     }
     [first, second].forEach(img => img.addEventListener("error", () => { state.textContent = "Preview expired. Queue again to refresh."; }));
     root.append(toolbar, stage, footer, state);
-    for (const event of ["pointerdown", "mousedown", "click", "dblclick", "keydown", "keyup", "wheel"]) root.addEventListener(event, e => e.stopPropagation());
+    // Keep canvas navigation alive over DOM widgets. Only ordinary control
+    // interactions belong to this panel; wheel, Space-pan and middle-pan bubble.
+    root.addEventListener("pointerdown", e => { panClick = spaceHeld || e.button === 1; }, true);
+    root.addEventListener("click", e => {
+        if (panClick) { panClick = false; e.preventDefault(); e.stopImmediatePropagation(); }
+    }, true);
+    for (const event of ["pointerdown", "mousedown", "click", "dblclick"]) root.addEventListener(event, e => {
+        if (!spaceHeld && e.button === 0) e.stopPropagation();
+    });
+    for (const event of ["keydown", "keyup"]) root.addEventListener(event, e => {
+        if (e.ctrlKey || e.metaKey || e.altKey || e.code === "Space" || e.key === " ") return;
+        if (e.defaultPrevented || ["Enter", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) e.stopPropagation();
+    });
     const ui = {
         root,
         sync() {
@@ -208,7 +225,7 @@ function build(node) {
             if (message.ray_directory?.[0]) { remember(message.ray_directory[0]); recentOptions(); }
             show();
         },
-        destroy() { node._raySaveDialog?.close(); first.removeAttribute("src"); second.removeAttribute("src"); },
+        destroy() { navigation.abort(); node._raySaveDialog?.close(); first.removeAttribute("src"); second.removeAttribute("src"); },
     };
     show(); ui.sync(); return ui;
 }
