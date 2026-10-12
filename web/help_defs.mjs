@@ -213,7 +213,7 @@ export const RAY_HELP_DEFS = {
             bullets: [
                 "Inspect parses A1111 `parameters`, ComfyUI graphs, EXIF comments and sidecar text.",
                 "Embed writes the connected image with `metadata_json` to `path`, then re-reads the file to verify it.",
-                "Drop an image on the node's drop zone to fill in `path` and preview it.",
+                "In Inspect, connect a Load Image node to `image` and it reads that file's metadata (a connected image wins over `path`). Generated images have no file, so use `path` for those.",
             ],
         }],
     },
