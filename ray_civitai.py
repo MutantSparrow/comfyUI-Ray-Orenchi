@@ -466,7 +466,7 @@ class RayCivitAI:
         "Gallery image (BHWC float32 [0,1]); 1x1 black on fetch failure.",
     )
     FUNCTION = "process"
-    CATEGORY = "👑 Ray/📝 Prompts"
+    CATEGORY = "👑 Ray/🔧 Tools"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):

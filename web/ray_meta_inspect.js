@@ -246,7 +246,7 @@ function wirePathStripper(node) {
 }
 
 function bootstrap(node) {
-    applyBucketTint(node, "Prompts");
+    applyBucketTint(node, "Tools");
     injectDropZone(node);
     injectPreview(node);
     wirePathStripper(node);
