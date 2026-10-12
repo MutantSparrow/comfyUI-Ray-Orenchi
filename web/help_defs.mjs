@@ -42,7 +42,7 @@ export const RAY_HELP_DEFS = {
                 "Use `repair_pixel_art` for existing pixel grids and `illustration_photo` for region abstraction.",
                 "`palette_strategy` builds the palette; `palette_mapping` assigns pixels to it. A connected `palette_image` overrides generated palettes (up to 256 exact colors).",
                 "Dithering is limited to smooth ramps; flat fills, texture and strong edges are protected. Start with `none`.",
-                "Exact aspect ratio can limit feasible sizes (for example 1001×667 cannot shrink exactly). See PIXEL_ART.md for details.",
+                "Exact aspect ratio can limit feasible sizes (for example 1001×667 cannot shrink exactly).",
             ],
         }],
     },
@@ -108,29 +108,6 @@ export const RAY_HELP_DEFS = {
     },
 
     // ── 💬 LLM ─────────────────────────────────────────────────────────
-    RayOllamaChat: {
-        summary: "A chat panel inside the node. It talks to a local Ollama server, or to the text encoder of a CLIP already loaded in ComfyUI, with optional image and audio attachments.",
-        sections: [{
-            heading: "Notes",
-            bullets: [
-                "`ollama` mode needs a running Ollama server with the selected model installed; `clip` mode needs no server and rejects vision-language CLIPs.",
-                "`attach_image` / `attach_audio` decide whether the connected IMAGE / AUDIO goes with the next message.",
-                "The chat history is stored on the node, so it survives reloading the workflow.",
-            ],
-        }],
-    },
-
-    RayPromptIterator: {
-        summary: "Asks an Ollama model how well an image matches its prompt, returning a confidence score and a revised prompt that aims to close the gap.",
-        sections: [{
-            heading: "Notes",
-            bullets: [
-                "Wire `new_prompt` back into your text encoder to iterate.",
-                "The judge instructions live in `iterator_sysprompt.txt` next to the node code; edit it to customize scoring.",
-            ],
-        }],
-    },
-
     RayPromptLibrary: {
         summary: "A local SQLite prompt library. Save mode stores prompts with tags and source; Browse mode searches the library and outputs the selected row.",
         sections: [{
@@ -160,7 +137,7 @@ export const RAY_HELP_DEFS = {
             heading: "Notes",
             bullets: [
                 "Load a full Qwen3-VL 4B or 8B checkpoint with CLIPLoader (type `qwen_image`, or `krea2`). The same CLIP can also feed image conditioning.",
-                "See FAST_VLM.md for measurements and FAST_VLM_RELIABILITY.md for the repetition safeguards.",
+                "See FAST_VLM.md for measurements and constraints.",
             ],
         }],
     },

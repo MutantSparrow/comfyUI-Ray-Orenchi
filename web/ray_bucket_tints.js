@@ -24,8 +24,6 @@ const RAY_BUCKET = {
     RayPromptFetcher: "Tools",
     RayMetaInspect: "Tools",
     // LLM
-    RayOllamaChat: "LLM",
-    RayPromptIterator: "LLM",
     RayPromptLibrary: "LLM",
 };
 
