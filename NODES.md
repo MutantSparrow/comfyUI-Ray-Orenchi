@@ -329,23 +329,40 @@ In `Inspect`, connect a **Load Image** node to `image` and the node reads the me
 
 ## ✨ Ray's VFX: VHS / Tape (`RayVHS`)
 
-**Purpose.** Videotape degradation modeled in YUV space: chroma blur, head-switching band, tracking wobble, dropouts, hiss, Y/C separation — plus an OSD overlay that mimics a classic VCR readout.
+**Purpose.** Videotape degradation modeled as a signal chain in YUV space, plus an OSD overlay that mimics a classic VCR readout. The stages follow the path a tape signal takes: soft luma with deck sharpening halos, low-bandwidth colour that smears and lags behind the picture, cross-colour rainbows around fine detail, smooth line-level time-base wobble with tracking bands and a bent top edge, the torn head-switching band at the bottom, streaky tape noise, and dropouts.
 
-Each slider defaults to `-1.0` (meaning "use the preset value") and `0..1` overrides that channel.
+Every effect is sized relative to the picture, not in pixels, so a preset looks the same on a small frame and on a 4K one. A fixed `seed` always gives the same tape, and changing one slider never reshuffles another effect's noise.
+
+Each slider defaults to `-1.0` (meaning "use the preset value") and `0..1` overrides that one effect. Setting every slider to `0` leaves only the preset's softness, colour and levels; the picture is otherwise clean.
+
+**Presets.** Each preset is a tape and deck: it sets the softness, deck sharpening halos, colour handling, levels and the starting value of every slider.
+
+| Preset | What it models |
+|--------|----------------|
+| Pristine SP | A well-kept standard-play tape on a good deck: soft, slightly lifted blacks, colour smeared a little, hardly any faults. |
+| S-VHS | Higher-resolution luma and separated colour (no rainbow artifacts), very stable. |
+| Worn EP | A rewatched extended-play tape (the default): soft, noisy, colour lagging, tracking wander, dropouts and a visible head-switch tear. |
+| Gen-3 dub | A copy of a copy: very soft, washed-out and hue-drifted colour, strong halos, heavy noise and dropouts. |
+| VHS-C camcorder | A compact-cassette camcorder: punchy saturated colour, crunchy highlights, strong sharpening, little tape damage. |
+| Hi8 | 8 mm tape: sharper than VHS with good colour and few faults. |
+| Rental tape | A shop rental played to death: many dropouts, tracking trouble and a bent top edge. |
+| Off-air LP | A long-play recording from broadcast TV: soft, with strong cross-colour rainbows and colour lag. |
+| Chewed tape | Damaged tape: tracking bands full of snow, a badly torn bottom edge, constant dropouts. |
+| Custom | A neutral middle setting to start your own look from. |
 
 **Category:** `👑 Ray/✨ VFX`
 
 | Pin | Type | Notes |
 |-----|------|-------|
 | **Input** `image` | IMAGE | Source frame(s). |
-| **Control** `preset` | enum | Tape / speed preset (baseline for the sliders below). |
-| **Control** `chroma_blur` | float ±1 | Chroma blur strength. |
-| **Control** `head_switch` | float ±1 | Head-switching band at the frame bottom. |
-| **Control** `tracking_jitter` | float ±1 | Horizontal tracking wobble. |
-| **Control** `dropout_rate` | float ±1 | Bright dropout streaks. |
-| **Control** `hiss` | float ±1 | Luma noise / analog hiss. |
-| **Control** `yc_separation` | float ±1 | Y/C separation artifact strength. |
-| **Control** `osd_mode` | enum | `Off` / `▶ PLAY` / `● REC` / `Date` / `Date+Time`. |
+| **Control** `preset` | enum | Tape and deck (baseline for the sliders below). |
+| **Control** `chroma_blur` | float ±1 | Colour bandwidth loss: how far chroma smears and lags the picture. |
+| **Control** `head_switch` | float ±1 | The skewed, noisy band at the bottom of the frame. |
+| **Control** `tracking_jitter` | float ±1 | Line wobble and tracking bands (with snow). |
+| **Control** `dropout_rate` | float ±1 | Dropout streaks, short bright or dark lines with a soft tail. |
+| **Control** `hiss` | float ±1 | Tape noise in brightness and colour, streaky along the scanline. |
+| **Control** `yc_separation` | float ±1 | Cross-colour rainbows and dot crawl around fine detail. |
+| **Control** `osd_mode` | enum | `Off` / `▶ PLAY` / `● REC` / `Date` / `Date+Time`, drawn in a built-in VCR pixel font. |
 | **Control** `osd_corner` | enum | `TL` / `TR` / `BL` / `BR`. |
 | **Control** `osd_date` | string | `YYYY MM DD`; blank stamps today's date. |
 | **Control** `seed` | int | `-1` for random; any `≥0` value is reproducible. |
