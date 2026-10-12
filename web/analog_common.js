@@ -67,6 +67,23 @@ function injectStyles() {
 .ray-analog-panel::before { left:5px; }
 .ray-analog-panel::after { right:5px; }
 .ray-analog-panel .ray-dymo { flex-shrink:0; margin:0; }
+.ray-style-picker {
+    position:fixed; z-index:100000; box-sizing:border-box; min-width:230px; max-width:calc(100vw - 16px);
+    max-height:min(72vh,520px); overflow-x:hidden; overflow-y:auto; padding:6px;
+    background:#1b1c1f; color:#e6e6e6; border:1px solid #4a4c52; border-radius:8px;
+    box-shadow:0 10px 30px #000a; font:13px/1.3 system-ui,sans-serif;
+}
+.ray-style-heading { margin:6px 8px 3px; font:600 10px system-ui; letter-spacing:.08em; text-transform:uppercase; color:#8d9096; }
+.ray-style-item {
+    display:flex; align-items:center; gap:8px; width:100%; padding:6px 8px; border:0; border-radius:5px;
+    background:transparent; color:inherit; font:inherit; text-align:left; white-space:nowrap; cursor:pointer;
+}
+.ray-style-item:hover, .ray-style-item:focus-visible { background:#33363c; outline:none; }
+.ray-style-item[aria-checked="true"] { color:#fff; }
+.ray-style-swatch { flex:none; width:10px; height:10px; border-radius:3px; border:1px solid #0009; background:#b6b8bb; }
+.ray-style-swatch[data-panel="charcoal"] { background:#34464a; }
+.ray-style-swatch[data-panel="olive"] { background:#c6c8ad; }
+.ray-style-mark { margin-left:auto; padding-left:12px; }
 .ray-analog-panel .ray-analog-face {
     display:block; flex:0 0 140px; width:140px; height:140px; max-width:100%;
     padding:0; border:0; border-radius:8px; background:transparent;
@@ -101,6 +118,79 @@ function injectStyles() {
 }
 `;
     document.head.appendChild(style);
+}
+
+// The style choice opens its own floating panel instead of a nested context-menu submenu: LiteGraph
+// pushes submenus over their parent near the screen edge, and the Nodes 2.0 menu renders them inside
+// its own scroll container, where they overflow sideways and become unreachable.
+let lastPointer = [0, 0];
+if (typeof window !== "undefined") {
+    lastPointer = [window.innerWidth / 2, window.innerHeight / 3];
+    window.addEventListener("pointerdown", event => { lastPointer = [event.clientX, event.clientY]; }, true);
+}
+
+export function openStylePicker(node, kind, styles) {
+    document.querySelector(".ray-style-picker")?.remove();
+    const picker = document.createElement("div");
+    picker.className = "ray-style-picker";
+    picker.setAttribute("role", "menu");
+    picker.setAttribute("aria-label", `${kind === "knob" ? "Control" : "Switch"} style`);
+    // Knob faces first, then sliders, each under a heading.
+    const entries = Object.entries(styles).sort(([, a], [, b]) => (a.kind === "slider") - (b.kind === "slider"));
+    const items = [];
+    let group = null;
+    for (const [key, style] of entries) {
+        const heading = kind === "knob" ? (style.kind === "slider" ? "Sliders" : "Knobs") : null;
+        if (heading && heading !== group) {
+            const title = document.createElement("div");
+            title.className = "ray-style-heading"; title.setAttribute("role", "presentation"); title.textContent = heading;
+            picker.append(title);
+        }
+        group = heading;
+        const current = node.properties.style === key;
+        const item = document.createElement("button");
+        item.type = "button"; item.className = "ray-style-item";
+        item.setAttribute("role", "menuitemradio"); item.setAttribute("aria-checked", String(current));
+        const swatch = document.createElement("span");
+        swatch.className = "ray-style-swatch"; swatch.dataset.panel = style.panel || "silver";
+        const label = document.createElement("span");
+        label.textContent = style.label;
+        item.append(swatch, label);
+        if (current) {
+            const mark = document.createElement("span");
+            mark.className = "ray-style-mark"; mark.textContent = "●";
+            item.append(mark);
+        }
+        item.addEventListener("click", () => {
+            close();
+            editNode(node, () => {
+                node.properties.style = key;
+                node._rayAnalog?.render();
+            });
+        });
+        items.push(item);
+        picker.append(item);
+    }
+    const stop = new AbortController();
+    function close() { stop.abort(); picker.remove(); }
+    document.body.append(picker);
+    // Keep the whole panel inside the window; it scrolls vertically if it is taller than the space.
+    const box = picker.getBoundingClientRect(), margin = 8;
+    picker.style.left = `${Math.max(margin, Math.min(lastPointer[0], window.innerWidth - box.width - margin))}px`;
+    picker.style.top = `${Math.max(margin, Math.min(lastPointer[1], window.innerHeight - box.height - margin))}px`;
+    const signal = stop.signal;
+    window.addEventListener("pointerdown", event => { if (!picker.contains(event.target)) close(); }, { capture: true, signal });
+    window.addEventListener("resize", close, { signal });
+    window.addEventListener("blur", close, { signal });
+    picker.addEventListener("keydown", event => {
+        event.stopPropagation();
+        const at = items.indexOf(document.activeElement);
+        const move = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[event.key];
+        if (event.key === "Escape") { event.preventDefault(); close(); }
+        else if (move !== undefined) { event.preventDefault(); items[(move + items.length) % items.length].focus(); }
+    });
+    (items.find(item => item.getAttribute("aria-checked") === "true") || items[0])?.focus({ preventScroll: false });
+    return picker;
 }
 
 export function createPanel(node, kind, css) {
@@ -253,25 +343,10 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
             const menu = proto.getExtraMenuOptions;
             proto.getExtraMenuOptions = function (canvas, options) {
                 const result = menu?.apply(this, arguments);
-                // Knob styles are listed before slider styles, each group under a heading.
-                const grouped = Object.entries(styles).sort(([, a], [, b]) => (a.kind === "slider") - (b.kind === "slider"));
-                const styleOptions = [];
-                let group = null;
-                for (const [key, style] of grouped) {
-                    const heading = kind === "knob" ? (style.kind === "slider" ? "Sliders" : "Knobs") : null;
-                    if (heading && heading !== group) styleOptions.push({ content: heading, disabled: true });
-                    group = heading;
-                    styleOptions.push({
-                        content: `${this.properties.style === key ? "● " : ""}${style.label}`,
-                        callback: () => editNode(this, () => {
-                            this.properties.style = key;
-                            this._rayAnalog?.render();
-                        }),
-                    });
-                }
                 options.unshift(
-                    { content: `${kind === "knob" ? "Control" : "Switch"} Style`, has_submenu: true,
-                        submenu: { options: styleOptions } },
+                    // Deferred so the context menu has finished closing before the picker takes focus.
+                    { content: `${kind === "knob" ? "Control" : "Switch"} Style…`,
+                        callback: () => setTimeout(() => openStylePicker(this, kind, styles), 0) },
                     { content: `${this.properties.compact ? "● " : ""}Compact mode`,
                         callback: () => editNode(this, () => {
                             this.properties.compact = !this.properties.compact;

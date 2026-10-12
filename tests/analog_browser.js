@@ -122,9 +122,23 @@ try {
             check(/Unmute/.test(again.find(o=>/sound/i.test(o.content||'')).content),'Menu offers Unmute while muted');
             setMuted(false);
         }
+        // The style choice is a plain menu entry that opens a floating picker, never a nested submenu.
         const styleMenu=[]; node.getExtraMenuOptions({},styleMenu);
-        const entries=styleMenu.find(o=>/Style$/.test(o.content)).submenu.options;
-        check(entries[0].disabled && entries[0].content==='Knobs' && entries.some(o=>o.disabled && o.content==='Sliders'),'Style menu groups knobs and sliders');
+        const styleItem=styleMenu.find(o=>/Style…$/.test(o.content));
+        check(!!styleItem && !styleItem.has_submenu && !styleItem.submenu,'Style is a plain menu entry, not a nested submenu');
+        styleItem.callback(); await new Promise(r=>setTimeout(r,20));
+        const picker=document.querySelector('.ray-style-picker');
+        check(!!picker && picker.getBoundingClientRect().left>=0 && picker.getBoundingClientRect().right<=innerWidth && picker.getBoundingClientRect().bottom<=innerHeight,'Style picker opens fully inside the window');
+        check([...picker.querySelectorAll('.ray-style-heading')].map(h=>h.textContent).join()==='Knobs,Sliders','Style picker groups knobs and sliders');
+        check(picker.querySelectorAll('.ray-style-item').length===Object.keys(KNOB_STYLES).length,'Style picker lists every style');
+        check(picker.scrollWidth<=picker.clientWidth,'Style picker never scrolls sideways');
+        const target=[...picker.querySelectorAll('.ray-style-item')].find(b=>/Channel Fader/.test(b.textContent));
+        target.click();
+        check(node.properties.style==='channel_fader' && !document.querySelector('.ray-style-picker'),'Choosing a style applies it and closes the picker');
+        node.properties.style='console_rotary';
+        styleItem.callback(); await new Promise(r=>setTimeout(r,20));
+        document.querySelector('.ray-style-picker').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+        check(!document.querySelector('.ray-style-picker') && node.properties.style==='console_rotary','Escape closes the picker without changing the style');
         const octx=new OfflineAudioContext(1,22050,44100);
         const bank=createBank(octx,octx.destination);
         for (const [kind,styles] of [['knob',KNOB_STYLES],['switch',SWITCH_STYLES]]) {
