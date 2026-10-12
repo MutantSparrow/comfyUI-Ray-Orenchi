@@ -47,7 +47,7 @@ the browser. After updating the pack, restart again so new and changed nodes loa
 - **Fast Qwen3-VL Infer** needs a full native Qwen3-VL 4B or 8B checkpoint loaded with
   ComfyUI's `CLIPLoader` (type `qwen_image`, or `krea2`). Connect its `CLIP`, an image and
   a prompt. Details and measurements are in [FAST_VLM.md](FAST_VLM.md).
-- **Folder Captioner** needs a GPU and loads its model from ComfyUI's `text_encoders` list.
+- **Folder Captioner** needs a GPU and the same kind of full Qwen3-VL `CLIP` from `CLIPLoader` as Fast Qwen3-VL.
 - **PromptDexter**, **CivitAI** and the matching **Prompt Fetcher** modes need network
   access. CivitAI can read an optional local `civitai.secret` file; it is ignored by Git.
 - Works in both the classic canvas and Nodes 2.0. Node IDs are stable, so saved workflows

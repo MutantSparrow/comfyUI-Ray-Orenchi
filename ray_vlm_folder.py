@@ -1,4 +1,4 @@
-"""Caption a folder with ComfyUI's native multimodal text encoder API."""
+"""Caption a folder with a connected CLIP, using ComfyUI's native multimodal text encoder API."""
 import secrets
 from pathlib import Path
 
@@ -6,9 +6,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageOps
 
-import folder_paths
 import comfy.model_management as model_management
-import comfy.sd
 from comfy.utils import ProgressBar
 
 
@@ -45,9 +43,10 @@ def has_image_tokens(value):
 
 class RayVLMFolder:
     DESCRIPTION = (
-        "Caption images alphabetically with a local CLIP/VLM on GPU. "
+        "Caption images alphabetically with a connected CLIP/VLM on GPU. "
         "Return aligned lists of answers, original images, and absolute paths. "
-        "Use a full vision-language checkpoint, not a text-only CLIP encoder. "
+        "Connect a full vision-language CLIP (for example Qwen3-VL from CLIPLoader, "
+        "type qwen_image), not a text-only encoder. "
         "No sidecars are written. Images remain in RAM until outputs are released; "
         "use start_index and limit for large folders."
     )
@@ -55,7 +54,7 @@ class RayVLMFolder:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {
-            "clip_name": (folder_paths.get_filename_list("text_encoders"), {"tooltip": "Select a full generative vision-language model from text_encoders, such as Qwen3-VL."}),
+            "clip": ("CLIP", {"tooltip": "Full generative vision-language CLIP, such as Qwen3-VL from CLIPLoader (type qwen_image). Text-only encoders cannot caption."}),
             "folder": ("STRING", {"default": "", "placeholder": "Absolute path to a folder of images", "tooltip": "Enter the folder containing images to caption."}),
             "recurse_subfolders": ("BOOLEAN", {"default": False, "tooltip": "Include images in subfolders, sorted by relative path."}),
             "start_index": ("INT", {"default": 0, "min": 0, "tooltip": "Skip this many images in alphabetical relative-path order."}),
@@ -86,7 +85,7 @@ class RayVLMFolder:
     def IS_CHANGED(cls, **kwargs):
         return float("nan")
 
-    def process(self, clip_name, folder, recurse_subfolders, start_index, limit,
+    def process(self, clip, folder, recurse_subfolders, start_index, limit,
                 user_prompt, max_length, temperature, top_k, top_p, min_p,
                 repetition_penalty, seed, thinking):
         paths = image_files(folder, recurse_subfolders, start_index, limit)
@@ -94,14 +93,8 @@ class RayVLMFolder:
         if device.type == "cpu":
             raise RuntimeError("GPU inference is required. Start ComfyUI with an available GPU backend.")
         model_management.throw_exception_if_processing_interrupted()
-        clip = comfy.sd.load_clip(
-            ckpt_paths=[folder_paths.get_full_path_or_raise("text_encoders", clip_name)],
-            embedding_directory=folder_paths.get_folder_paths("embeddings"),
-            clip_type=comfy.sd.CLIPType.QWEN_IMAGE,
-            model_options={"load_device": device, "offload_device": torch.device("cpu")},
-        )
         if clip.patcher.load_device.type == "cpu":
-            raise RuntimeError("The VLM fell back to CPU. Choose a checkpoint supported by your GPU.")
+            raise RuntimeError("The connected CLIP runs on CPU. In CLIPLoader set device to default, and use a GPU that supports the checkpoint.")
         print(f"[RayVLMFolder] Captioning {len(paths)} images on {clip.patcher.load_device}")
         texts, images, image_paths = [], [], []
         progress = ProgressBar(len(paths))
@@ -112,7 +105,7 @@ class RayVLMFolder:
                 image = torch.from_numpy(np.array(rgb, dtype=np.float32) / 255.0).unsqueeze(0)
             tokens = clip.tokenize(user_prompt, image=image, skip_template=False, min_length=1, thinking=thinking)
             if not has_image_tokens(tokens):
-                raise ValueError("No image tokens produced. Select a full VLM and use a plain instruction without manual chat-template markers.")
+                raise ValueError("No image tokens produced. Connect a full vision-language CLIP (for example Qwen3-VL from CLIPLoader, type qwen_image) and use a plain instruction without manual chat-template markers.")
             generated = clip.generate(
                 tokens, do_sample=temperature > 0, max_length=max_length,
                 temperature=temperature if temperature > 0 else 1.0,
