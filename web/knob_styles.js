@@ -20,15 +20,16 @@ export function getBrushedAluminumURL() {
         const a = 0.04 + Math.random() * 0.10;
         x.strokeStyle = Math.random() > 0.5 ? `rgba(255,255,255,${a})` : `rgba(40,40,40,${a * 0.85})`;
         x.lineWidth = 0.4 + Math.random() * 0.6;
-        x.beginPath();
-        x.moveTo(xs, y);
-        x.lineTo(xs + len, y + (Math.random() - 0.5) * 0.4);
-        x.stroke();
+        // Draw each stroke twice, one tile to the left, so strokes wrap and the tile repeats seamlessly.
+        const drift = (Math.random() - 0.5) * 0.4;
+        for (const shift of [0, -256]) {
+            x.beginPath();
+            x.moveTo(xs + shift, y);
+            x.lineTo(xs + shift + len, y + drift);
+            x.stroke();
+        }
     }
-    const vg = x.createRadialGradient(128, 128, 30, 128, 128, 200);
-    vg.addColorStop(0, "rgba(0,0,0,0)");
-    vg.addColorStop(1, "rgba(0,0,0,0.10)");
-    x.fillStyle = vg; x.fillRect(0, 0, 256, 256);
+    // No per-tile vignette: it repeated as visible bands on wide nodes.
     _brushedNodeURL = c.toDataURL();
     return _brushedNodeURL;
 }
