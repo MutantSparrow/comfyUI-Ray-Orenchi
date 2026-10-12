@@ -3,13 +3,11 @@
 // One place for everything the per-node JS files used to reinvent:
 //   TWO_PI                       — Math.PI * 2 constant.
 //   getRadialBrushedURL()        — cached radial brushed-metal texture.
-//   RAY_PALETTE                  — bucket color palette (see UI.md).
+//   RAY_PALETTE                  — bucket color palette.
 //   applyBucketTint(node, key)   — assign bg/edge color for a bucket.
 //   shiftTint(hex, degrees)      — hue-rotate a base hex color (mode tints).
 //   setWidgetHidden(n, w, hide)  — v2-frontend-safe hide/show for a widget.
 //   mountDymoLabel(node, opts)   — Dymo embossed label (knob + switch).
-//
-// See UI.md for the canon these helpers implement.
 
 export const TWO_PI = Math.PI * 2;
 

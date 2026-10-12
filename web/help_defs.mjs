@@ -42,7 +42,7 @@ export const RAY_HELP_DEFS = {
                 "Use `repair_pixel_art` for existing pixel grids and `illustration_photo` for region abstraction.",
                 "`palette_strategy` builds the palette; `palette_mapping` assigns pixels to it. A connected `palette_image` overrides generated palettes (up to 256 exact colors).",
                 "Dithering is limited to smooth ramps; flat fills, texture and strong edges are protected. Start with `none`.",
-                "Exact aspect ratio can limit feasible sizes (for example 1001×667 cannot shrink exactly). See PIXEL_ART.md for details.",
+                "Exact aspect ratio can limit feasible sizes (for example 1001×667 cannot shrink exactly).",
             ],
         }],
     },
@@ -137,7 +137,7 @@ export const RAY_HELP_DEFS = {
             heading: "Notes",
             bullets: [
                 "Load a full Qwen3-VL 4B or 8B checkpoint with CLIPLoader (type `qwen_image`, or `krea2`). The same CLIP can also feed image conditioning.",
-                "See FAST_VLM.md for measurements and FAST_VLM_RELIABILITY.md for the repetition safeguards.",
+                "See FAST_VLM.md for measurements and constraints.",
             ],
         }],
     },

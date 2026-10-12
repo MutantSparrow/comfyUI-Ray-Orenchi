@@ -33,3 +33,8 @@ civitai.secret
 # Local prompt library database (RayPromptLibrary)
 prompt_library.db
 prompt_library.db-*
+
+# Local working docs (kept on disk for reference, not published)
+PIXEL_ART.md
+FAST_VLM_RELIABILITY.md
+UI.md
