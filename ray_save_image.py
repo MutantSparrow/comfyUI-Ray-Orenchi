@@ -38,7 +38,7 @@ class RaySaveImage:
     RETURN_NAMES = ()
     FUNCTION = "save"
     OUTPUT_NODE = True
-    CATEGORY = "👑 Ray/✨ VFX"
+    CATEGORY = "👑 Ray/🔧 Tools"
     DESCRIPTION = "Save PNG images or compare two inputs with a draggable preview divider."
 
     def save(self, image_1, save_image="1", directory="", filename_prefix="Ray",

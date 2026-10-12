@@ -10,7 +10,7 @@
 // ./help_defs.mjs for the actual per-class content.
 
 import { app } from "../../scripts/app.js";
-import { openHelpPopup, getNodeHelp, descToHelpDef, registerNodeHelp } from "./help.mjs";
+import { openHelpPopup, getNodeHelp, registerNodeHelp } from "./help.mjs";
 import { RAY_HELP_DEFS } from "./help_defs.mjs";
 
 const CMD_ID = "Ray.ShowHelp";
@@ -36,6 +36,10 @@ function injectIconCSS() {
     document.head.appendChild(el);
 }
 
+// Node definitions (object_info) by class; the popup builds its input,
+// widget and output reference from these.
+const _nodeData = new Map();
+
 // First selected Ray node with registered help (or null).
 function selectedHelp() {
     const c = app.canvas;
@@ -48,7 +52,7 @@ function selectedHelp() {
     for (const n of nodes) {
         const cls = n && n.comfyClass;
         const help = getNodeHelp(cls);
-        if (help) return help;
+        if (help) return { help, nodeData: _nodeData.get(cls) || null };
     }
     return null;
 }
@@ -66,8 +70,8 @@ app.registerExtension({
             label: "Help",
             icon: ICON_CLASS,
             function: () => {
-                const help = selectedHelp();
-                if (help) openHelpPopup(help);
+                const sel = selectedHelp();
+                if (sel) openHelpPopup(sel.help, sel.nodeData);
             },
         },
     ],
@@ -77,18 +81,14 @@ app.registerExtension({
         if (getNodeHelp(item.comfyClass)) return [CMD_ID];
         return [];
     },
-    // Fallback: if a Ray class registered a DESCRIPTION but no rich help def,
-    // synthesize a minimal one so the ? still opens something useful.
+    // Keep every Ray node's definition. A class without an authored help def
+    // still gets one: its DESCRIPTION as the summary plus the generated
+    // input/widget/output reference.
     async beforeRegisterNodeDef(nodeType, nodeData) {
         const name = nodeData?.name;
         if (!name || !name.startsWith("Ray")) return;
-        if (getNodeHelp(name)) return;
-        const desc = nodeData?.description || nodeType?.prototype?.constructor?.DESCRIPTION;
-        if (desc) {
-            const title = nodeData?.display_name || name;
-            const def = descToHelpDef(title, desc);
-            if (def) registerNodeHelp(name, def);
-        }
+        _nodeData.set(name, nodeData);
+        if (!getNodeHelp(name)) registerNodeHelp(name, {});
     },
     setup() {
         injectIconCSS();
