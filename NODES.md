@@ -5,11 +5,11 @@ four bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
 - `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck).
-- `👑 Ray/🔧 Tools` — scrapers, prompt fetcher, metadata inspector, TXT folder, Save Image.
-- `👑 Ray/💬 LLM` — local vision-language inference, folder captioning, prompt library.
+- `👑 Ray/🔧 Tools` — scrapers, prompt scraper, metadata inspector, TXT folder, Save Image.
+- `👑 Ray/💬 LLM` — local vision-language inference and folder captioning.
 
 Every node has a black body and a header colored by its bucket. Mode-tinted
-nodes (`RayCivitAI`, `RayPromptFetcher`, `RayPromptLibrary`) hue-shift their
+nodes (`RayCivitAI`, `RayPromptFetcher`) hue-shift their
 header color rather than pick a bespoke one.
 
 ---
@@ -241,7 +241,7 @@ Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.
 
 ---
 
-## 🔧 Ray's Tools: Prompt Fetcher (`RayPromptFetcher`)
+## 🔧 Ray's Tools: Prompt Scraper (`RayPromptFetcher`)
 
 **Purpose.** One node, three prompt sources. A `scraper_mode` dropdown picks between `Local Folder`, `PromptDexter`, and `CivitAI`; the frontend hides widgets that don't belong to the active mode. Outputs are harmonized to the local-scraper shape `(prompt_single, prompt_multiline, image, image_path)` so any mode is drop-in compatible with downstream wiring.
 
@@ -353,30 +353,6 @@ Each slider defaults to `-1.0` (meaning "use the preset value") and `0..1` overr
 
 ---
 
-## 💬 Ray's LLM: Prompt Library (`RayPromptLibrary`)
-
-**Purpose.** Local SQLite prompt library. Two modes on the same node — `Save` writes `prompt_in` to the DB with source, tags, image path, and model; `Browse` serves rows from an inline searchable table. Node tint hue-shifts between the two modes.
-
-**Category:** `👑 Ray/💬 LLM`
-
-| Pin | Type | Notes |
-|-----|------|-------|
-| **Control** `mode` | enum | `Save` / `Browse`. Legacy `Fetch` from older workflows migrates to `Browse`. |
-| **Control** `prompt_in` | string (multiline) | Save mode: prompt text to store. Passed through on the outputs regardless of mode. |
-| **Control** `seed` | int | `-1` for random. |
-| **Save** `save__source` | string | Label attached to this row (`manual` / `local` / `dexter` / `civitai` / free-form). |
-| **Save** `save__tags` | string | Comma-separated tags. |
-| **Save** `save__image_path` | string | Optional path to the image this prompt produced. |
-| **Save** `save__model` | string | Optional model / checkpoint that produced the row. |
-| **Browse** `browse__selected_id` | int | DB row id selected in the panel. |
-| **Browse** `browse__last_query` | string | Managed by the panel. |
-| **Output** `prompt_single` | STRING (list) | Single-line prompt. |
-| **Output** `prompt_multiline` | STRING (list) | Prompt with newlines preserved. |
-| **Output** `image` | IMAGE (list) | Image stored with the selected row. |
-| **Output** `image_path` | STRING (list) | Path to the associated image on disk, if any. |
-
-**Browse panel.** Full-text search, tag + source filters, and multiple sort orders (most recent, longest, similarity by embedding). Click a row to select — the node then serves that row on every subsequent run.
-
 ## 🔧 Ray's Tools: TXT Folder (`RayTextFolder`)
 
 **Category:** `👑 Ray/🔧 Tools`
@@ -408,15 +384,16 @@ normal counter suffix. Use limit 3 for a small test, then -1 for the folder.
 
 **Category:** `👑 Ray/💬 LLM`
 
-Load one full vision-language checkpoint from ComfyUI's `text_encoders`
-model list and caption each selected image independently on GPU. The node
+Connect a full vision-language `CLIP` (for example Qwen3-VL from a
+`CLIPLoader` with type `qwen_image`, the same setup as Fast Qwen3-VL) and caption
+each selected image independently on GPU. The node
 uses native `CLIP.tokenize/generate/decode` with the image template enabled,
 and preserves the supplied instruction and decoded answer. It does not write
 sidecars, resize source images, or add a conversation history.
 
 | Control | Behavior |
 |---|---|
-| `clip_name` | Full generative VLM, e.g. Qwen3-VL; ordinary text-only CLIP is unsuitable |
+| `clip` (input) | Full generative VLM CLIP, e.g. Qwen3-VL from `CLIPLoader`; an ordinary text-only CLIP is unsuitable |
 | `folder`, `recurse_subfolders` | Source folder and optional recursive scan |
 | `start_index`, `limit` | Zero-based alphabetical relative-path range; -1 means all remaining files |
 | `user_prompt` | Multiline instruction used independently for each image |

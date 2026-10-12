@@ -12,14 +12,13 @@ Bundles:
   • RaySwitch                — Ray's Analog: Switch
   • RayButtonDeck            — Ray's Analog: Button Deck
   💬 LLM
-  • RayPromptLibrary         — Ray's LLM: Prompt Library (SQLite)
   • RayVLMFolder             — Ray's LLM: Folder Captioner
   • RayFastQwen3VL           — Ray's LLM: Fast Qwen3-VL Infer
   🔧 Tools
   • RayPromptDexter          — Ray's Tools: PromptDexter Scraper
   • RayCivitAI               — Ray's Tools: CivitAI Gallery Scraper
   • RayLocalScraper          — Ray's Tools: Folder Image Scraper
-  • RayPromptFetcher         — Ray's Tools: Prompt Fetcher (local + web)
+  • RayPromptFetcher         — Ray's Tools: Prompt Scraper (local + web)
   • RayMetaInspect           — Ray's Tools: Metadata Inspector (read/embed)
   • RayTextFolder            — Ray's Tools: TXT Folder
   • RaySaveImage             — Ray's Tools: Save Image (save + comparison preview)
@@ -48,7 +47,6 @@ _NODE_MODULES = {
     "RayFastQwen3VL":      "ray_fast_vlm",
     "RayPromptFetcher":    "ray_prompt_fetcher",
     "RayMetaInspect":      "ray_meta_inspect",
-    "RayPromptLibrary":    "ray_prompt_library",
     "RayFilmStock":        "ray_film_stock",
     "RayVHS":              "ray_vhs",
 }
@@ -57,7 +55,6 @@ _NODE_MODULES = {
 _ROUTE_MODULES = (
     "promptdexter_routes",
     "civitai_routes",
-    "prompt_library_routes",
     "film_stock_routes",
 )
 
@@ -102,14 +99,13 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RaySwitch":           "🎛️ Ray's Analog: Switch",
     "RayButtonDeck":       "🎛️ Ray's Analog: Button Deck",
     # 👑 Ray/💬 LLM
-    "RayPromptLibrary":    "💬 Ray's LLM: Prompt Library",
     "RayVLMFolder":        "💬 Ray's LLM: Folder Captioner",
     "RayFastQwen3VL":      "💬 Ray's LLM: Fast Qwen3-VL Infer",
     # 👑 Ray/🔧 Tools
     "RayPromptDexter":     "🔧 Ray's Tools: PromptDexter Scraper",
     "RayCivitAI":          "🔧 Ray's Tools: CivitAI Gallery Scraper",
     "RayLocalScraper":     "🔧 Ray's Tools: Folder Image Scraper",
-    "RayPromptFetcher":    "🔧 Ray's Tools: Prompt Fetcher",
+    "RayPromptFetcher":    "🔧 Ray's Tools: Prompt Scraper",
     "RayMetaInspect":      "🔧 Ray's Tools: Metadata Inspector",
     "RayTextFolder":       "🔧 Ray's Tools: TXT Folder",
     "RaySaveImage":        "🔧 Ray's Tools: Save Image",
