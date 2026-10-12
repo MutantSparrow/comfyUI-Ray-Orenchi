@@ -183,21 +183,20 @@ try {
         check(again===JSON.stringify(graph),'Spin migration is idempotent');
     }
     {
-        // Every knob face sweeps min..max over 270 degrees; legacy faces start at 7:30 like the studio ones.
+        // Every knob face sweeps min..max over 270 degrees, from 7:30 to 4:30.
         const node=make('knob'), ui=node._rayAnalog; document.body.append(ui.element);
         const value=widget(node,'knob_value');
         const angleAt=(style,v)=>{ node.properties.style=style; value.value=v; ui.render();
             return Number(/rotate\(([-\d.]+)\)/.exec(ui.host.querySelector('[data-rotate]')?.getAttribute('transform')||'')?.[1]); };
         for (const [key,style] of Object.entries(KNOB_STYLES)) {
             if (style.kind==='slider') continue;
-            const zero=style.zero ?? -135;
-            check(angleAt(key,-100)===zero && angleAt(key,100)===zero+270,`Knob ${key} sweeps 270 degrees from min to max`);
+            check(angleAt(key,-100)===-135 && angleAt(key,100)===135,`Knob ${key} sweeps 270 degrees from min to max`);
         }
         widget(node,'min_value').value=0; widget(node,'max_value').value=1;
         check(angleAt('console_rotary',.5)===0,'A 0..1 range centres the dial at 0.5');
         node.properties.style='dark_studio_led'; value.value=1; ui.render();
         const arc=ui.host.querySelector('[data-arc]');
-        check(arc.getAttribute('stroke-dasharray')==='75.00 100' && arc.getAttribute('stroke-dashoffset')==='-37.5','LED arc covers the 270 degree sweep');
+        check(arc.getAttribute('stroke-dasharray')==='75.00 100' && arc.getAttribute('transform')==='rotate(135)','LED ring arc starts at 7:30 and covers the 270 degree sweep');
         node.onRemoved(); ui.element.remove();
     }
     const linked={nodes:[{type:'RaySwitch',outputs:[{name:'bool',type:'BOOLEAN',links:[77]}]}]};

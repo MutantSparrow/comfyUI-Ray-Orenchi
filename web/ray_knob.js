@@ -88,13 +88,10 @@ function buildKnob(node, widget) {
         const [lo, hi] = bounds(node);
         const value = boundValue(node, widget.value);
         const fraction = hi > lo ? (value - lo) / (hi - lo) : 0;
-        const angle = (style.zero ?? -135) + fraction * SWEEP_DEGREES;
+        const angle = -SWEEP_DEGREES / 2 + fraction * SWEEP_DEGREES;
         for (const el of rotating) el.setAttribute("transform", `rotate(${angle.toFixed(3)})`);
-        if (arc) {
-            // The arc ring starts at 3 o'clock; the sweep starts at 7:30, 37.5% of the way round.
-            arc.setAttribute("stroke-dasharray", `${(fraction * SWEEP_DEGREES / 3.6).toFixed(2)} 100`);
-            arc.setAttribute("stroke-dashoffset", "-37.5");
-        }
+        // The arc ring is drawn starting at 7:30; its path length is 100 for a full circle.
+        if (arc) arc.setAttribute("stroke-dasharray", `${(fraction * SWEEP_DEGREES / 3.6).toFixed(2)} 100`);
         if (slide) {
             const across = -43 + fraction * 86;
             slide.setAttribute("transform", slideAxis() === "x"

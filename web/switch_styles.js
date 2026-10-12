@@ -1,8 +1,7 @@
-// Original style IDs remain stable for saved workflows.
-import { STUDIO_SWITCHES } from "./analog_hardware.js";
-import { LEGACY_SWITCHES } from "./analog_legacy.js";
+// Style IDs stay stable for saved workflows.
+import { SWITCHES } from "./analog_hardware.js";
 
-export const SWITCH_STYLES = { ...STUDIO_SWITCHES, ...LEGACY_SWITCHES };
+export const SWITCH_STYLES = SWITCHES;
 
 export const DEFAULT_SWITCH_STYLE = "console_rocker";
 
