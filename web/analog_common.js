@@ -51,11 +51,13 @@ function injectStyles() {
     color:#c5cabb; border-color:#111b1d;
     background-color:#29383b;
     background-image:repeating-linear-gradient(0deg,#ffffff02 0px,#ffffff02 1px,transparent 1px,transparent 3px),linear-gradient(115deg,#344246,#253236);
+    background-size:auto,100% 100%;
     box-shadow:inset 0 1px 0 #73817f55,inset 0 -1px 0 #0009;
 }
 .ray-analog-panel[data-panel="olive"] {
     color:#30382e; border-color:#767c67;
     background-image:repeating-linear-gradient(0deg,#00000002 0px,#00000002 1px,transparent 1px,transparent 3px),linear-gradient(115deg,#c6c8ad,#adb59a);
+    background-size:auto,100% 100%;
 }
 .ray-analog-panel::before,.ray-analog-panel::after {
     content:""; position:absolute; bottom:6px; width:5px; height:5px; border-radius:50%;
