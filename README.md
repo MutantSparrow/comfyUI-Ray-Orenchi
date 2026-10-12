@@ -55,9 +55,7 @@ the browser. After updating the pack, restart again so new and changed nodes loa
 
 ## Documentation
 
-- [NODES.md](NODES.md): node-by-node reference for inputs, outputs and behavior
-- [FAST_VLM.md](FAST_VLM.md): how Fast Qwen3-VL works, with measurements and constraints
-- [benchmarks/pixel_art](benchmarks/pixel_art/README.md): Pixel Art benchmark method and results
+[NODES.md](NODES.md) is the node-by-node reference for inputs, outputs and behavior.
 
 ## License
 
