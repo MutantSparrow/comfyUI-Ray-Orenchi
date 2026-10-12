@@ -38,3 +38,4 @@ prompt_library.db-*
 PIXEL_ART.md
 FAST_VLM_RELIABILITY.md
 UI.md
+benchmarks/pixel_art/*.md
