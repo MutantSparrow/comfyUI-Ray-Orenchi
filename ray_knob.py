@@ -3,15 +3,16 @@ import math
 
 class RayKnob:
     DESCRIPTION = (
-        "Analog-style float knob widget. Drag rotates the knob face; "
+        "Analog-style float control: a rotary knob or a slider, themed after "
+        "studio hardware. Drag turns the knob or moves the slider cap; "
         "outputs both an INT (quantized by `clamp`) and a raw FLOAT so it "
         "plugs into either side without a converter.\n\n"
-        "Right-click for style picker (brushed-metal, black-plastic, "
-        "bakelite, brass…), Compact mode (strips everything except the "
-        "brushed panel, Dymo tape, knob face, and readout — title bar "
-        "gone, config widgets hidden, input/output pins stashed when "
-        "unwired), and Edit label. The Dymo tape above the face is "
-        "double-click editable and is saved with the workflow."
+        "Right-click for the style picker (nine knobs, five sliders), Mute "
+        "sound (knobs, sliders and switches make hardware sounds), Compact "
+        "mode (strips everything except the brushed panel, Dymo tape, face, "
+        "and readout — title bar gone, config widgets hidden, input/output "
+        "pins stashed when unwired), and Edit label. The Dymo tape above the "
+        "face is double-click editable and is saved with the workflow."
     )
 
     @classmethod

@@ -1,5 +1,5 @@
 // Original style IDs remain stable for saved workflows. Artwork is shared by both renderers.
-import { STUDIO_KNOBS } from "./analog_hardware.js";
+import { STUDIO_KNOBS, STUDIO_SLIDERS } from "./analog_hardware.js";
 import { LEGACY_KNOBS } from "./analog_legacy.js";
 
 let _brushedNodeURL = null;
@@ -33,7 +33,7 @@ export function getBrushedAluminumURL() {
     return _brushedNodeURL;
 }
 
-export const KNOB_STYLES = { ...STUDIO_KNOBS, ...LEGACY_KNOBS };
+export const KNOB_STYLES = { ...STUDIO_KNOBS, ...LEGACY_KNOBS, ...STUDIO_SLIDERS };
 
 export const DEFAULT_STYLE = "console_rotary";
 

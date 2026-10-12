@@ -4,6 +4,7 @@ import '/extensions/ray/ray_switch.js';
 import { KNOB_STYLES } from '/extensions/ray/knob_styles.js';
 import { SWITCH_STYLES } from '/extensions/ray/switch_styles.js';
 import { quantizeInt, boundValue } from '/extensions/ray/ray_knob.js';
+import { isMuted, setMuted, createBank, VOICE_TABLES } from '/extensions/ray/analog_audio.js';
 
 const messages = [];
 let passes = 0;
@@ -84,6 +85,58 @@ try {
             check(!!ui.host.querySelector('svg'),`Switch style ${key} renders`);
         }
         toggle.onRemoved(); ui.element.remove();
+    }
+    {
+        // Sliders: horizontal and vertical travel, LED ladder and fill indicators.
+        const node=make('knob'), ui=node._rayAnalog; document.body.append(ui.element);
+        const value=widget(node,'knob_value'), slideOf=()=>ui.host.querySelector('[data-slide]');
+        const setAt=(style,v)=>{ node.properties.style=style; value.value=v; ui.render(); };
+        setAt('pan_slider',-100); check(slideOf().getAttribute('transform')==='translate(-43.000,0)','Horizontal slider sits at the left end');
+        setAt('pan_slider',100); check(slideOf().getAttribute('transform')==='translate(43.000,0)','Horizontal slider sits at the right end');
+        setAt('channel_fader',100); check(slideOf().getAttribute('transform')==='translate(0,-43.000)','Vertical slider sits at the top');
+        setAt('channel_fader',-100); check(slideOf().getAttribute('transform')==='translate(0,43.000)','Vertical slider sits at the bottom');
+        check(ui.element.dataset.control==='slider','Slider styles are flagged as sliders');
+        setAt('console_rotary',0); check(ui.element.dataset.control==='knob','Knob styles are flagged as knobs');
+        const lit=()=>[...ui.host.querySelectorAll('[data-led][data-on="1"]')].filter(el=>el.style.opacity==='1').length;
+        setAt('led_ladder',-100); check(lit()===0,'LED ladder is dark at minimum');
+        setAt('led_ladder',100); check(lit()===12,'LED ladder is fully lit at maximum');
+        setAt('led_ladder',0); check(lit()===6,'LED ladder lights half its segments at mid range');
+        const fill=()=>ui.host.querySelector('[data-fill]').getAttribute('transform');
+        setAt('amber_slide',-100); check(fill()==='scale(0.0000,1)','Amber bar is empty at minimum');
+        setAt('amber_slide',100); check(fill()==='scale(1.0000,1)','Amber bar is full at maximum');
+        node.onRemoved(); ui.element.remove();
+    }
+    {
+        // Sound: the mute option, the persisted preference, and a voice for every style.
+        setMuted(false);
+        const node=make('knob'), toggle=make('switch');
+        for (const n of [node,toggle]) {
+            const options=[]; n.getExtraMenuOptions({},options);
+            const item=options.find(o=>/sound/i.test(o.content||''));
+            check(!!item && /Mute/.test(item.content),'Right-click menu offers Mute sound');
+            item.callback();
+            check(isMuted() && localStorage.getItem('ray.analog.muted.v1')==='1','Mute persists as a listener preference');
+            const again=[]; n.getExtraMenuOptions({},again);
+            check(/Unmute/.test(again.find(o=>/sound/i.test(o.content||'')).content),'Menu offers Unmute while muted');
+            setMuted(false);
+        }
+        const styleMenu=[]; node.getExtraMenuOptions({},styleMenu);
+        const entries=styleMenu.find(o=>/Style$/.test(o.content)).submenu.options;
+        check(entries[0].disabled && entries[0].content==='Knobs' && entries.some(o=>o.disabled && o.content==='Sliders'),'Style menu groups knobs and sliders');
+        const octx=new OfflineAudioContext(1,22050,44100);
+        const bank=createBank(octx,octx.destination);
+        for (const [kind,styles] of [['knob',KNOB_STYLES],['switch',SWITCH_STYLES]]) {
+            for (const key of Object.keys(styles)) check(Object.hasOwn(VOICE_TABLES[kind],key),`${kind} style ${key} has a sound voice`);
+        }
+        for (const voice of new Set(Object.values(VOICE_TABLES.switch))) check(bank.voices.presses.includes(voice),`Switch voice ${voice} exists`);
+        for (const voice of new Set(Object.values(VOICE_TABLES.knob))) check(bank.voices.ticks.includes(voice),`Knob voice ${voice} exists`);
+        for (const voice of bank.voices.presses) { const o=new OfflineAudioContext(1,22050,44100); const b=createBank(o,o.destination); b.press(voice,true,0); b.press(voice,false,0.1);
+            const peak=(await o.startRendering()).getChannelData(0).reduce((m,x)=>Math.max(m,Math.abs(x)),0);
+            check(peak>0.05 && peak<1,`Switch voice ${voice} is audible and does not clip`); }
+        for (const voice of bank.voices.ticks) { const o=new OfflineAudioContext(1,22050,44100); const b=createBank(o,o.destination); b.tick(voice,1,0);
+            const peak=(await o.startRendering()).getChannelData(0).reduce((m,x)=>Math.max(m,Math.abs(x)),0);
+            check(peak>0.02 && peak<1,`Tick voice ${voice} is audible and does not clip`); }
+        node.onRemoved(); toggle.onRemoved();
     }
     for (const kind of ['knob','switch']) {
         const node=make(kind,false,false);
