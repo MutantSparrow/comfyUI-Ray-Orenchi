@@ -3,15 +3,16 @@ import math
 
 class RayKnob:
     DESCRIPTION = (
-        "Analog-style float knob widget. Drag rotates the knob face; "
+        "Analog-style float control: a rotary knob or a slider, themed after "
+        "studio hardware. Drag turns the knob or moves the slider cap; "
         "outputs both an INT (quantized by `clamp`) and a raw FLOAT so it "
         "plugs into either side without a converter.\n\n"
-        "Right-click for style picker (brushed-metal, black-plastic, "
-        "bakelite, brass…), Compact mode (strips everything except the "
-        "brushed panel, Dymo tape, knob face, and readout — title bar "
-        "gone, config widgets hidden, input/output pins stashed when "
-        "unwired), and Edit label. The Dymo tape above the face is "
-        "double-click editable and is saved with the workflow."
+        "Right-click for the style picker (nine knobs, five sliders), Mute "
+        "sound (knobs, sliders and switches make hardware sounds), Compact "
+        "mode (strips everything except the brushed panel, Dymo tape, face, "
+        "and readout — title bar gone, config widgets hidden, input/output "
+        "pins stashed when unwired), and Edit label. The Dymo tape above the "
+        "face is double-click editable and is saved with the workflow."
     )
 
     @classmethod
@@ -22,8 +23,6 @@ class RayKnob:
                                                 "tooltip": "Range minimum."}),
                 "max_value":      ("FLOAT",   {"default":  100.0, "min": -1e9, "max": 1e9, "step": 0.1,
                                                 "tooltip": "Range maximum."}),
-                "spin_value":     ("FLOAT",   {"default":   20.0, "min": 10.0, "max": 100.0, "step": 0.1,
-                                                "tooltip": "Drag sensitivity in px per full sweep."}),
                 "clamp":          ("FLOAT",   {"default":    0.0, "min":  0.0, "max": 1024.0, "step": 0.1,
                                                 "tooltip": "Quantization step for the INT output. 0 truncates."}),
                 "allow_negative": ("BOOLEAN", {"default": True,
@@ -42,7 +41,7 @@ class RayKnob:
     FUNCTION = "process"
     CATEGORY = "👑 Ray/🎛️ Analog"
 
-    def process(self, min_value, max_value, spin_value, clamp, allow_negative, knob_value):
+    def process(self, min_value, max_value, clamp, allow_negative, knob_value):
         lo = float(min_value) if allow_negative else max(0.0, float(min_value))
         hi = float(max_value)
         if hi < lo:

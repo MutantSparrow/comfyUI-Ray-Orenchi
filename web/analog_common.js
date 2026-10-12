@@ -1,5 +1,6 @@
 import { applyBucketTint, findWidget, mountDymoLabel, setWidgetHidden } from "./_common.js";
 import { getBrushedAluminumURL } from "./knob_styles.js";
+import { isMuted, setMuted } from "./analog_audio.js";
 
 let nextSvgId = 0;
 
@@ -50,11 +51,13 @@ function injectStyles() {
     color:#c5cabb; border-color:#111b1d;
     background-color:#29383b;
     background-image:repeating-linear-gradient(0deg,#ffffff02 0px,#ffffff02 1px,transparent 1px,transparent 3px),linear-gradient(115deg,#344246,#253236);
+    background-size:auto,100% 100%;
     box-shadow:inset 0 1px 0 #73817f55,inset 0 -1px 0 #0009;
 }
 .ray-analog-panel[data-panel="olive"] {
     color:#30382e; border-color:#767c67;
     background-image:repeating-linear-gradient(0deg,#00000002 0px,#00000002 1px,transparent 1px,transparent 3px),linear-gradient(115deg,#c6c8ad,#adb59a);
+    background-size:auto,100% 100%;
 }
 .ray-analog-panel::before,.ray-analog-panel::after {
     content:""; position:absolute; bottom:6px; width:5px; height:5px; border-radius:50%;
@@ -64,6 +67,23 @@ function injectStyles() {
 .ray-analog-panel::before { left:5px; }
 .ray-analog-panel::after { right:5px; }
 .ray-analog-panel .ray-dymo { flex-shrink:0; margin:0; }
+.ray-style-picker {
+    position:fixed; z-index:100000; box-sizing:border-box; min-width:230px; max-width:calc(100vw - 16px);
+    max-height:min(72vh,520px); overflow-x:hidden; overflow-y:auto; padding:6px;
+    background:#1b1c1f; color:#e6e6e6; border:1px solid #4a4c52; border-radius:8px;
+    box-shadow:0 10px 30px #000a; font:13px/1.3 system-ui,sans-serif;
+}
+.ray-style-heading { margin:6px 8px 3px; font:600 10px system-ui; letter-spacing:.08em; text-transform:uppercase; color:#8d9096; }
+.ray-style-item {
+    display:flex; align-items:center; gap:8px; width:100%; padding:6px 8px; border:0; border-radius:5px;
+    background:transparent; color:inherit; font:inherit; text-align:left; white-space:nowrap; cursor:pointer;
+}
+.ray-style-item:hover, .ray-style-item:focus-visible { background:#33363c; outline:none; }
+.ray-style-item[aria-checked="true"] { color:#fff; }
+.ray-style-swatch { flex:none; width:10px; height:10px; border-radius:3px; border:1px solid #0009; background:#b6b8bb; }
+.ray-style-swatch[data-panel="charcoal"] { background:#34464a; }
+.ray-style-swatch[data-panel="olive"] { background:#c6c8ad; }
+.ray-style-mark { margin-left:auto; padding-left:12px; }
 .ray-analog-panel .ray-analog-face {
     display:block; flex:0 0 140px; width:140px; height:140px; max-width:100%;
     padding:0; border:0; border-radius:8px; background:transparent;
@@ -74,6 +94,9 @@ function injectStyles() {
     outline:2px solid #185d89; outline-offset:2px;
 }
 .ray-analog-face[aria-disabled="true"] { opacity:.55; cursor:not-allowed; }
+.ray-analog-face:hover:not([aria-disabled="true"]) svg { filter:brightness(1.04); }
+.ray-knob-wrap[data-dragging="true"] .ray-analog-face svg [data-slide],
+.ray-knob-wrap[data-dragging="true"] .ray-analog-face svg [data-rotate] { filter:brightness(1.13); }
 .ray-knob-wrap .ray-analog-face { cursor:grab; }
 .ray-knob-wrap[data-dragging="true"] .ray-analog-face { cursor:grabbing; }
 .ray-analog-readout {
@@ -97,6 +120,79 @@ function injectStyles() {
     document.head.appendChild(style);
 }
 
+// The style choice opens its own floating panel instead of a nested context-menu submenu: LiteGraph
+// pushes submenus over their parent near the screen edge, and the Nodes 2.0 menu renders them inside
+// its own scroll container, where they overflow sideways and become unreachable.
+let lastPointer = [0, 0];
+if (typeof window !== "undefined") {
+    lastPointer = [window.innerWidth / 2, window.innerHeight / 3];
+    window.addEventListener("pointerdown", event => { lastPointer = [event.clientX, event.clientY]; }, true);
+}
+
+export function openStylePicker(node, kind, styles) {
+    document.querySelector(".ray-style-picker")?.remove();
+    const picker = document.createElement("div");
+    picker.className = "ray-style-picker";
+    picker.setAttribute("role", "menu");
+    picker.setAttribute("aria-label", `${kind === "knob" ? "Control" : kind === "deck" ? "Button deck" : "Switch"} style`);
+    // Knob faces first, then sliders, each under a heading.
+    const entries = Object.entries(styles).sort(([, a], [, b]) => (a.kind === "slider") - (b.kind === "slider"));
+    const items = [];
+    let group = null;
+    for (const [key, style] of entries) {
+        const heading = kind === "knob" ? (style.kind === "slider" ? "Sliders" : "Knobs") : null;
+        if (heading && heading !== group) {
+            const title = document.createElement("div");
+            title.className = "ray-style-heading"; title.setAttribute("role", "presentation"); title.textContent = heading;
+            picker.append(title);
+        }
+        group = heading;
+        const current = node.properties.style === key;
+        const item = document.createElement("button");
+        item.type = "button"; item.className = "ray-style-item";
+        item.setAttribute("role", "menuitemradio"); item.setAttribute("aria-checked", String(current));
+        const swatch = document.createElement("span");
+        swatch.className = "ray-style-swatch"; swatch.dataset.panel = style.panel || "silver";
+        const label = document.createElement("span");
+        label.textContent = style.label;
+        item.append(swatch, label);
+        if (current) {
+            const mark = document.createElement("span");
+            mark.className = "ray-style-mark"; mark.textContent = "●";
+            item.append(mark);
+        }
+        item.addEventListener("click", () => {
+            close();
+            editNode(node, () => {
+                node.properties.style = key;
+                node._rayAnalog?.render();
+            });
+        });
+        items.push(item);
+        picker.append(item);
+    }
+    const stop = new AbortController();
+    function close() { stop.abort(); picker.remove(); }
+    document.body.append(picker);
+    // Keep the whole panel inside the window; it scrolls vertically if it is taller than the space.
+    const box = picker.getBoundingClientRect(), margin = 8;
+    picker.style.left = `${Math.max(margin, Math.min(lastPointer[0], window.innerWidth - box.width - margin))}px`;
+    picker.style.top = `${Math.max(margin, Math.min(lastPointer[1], window.innerHeight - box.height - margin))}px`;
+    const signal = stop.signal;
+    window.addEventListener("pointerdown", event => { if (!picker.contains(event.target)) close(); }, { capture: true, signal });
+    window.addEventListener("resize", close, { signal });
+    window.addEventListener("blur", close, { signal });
+    picker.addEventListener("keydown", event => {
+        event.stopPropagation();
+        const at = items.indexOf(document.activeElement);
+        const move = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: items.length - 1 }[event.key];
+        if (event.key === "Escape") { event.preventDefault(); close(); }
+        else if (move !== undefined) { event.preventDefault(); items[(move + items.length) % items.length].focus(); }
+    });
+    (items.find(item => item.getAttribute("aria-checked") === "true") || items[0])?.focus({ preventScroll: false });
+    return picker;
+}
+
 export function createPanel(node, kind, css) {
     injectStyles();
     const styleId = `ray-${kind}-styles`;
@@ -112,7 +208,7 @@ export function createPanel(node, kind, css) {
     element.appendChild(dymo.root);
     const host = document.createElement(kind === "switch" ? "button" : "div");
     if (kind === "switch") host.type = "button";
-    host.className = `ray-analog-face ${kind === "knob" ? "rk-host" : "rs-host"}`;
+    host.className = `ray-analog-face ${kind === "knob" ? "rk-host" : kind === "deck" ? "ray-deck-host" : "rs-host"}`;
     host.tabIndex = 0;
     element.appendChild(host);
     const readout = document.createElement("div");
@@ -146,10 +242,15 @@ export function repairAnalogWorkflow(data, name, title, outputs) {
     }
 }
 
-export function registerAnalog(app, { kind, name, title, styles, defaultStyle, valueName, configNames = [], outputs, build }) {
+// Options beyond the common ones: `extensionName` and `menuName` label the registration and the style
+// menu entry; `heights(ui)` returns {min, max?} when the face is not a fixed 232 px; `menuItems(node)`
+// adds menu entries after the common ones; `ui.compactWidgets()` lists extra widgets compact mode hides.
+export function registerAnalog(app, { kind, name, title, styles, defaultStyle, valueName, configNames = [], outputs, build, migrate,
+    extensionName = `Ray.${kind === "knob" ? "Knob" : "Switch"}`, menuName = kind === "knob" ? "Control" : "Switch",
+    heights = () => ({ min: 232, max: 232 }), menuItems = () => [] }) {
     app.registerExtension({
-        name: `Ray.${kind === "knob" ? "Knob" : "Switch"}`,
-        beforeConfigureGraph(data) { repairAnalogWorkflow(data, name, title, outputs); },
+        name: extensionName,
+        beforeConfigureGraph(data) { repairAnalogWorkflow(data, name, title, outputs); migrate?.(data); },
         beforeRegisterNodeDef(nodeType, nodeData) {
             if (nodeData.name !== name) return;
             const proto = nodeType.prototype;
@@ -172,7 +273,9 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                 setWidgetHidden(this, widget, true);
                 this.addDOMWidget(`${kind}_ui`, `RAY_${kind.toUpperCase()}`, ui.element, {
                     serialize: false, hideOnZoom: false,
-                    getMinHeight: () => 232, getMaxHeight: () => 232, getHeight: () => 232,
+                    getMinHeight: () => heights(ui).min,
+                    getMaxHeight: () => heights(ui).max,
+                    getHeight: () => heights(ui).min,
                     onDraw: () => ui.render(),
                 });
                 const titleDescriptor = Object.getOwnPropertyDescriptor(this, "title_mode");
@@ -185,6 +288,7 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                         const config = findWidget(this, key);
                         if (config && !isLinked(this, key)) setWidgetHidden(this, config, compact);
                     }
+                    for (const extra of ui.compactWidgets?.() || []) setWidgetHidden(this, extra, compact);
                     // Keep slots and the actual title intact for serialization and Nodes 2.0.
                     if (compact) {
                         Object.defineProperty(this, "title_mode", {
@@ -248,20 +352,17 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
             proto.getExtraMenuOptions = function (canvas, options) {
                 const result = menu?.apply(this, arguments);
                 options.unshift(
-                    { content: `${kind === "knob" ? "Knob" : "Switch"} Style`, has_submenu: true,
-                        submenu: { options: Object.entries(styles).map(([key, style]) => ({
-                            content: `${this.properties.style === key ? "● " : ""}${style.label}`,
-                            callback: () => editNode(this, () => {
-                                this.properties.style = key;
-                                this._rayAnalog?.render();
-                            }),
-                        })) } },
+                    // Deferred so the context menu has finished closing before the picker takes focus.
+                    { content: `${menuName} Style…`,
+                        callback: () => setTimeout(() => openStylePicker(this, kind, styles), 0) },
                     { content: `${this.properties.compact ? "● " : ""}Compact mode`,
                         callback: () => editNode(this, () => {
                             this.properties.compact = !this.properties.compact;
                             this._rayAnalog?.applyCompact();
                         }) },
                     { content: "Edit label…", callback: () => this._rayDymo?.beginEdit() },
+                    ...menuItems(this),
+                    { content: isMuted() ? "🔈 Unmute sound" : "🔇 Mute sound", callback: () => setMuted(!isMuted()) },
                 );
                 return result;
             };

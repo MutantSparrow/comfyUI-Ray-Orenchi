@@ -9,17 +9,17 @@ class StoredWidget {
 export function nodeClass(kind, accessor = false, dom = true) {
     return class Node {
         constructor() {
-            this.title = kind === 'knob' ? "🎛️ Ray's Analog: Knob" : "🎛️ Ray's Analog: Switch";
+            this.title = kind === 'knob' ? "🎛️ Ray's Analog: Knob" : kind === 'deck' ? "🎛️ Ray's Analog: Button Deck" : "🎛️ Ray's Analog: Switch";
             this.widgets = Object.entries(kind === 'knob' ? {
-                min_value:-100,max_value:100,spin_value:20,clamp:0,allow_negative:true,knob_value:0,
-            } : {state:false}).map(([name,value]) => {
-                const data = { name, value, type:typeof value === 'boolean' ? 'toggle' : 'number', options:{},
+                min_value:-100,max_value:100,clamp:0,allow_negative:true,knob_value:0,
+            } : kind === 'deck' ? {entries:"Alpha\nBeta\nGamma",selected:""} : {state:false}).map(([name,value]) => {
+                const data = { name, value, type:typeof value === 'boolean' ? 'toggle' : typeof value === 'string' ? 'text' : 'number', options:{},
                     callback: () => { this.callbacks++; } };
                 return accessor ? new StoredWidget(data) : data;
             });
             this.callbacks = 0;
             this.inputs = [];
-            this.outputs = (kind === 'knob' ? [['int','INT'],['float','FLOAT']] : [['bool','BOOLEAN']])
+            this.outputs = (kind === 'knob' ? [['int','INT'],['float','FLOAT']] : kind === 'deck' ? [['value','STRING']] : [['bool','BOOLEAN']])
                 .map(([name,type]) => ({name,type,links:null}));
             this.size = [230,260]; this.flags = {}; this.properties = {};
             this.graph = { before:0, after:0, beforeChange(){this.before++;}, afterChange(){this.after++;}, change(){} };
@@ -28,6 +28,9 @@ export function nodeClass(kind, accessor = false, dom = true) {
         addProperty(name, value) { this.properties[name] = value; }
         addDOMWidget(name,type,element,options) {
             const widget = {name,type,element,options}; this.widgets.push(widget); return widget;
+        }
+        addWidget(type,name,value,callback) {
+            const widget = {name,type,value,callback,options:{}}; this.widgets.push(widget); return widget;
         }
         computeSize() { return [230,260]; }
         setSize(value) { this.size = value; }
