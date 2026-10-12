@@ -124,7 +124,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
-                "Choose a full generative VLM checkpoint (such as Qwen3-VL) in `clip_name`; text-only encoders cannot caption.",
+                "Connect a full generative VLM `CLIP` (such as Qwen3-VL from `CLIPLoader`, type `qwen_image`) to `clip`; text-only encoders cannot caption.",
                 "Files are sorted by relative path. Use `start_index` and `limit` to process large folders in chunks; output images are held in RAM.",
                 "Supports JPEG, PNG, WebP, BMP, TIFF and GIF (first frame). Requires a GPU.",
             ],
