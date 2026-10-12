@@ -3,11 +3,11 @@
 A collection of 19 ComfyUI custom nodes for image effects, pixel-art conversion,
 native local vision-language inference, prompt workflows, metadata, and compact
 analog controls. Nodes appear under the `👑 Ray` category in four groups:
-`✨ VFX`, `🎛️ Analog`, `📝 Prompts`, and `💬 LLM`.
+`✨ VFX`, `🎛️ Analog`, `🔧 Tools`, and `💬 LLM`.
 
 ## Highlights
 
-- **Ray Save Image** combines PNG saving and a two-input comparison preview,
+- **Save Image** combines PNG saving and a two-input comparison preview,
   with compact save buttons, folder browsing/history, and an Explorer shortcut.
 
 - **Fast Qwen3-VL Infer** reuses an existing native Qwen3-VL `CLIP` object and
@@ -25,7 +25,6 @@ analog controls. Nodes appear under the `👑 Ray` category in four groups:
 
 | Node | Group | Purpose |
 |---|---|---|
-| Ray Save Image | VFX | Save either or both image inputs as PNGs, or preview them with a draggable comparison divider |
 | Ray's VFX: CRT | VFX | CRT display simulation with phosphor masks, scanlines, halation, NTSC bleed, and barrel distortion |
 | Ray's VFX: Offset Print | VFX | CMYK or duotone halftone printing with paper simulation |
 | Ray's VFX: Pixel Art | VFX | Pixel-grid repair and illustration abstraction with palette reduction, selective dithering, outlines, native-size output, and comparison preview |
@@ -38,12 +37,13 @@ analog controls. Nodes appear under the `👑 Ray` category in four groups:
 | Ray's LLM: Ollama Chat | LLM | Ollama or ComfyUI CLIP chat with image and audio attachments |
 | Ray's LLM: Prompt Iterator | LLM | Score image/prompt agreement and propose a revised prompt through Ollama |
 | Ray's LLM: Prompt Library | LLM | Store and browse prompts in a local SQLite library with tags and source filters |
-| Ray's Prompts: TXT Folder | Prompts | Read complete UTF-8 text prompts alphabetically and emit matching Save Image prefixes |
-| Ray's Prompts: PromptDexter Scraper | Prompts | Retrieve a random prompt and image from PromptDexter |
-| Ray's Prompts: CivitAI Gallery Scraper | Prompts | Retrieve prompt/image metadata from the CivitAI API with SFW/NSFW selection |
-| Ray's Prompts: Folder Image Scraper | Prompts | Select a local image and extract its generation prompt |
-| Ray's Prompts: Prompt Fetcher | Prompts | Unified local, PromptDexter, and CivitAI prompt source |
-| Ray's Prompts: Metadata Inspector | Prompts | Read generation metadata or embed supplied metadata into an image |
+| Ray's Tools: Save Image | Tools | Save either or both image inputs as PNGs, or preview them with a draggable comparison divider |
+| Ray's Tools: TXT Folder | Tools | Read complete UTF-8 text prompts alphabetically and emit matching Save Image prefixes |
+| Ray's Tools: PromptDexter Scraper | Tools | Retrieve a random prompt and image from PromptDexter |
+| Ray's Tools: CivitAI Gallery Scraper | Tools | Retrieve prompt/image metadata from the CivitAI API with SFW/NSFW selection |
+| Ray's Tools: Folder Image Scraper | Tools | Select a local image and extract its generation prompt |
+| Ray's Tools: Prompt Fetcher | Tools | Unified local, PromptDexter, and CivitAI prompt source |
+| Ray's Tools: Metadata Inspector | Tools | Read generation metadata or embed supplied metadata into an image |
 
 Detailed references are linked in the documentation section below.
 
@@ -119,7 +119,7 @@ recommended settings, limitations, engine attribution, and benchmark methodology
 are documented in [PIXEL_ART.md](PIXEL_ART.md) and
 [benchmarks/pixel_art/README.md](benchmarks/pixel_art/README.md).
 
-## Ray Save Image
+## Save Image
 
 The compact black panel shows image dimensions below the preview on the left
 and batch navigation on the right. Preview backgrounds are solid black.
@@ -146,10 +146,10 @@ selector and metadata choice are serialized with the workflow. The custom
 controls use shared Legacy/Nodes 2.0 DOM-widget support; frontends without DOM
 widgets retain the standard save-selection and metadata inputs.
 
-Right-click **Ray Save Image → Open image location in Explorer** to open the
-folder from its latest successful save. The option becomes available after a
-save in the current session and stays tied to that folder if you edit the next
-destination or run preview-only. Explorer opens on the Windows ComfyUI host.
+Right-click **Ray's Tools: Save Image → Open image location in Explorer** to
+open the folder from its latest successful save. The option becomes available
+after a save in the current session and stays tied to that folder if you edit
+the next destination or run preview-only. Explorer opens on the Windows ComfyUI host.
 
 ## Analog controls
 

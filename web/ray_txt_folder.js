@@ -8,12 +8,12 @@ app.registerExtension({
         const onCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function (...args) {
             const result = onCreated?.apply(this, args);
-            applyBucketTint(this, "Prompts");
+            applyBucketTint(this, "Tools");
             return result;
         };
         const onDraw = nodeType.prototype.onDrawBackground;
         nodeType.prototype.onDrawBackground = function (...args) {
-            applyBucketTint(this, "Prompts");
+            applyBucketTint(this, "Tools");
             return onDraw?.apply(this, args);
         };
     },

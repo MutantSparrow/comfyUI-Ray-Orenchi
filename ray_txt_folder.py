@@ -26,7 +26,7 @@ class RayTextFolder:
     )
     OUTPUT_IS_LIST = (True, True)
     FUNCTION = "load"
-    CATEGORY = "👑 Ray/📝 Prompts"
+    CATEGORY = "👑 Ray/🔧 Tools"
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):

@@ -57,7 +57,7 @@ export function getRadialBrushedURL(palette = ["#f5f5f5", "#c8c8c8", "#7a7a7a"])
 export const RAY_PALETTE = {
     VFX:     { bg: "#2a1f3a", edge: "#8a3ac8" },  // violet
     Analog:  { bg: "#000000", edge: "#000000" },  // black — knob / switch
-    Prompts: { bg: "#1f3a2a", edge: "#3aa867" },  // green
+    Tools:   { bg: "#3a2a1a", edge: "#c8873a" },  // amber
     LLM:     { bg: "#1f2a4a", edge: "#3a73c8" },  // blue
 };
 
@@ -126,45 +126,40 @@ export function shiftTint(hex, degrees = 0) {
 // Widget hide / show (v2 frontend compat)
 // ---------------------------------------------------------------------------
 //
-// V2 renders widgets whose `type === "converted-widget"` as pins only. Legacy
-// still respects an explicit `hidden` flag. We stash the original type under
-// a single property so any node can round-trip repeatedly.
-
-// Nodes 2.0 (Vue) checks `widget.hidden` in the base class's
-// `isWidgetVisible()` — that alone filters both layout and rendering.
-// Legacy canvas frontends respect the same flag but historically also
-// wanted `type = "converted-widget"` + zero-height computeSize, so we
-// keep that as a belt-and-braces fallback.
+// Current frontends filter on `widget.hidden` / `options.hidden` in both
+// renderers (LGraphNode.isWidgetVisible). Do NOT also swap the type there:
+// Nodes 2.0 always renders a row for `type === "converted-widget"` widgets
+// that have an input slot, which leaves an empty gap per hidden widget.
+//
+// Older canvas frontends without isWidgetVisible need the type swap plus a
+// zero-height computeSize. The originals are stashed only on the first hide,
+// so repeated hides never capture the stub as the "original".
 const _HIDDEN_TYPE = "converted-widget";
 const _ORIG_KEY = "_rayOrigType";
 const _ORIG_COMPUTE = "_rayOrigCompute";
 
 export function setWidgetHidden(node, widget, hidden) {
     if (!widget) return;
-    // Nodes 2.0 reads options.hidden when constructing Vue widget rows.
-    // Keep it in sync with LiteGraph's widget.hidden flag.
+    hidden = !!hidden;
     widget.options ||= {};
     widget.options.hidden = hidden;
-    if (hidden) {
-        if (widget[_ORIG_KEY] === undefined) widget[_ORIG_KEY] = widget.type;
-        if (widget[_ORIG_COMPUTE] === undefined && typeof widget.computeSize === "function") {
-            widget[_ORIG_COMPUTE] = widget.computeSize;
+    widget.hidden = hidden;
+    // Some callers pass no node; fall back to the global LGraphNode class.
+    const proto = node ?? globalThis.LiteGraph?.LGraphNode?.prototype;
+    const legacy = typeof proto?.isWidgetVisible !== "function";
+    if (hidden && legacy) {
+        if (!(_ORIG_KEY in widget)) {
+            widget[_ORIG_KEY] = widget.type;
+            widget[_ORIG_COMPUTE] = Object.hasOwn(widget, "computeSize") ? widget.computeSize : null;
         }
-        widget.hidden = true;             // Nodes 2.0 canonical filter.
-        widget.type = _HIDDEN_TYPE;       // Legacy canvas fallback.
+        widget.type = _HIDDEN_TYPE;
         widget.computeSize = () => [0, -4];
-    } else {
-        widget.hidden = false;
-        if (widget[_ORIG_KEY] !== undefined) {
-            widget.type = widget[_ORIG_KEY];
-            delete widget[_ORIG_KEY];
-        }
-        if (widget[_ORIG_COMPUTE] !== undefined) {
-            widget.computeSize = widget[_ORIG_COMPUTE];
-            delete widget[_ORIG_COMPUTE];
-        } else if (widget.computeSize && widget.computeSize.toString().includes("[0, -4]")) {
-            delete widget.computeSize;
-        }
+    } else if (_ORIG_KEY in widget) {
+        widget.type = widget[_ORIG_KEY];
+        if (widget[_ORIG_COMPUTE]) widget.computeSize = widget[_ORIG_COMPUTE];
+        else delete widget.computeSize;
+        delete widget[_ORIG_KEY];
+        delete widget[_ORIG_COMPUTE];
     }
     if (node && typeof node.setDirtyCanvas === "function") {
         node.setDirtyCanvas(true, true);

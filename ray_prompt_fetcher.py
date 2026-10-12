@@ -85,7 +85,7 @@ class RayPromptFetcher:
             "required": {
                 "scraper_mode": (MODES, {
                     "default": MODE_LOCAL,
-                    "tooltip": "Which backend runs. The JS hides widgets for the other modes.",
+                    "tooltip": "Prompt source to fetch from. Only the widgets for this source are shown.",
                 }),
                 "seed": ("INT", {
                     "default": -1, "min": -1, "max": 2**31 - 1,
@@ -177,7 +177,7 @@ class RayPromptFetcher:
     )
     OUTPUT_IS_LIST = (True, True, True, True)
     FUNCTION = "process"
-    CATEGORY = "👑 Ray/📝 Prompts"
+    CATEGORY = "👑 Ray/🔧 Tools"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
