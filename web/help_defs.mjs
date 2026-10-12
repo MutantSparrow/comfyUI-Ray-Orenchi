@@ -108,29 +108,6 @@ export const RAY_HELP_DEFS = {
     },
 
     // ── 💬 LLM ─────────────────────────────────────────────────────────
-    RayOllamaChat: {
-        summary: "A chat panel inside the node. It talks to a local Ollama server, or to the text encoder of a CLIP already loaded in ComfyUI, with optional image and audio attachments.",
-        sections: [{
-            heading: "Notes",
-            bullets: [
-                "`ollama` mode needs a running Ollama server with the selected model installed; `clip` mode needs no server and rejects vision-language CLIPs.",
-                "`attach_image` / `attach_audio` decide whether the connected IMAGE / AUDIO goes with the next message.",
-                "The chat history is stored on the node, so it survives reloading the workflow.",
-            ],
-        }],
-    },
-
-    RayPromptIterator: {
-        summary: "Asks an Ollama model how well an image matches its prompt, returning a confidence score and a revised prompt that aims to close the gap.",
-        sections: [{
-            heading: "Notes",
-            bullets: [
-                "Wire `new_prompt` back into your text encoder to iterate.",
-                "The judge instructions live in `iterator_sysprompt.txt` next to the node code; edit it to customize scoring.",
-            ],
-        }],
-    },
-
     RayPromptLibrary: {
         summary: "A local SQLite prompt library. Save mode stores prompts with tags and source; Browse mode searches the library and outputs the selected row.",
         sections: [{
