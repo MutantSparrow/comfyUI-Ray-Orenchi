@@ -1,6 +1,5 @@
-// Original style IDs remain stable for saved workflows. Artwork is shared by both renderers.
-import { STUDIO_KNOBS, STUDIO_SLIDERS } from "./analog_hardware.js";
-import { LEGACY_KNOBS } from "./analog_legacy.js";
+// Style IDs stay stable for saved workflows. Artwork is shared by both renderers.
+import { KNOBS, SLIDERS } from "./analog_hardware.js";
 
 let _brushedNodeURL = null;
 export function getBrushedAluminumURL() {
@@ -34,12 +33,8 @@ export function getBrushedAluminumURL() {
     return _brushedNodeURL;
 }
 
-// The original faces drew an indicator pointing right at zero and spun endlessly. They now sweep
-// min..max over 270° like the studio knobs, starting at 7:30 (-225° from their 3 o'clock zero).
-const SWEEPING_LEGACY = Object.fromEntries(Object.entries(LEGACY_KNOBS).map(
-    ([key, style]) => [key, { sweep: true, zero: -225, ...style }]));
-
-export const KNOB_STYLES = { ...STUDIO_KNOBS, ...SWEEPING_LEGACY, ...STUDIO_SLIDERS };
+// Every rotary face sweeps min..max over 270°, starting at 7:30 with its indicator drawn pointing up.
+export const KNOB_STYLES = { ...KNOBS, ...SLIDERS };
 
 export const DEFAULT_STYLE = "console_rotary";
 
