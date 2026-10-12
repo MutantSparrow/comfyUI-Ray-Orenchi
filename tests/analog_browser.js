@@ -24,15 +24,15 @@ try {
         const knob = make('knob',accessor);
         const control = knob._rayAnalog;
         document.body.append(control.element);
-        const values = knob.widgets.slice(0,6).map(w=>w.value);
+        const values = knob.widgets.slice(0,5).map(w=>w.value);
         const slots = knob.outputs;
         knob.properties.compact = true; control.applyCompact();
         check(knob.outputs === slots && knob.outputs.length===2,'Compact preserves actual output slots');
         check(knob.title.includes('Knob'),'Compact preserves saved title');
-        check(knob.widgets.slice(0,5).every(w=>w.hidden),'Compact hides numeric configuration');
+        check(knob.widgets.slice(0,4).every(w=>w.hidden),'Compact hides numeric configuration');
         knob.properties.compact=false; control.applyCompact();
-        check(knob.widgets.slice(0,5).every(w=>!w.hidden && ['number','toggle'].includes(w.type)),'Expand restores native types');
-        check(JSON.stringify(values)===JSON.stringify(knob.widgets.slice(0,6).map(w=>w.value)),'Presentation preserves serialized input order and values');
+        check(knob.widgets.slice(0,4).every(w=>!w.hidden && ['number','toggle'].includes(w.type)),'Expand restores native types');
+        check(JSON.stringify(values)===JSON.stringify(knob.widgets.slice(0,5).map(w=>w.value)),'Presentation preserves serialized input order and values');
         const value = widget(knob,'knob_value');
         widget(knob,'clamp').value = 2.5;
         check(quantizeInt(knob,6)===5 && quantizeInt(knob,-6)===-7,'Fractional quantization matches Python INT truncation');
@@ -41,7 +41,9 @@ try {
         check(boundValue(knob,-9)===0,'Inverted nonnegative bounds match backend');
         widget(knob,'allow_negative').value=true; widget(knob,'max_value').value=100;
         control.host.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowUp',bubbles:true,cancelable:true}));
-        check(Math.abs(value.value-.2)<1e-9 && knob.callbacks===1,'Keyboard updates backing widget and callback exactly once');
+        check(Math.abs(value.value-1)<1e-9 && knob.callbacks===1,'Keyboard steps 1/200 of the range and calls the callback exactly once');
+        control.host.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',shiftKey:true,bubbles:true,cancelable:true}));
+        check(Math.abs(value.value-.9)<1e-9,'Shift slows keyboard steps tenfold');
         control.host.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true,cancelable:true}));
         check(value.value===100,'End reaches upper bound');
         control.host.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true,cancelable:true}));
@@ -146,10 +148,44 @@ try {
         {type:'RaySwitch',properties:{compact:true},outputs:[]}]};
     for(const extension of app.extensions) extension.beforeConfigureGraph(old);
     check(old.nodes[0].outputs.length===2 && old.nodes[1].outputs.length===1,'Repair outputs lost by historical compact saves');
-    check(old.nodes[0].widgets_values[5]===17 && old.nodes[0].properties.ray_label==='GAIN','Migration preserves values and label');
+    check(JSON.stringify(old.nodes[0].widgets_values)==='[-100,100,0,true,17]' && old.nodes[0].properties.ray_label==='GAIN','Migration drops the saved spin value and keeps the rest and the label');
     const first=JSON.stringify(old);
     for(const extension of app.extensions) extension.beforeConfigureGraph(old);
     check(first===JSON.stringify(old),'Migration is idempotent');
+    {
+        // A saved Control with a spin_value input slot, wired on both sides of it.
+        const graph={nodes:[
+            {id:1,type:'Primitive',outputs:[{name:'out',links:[9,10]}]},
+            {id:5,type:'RayKnob',inputs:[{name:'min_value',link:null},{name:'max_value',link:null},{name:'spin_value',link:9},
+                {name:'clamp',link:null},{name:'allow_negative',link:null},{name:'knob_value',link:10}],widgets_values:[0,1,20,0,true,.5]}],
+            links:[[9,1,0,5,2,'FLOAT'],[10,1,0,5,5,'FLOAT']]};
+        for(const extension of app.extensions) extension.beforeConfigureGraph(graph);
+        check(graph.nodes[1].inputs.length===5 && !graph.nodes[1].inputs.some(i=>i.name==='spin_value'),'Migration removes the spin_value input slot');
+        check(graph.links.length===1 && graph.links[0][4]===4,'Links into later slots shift down and the spin_value link is dropped');
+        check(JSON.stringify(graph.nodes[0].outputs[0].links)==='[10]','The dropped link is removed from its source output');
+        check(JSON.stringify(graph.nodes[1].widgets_values)==='[0,1,0,true,0.5]','Saved 0..1 range and value survive the migration');
+        const again=JSON.stringify(graph);
+        for(const extension of app.extensions) extension.beforeConfigureGraph(graph);
+        check(again===JSON.stringify(graph),'Spin migration is idempotent');
+    }
+    {
+        // Every knob face sweeps min..max over 270 degrees; legacy faces start at 7:30 like the studio ones.
+        const node=make('knob'), ui=node._rayAnalog; document.body.append(ui.element);
+        const value=widget(node,'knob_value');
+        const angleAt=(style,v)=>{ node.properties.style=style; value.value=v; ui.render();
+            return Number(/rotate\(([-\d.]+)\)/.exec(ui.host.querySelector('[data-rotate]')?.getAttribute('transform')||'')?.[1]); };
+        for (const [key,style] of Object.entries(KNOB_STYLES)) {
+            if (style.kind==='slider') continue;
+            const zero=style.zero ?? -135;
+            check(angleAt(key,-100)===zero && angleAt(key,100)===zero+270,`Knob ${key} sweeps 270 degrees from min to max`);
+        }
+        widget(node,'min_value').value=0; widget(node,'max_value').value=1;
+        check(angleAt('console_rotary',.5)===0,'A 0..1 range centres the dial at 0.5');
+        node.properties.style='dark_studio_led'; value.value=1; ui.render();
+        const arc=ui.host.querySelector('[data-arc]');
+        check(arc.getAttribute('stroke-dasharray')==='75.00 100' && arc.getAttribute('stroke-dashoffset')==='-37.5','LED arc covers the 270 degree sweep');
+        node.onRemoved(); ui.element.remove();
+    }
     const linked={nodes:[{type:'RaySwitch',outputs:[{name:'bool',type:'BOOLEAN',links:[77]}]}]};
     for(const extension of app.extensions) extension.beforeConfigureGraph(linked);
     check(linked.nodes[0].outputs[0].links[0]===77,'Migration preserves live links');

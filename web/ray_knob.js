@@ -1,8 +1,12 @@
 import { app } from "../../scripts/app.js";
 import { KNOB_STYLES, DEFAULT_STYLE, getAllStyleCSS } from "./knob_styles.js";
-import { findWidget, TWO_PI } from "./_common.js";
+import { findWidget } from "./_common.js";
 import { createPanel, changeValue, editNode, isLinked, mountControlSVG, registerAnalog } from "./analog_common.js";
 import { createKnobFeel } from "./analog_audio.js";
+
+// Shift slows any drag to this fraction of normal speed.
+const FINE = .05;
+const SWEEP_DEGREES = 270;
 
 function number(node, name, fallback) {
     const value = Number(findWidget(node, name)?.value);
@@ -60,12 +64,10 @@ function buildKnob(node, widget) {
             ? ((event.clientX - (rect.left + rect.width / 2)) / unit + 43) / 86
             : (43 - (event.clientY - (rect.top + rect.height / 2)) / unit) / 86;
     };
-    // Dial position in detent units: 0..1 along a sweep, turns for endless knobs.
+    // Dial position in detent units: 0..1 from min to max.
     const position = value => {
         const [lo, hi] = bounds(node);
-        return KNOB_STYLES[currentStyle]?.sweep
-            ? (hi > lo ? (value - lo) / (hi - lo) : 0)
-            : value / Math.max(.0001, number(node, "spin_value", 20));
+        return hi > lo ? (value - lo) / (hi - lo) : 0;
     };
     const render = () => {
         const key = Object.hasOwn(KNOB_STYLES, node.properties.style) ? node.properties.style : DEFAULT_STYLE;
@@ -86,10 +88,13 @@ function buildKnob(node, widget) {
         const [lo, hi] = bounds(node);
         const value = boundValue(node, widget.value);
         const fraction = hi > lo ? (value - lo) / (hi - lo) : 0;
-        const turns = value / Math.max(.0001, number(node, "spin_value", 20));
-        const angle = style.sweep ? -135 + fraction * 270 : (turns % 1) * 360;
+        const angle = (style.zero ?? -135) + fraction * SWEEP_DEGREES;
         for (const el of rotating) el.setAttribute("transform", `rotate(${angle.toFixed(3)})`);
-        if (arc) arc.setAttribute("stroke-dasharray", `${(((turns % 1) + 1) % 1 * 100).toFixed(2)} 100`);
+        if (arc) {
+            // The arc ring starts at 3 o'clock; the sweep starts at 7:30, 37.5% of the way round.
+            arc.setAttribute("stroke-dasharray", `${(fraction * SWEEP_DEGREES / 3.6).toFixed(2)} 100`);
+            arc.setAttribute("stroke-dashoffset", "-37.5");
+        }
         if (slide) {
             const across = -43 + fraction * 86;
             slide.setAttribute("transform", slideAxis() === "x"
@@ -137,7 +142,7 @@ function buildKnob(node, widget) {
     });
     host.addEventListener("keydown", event => {
         const [lo, hi] = bounds(node);
-        const step = Math.max(.0001, number(node, "spin_value", 20) / 100) * (event.shiftKey ? .1 : 1);
+        const step = (hi - lo) / 200 * (event.shiftKey ? .1 : 1);
         const increments = { ArrowUp: step, ArrowRight: step, ArrowDown: -step, ArrowLeft: -step, PageUp: step * 10, PageDown: -step * 10 };
         let value;
         if (event.key === "Home") value = lo;
@@ -190,21 +195,54 @@ function buildKnob(node, widget) {
         } else {
             const prev = Math.atan2(drag.lastY - drag.y, drag.lastX - drag.x);
             const next = Math.atan2(event.clientY - drag.y, event.clientX - drag.x);
-            delta = Math.atan2(Math.sin(next - prev), Math.cos(next - prev)) / TWO_PI * number(node, "spin_value", 20);
+            const [lo, hi] = bounds(node);
+            // The dial follows the pointer: a full sweep of the dial covers min to max.
+            delta = Math.atan2(Math.sin(next - prev), Math.cos(next - prev)) / (SWEEP_DEGREES * Math.PI / 180) * (hi - lo);
             // Ignore the unstable angle close to the spindle.
             if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 8 ||
                 Math.hypot(drag.lastX - drag.x, drag.lastY - drag.y) < 8) delta = 0;
         }
         drag.lastX = event.clientX; drag.lastY = event.clientY;
-        setValue(boundValue(node, widget.value) + delta * (event.shiftKey ? .1 : 1), event);
+        setValue(boundValue(node, widget.value) + delta * (event.shiftKey ? FINE : 1), event);
     });
     for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) host.addEventListener(type, endDrag);
     return ui;
 }
 
+// Older workflows saved a spin_value widget between max_value and clamp. Drop its saved value and
+// input slot, shifting links into the later slots, so nothing lands in the wrong widget.
+export function removeSpinValue(data) {
+    const links = Array.isArray(data?.links) ? data.links : [];
+    const read = (link, index, key) => Array.isArray(link) ? link[index] : link?.[key];
+    for (const node of data?.nodes || []) {
+        if (node?.type !== "RayKnob") continue;
+        if (Array.isArray(node.widgets_values) && node.widgets_values.length === 6) node.widgets_values.splice(2, 1);
+        const at = Array.isArray(node.inputs) ? node.inputs.findIndex(input => input?.name === "spin_value") : -1;
+        if (at < 0) continue;
+        node.inputs.splice(at, 1);
+        for (const link of [...links]) {
+            if (read(link, 3, "target_id") !== node.id) continue;
+            const slot = read(link, 4, "target_slot");
+            if (slot > at) {
+                if (Array.isArray(link)) link[4] = slot - 1; else link.target_slot = slot - 1;
+            } else if (slot === at) {
+                const id = read(link, 0, "id"), origin = read(link, 1, "origin_id");
+                links.splice(links.indexOf(link), 1);
+                for (const source of data.nodes) {
+                    if (source.id !== origin) continue;
+                    for (const output of source.outputs || []) {
+                        if (Array.isArray(output.links)) output.links = output.links.filter(l => l !== id);
+                    }
+                }
+            }
+        }
+    }
+    for (const subgraph of data?.definitions?.subgraphs || []) removeSpinValue(subgraph);
+}
+
 registerAnalog(app, {
     kind: "knob", name: "RayKnob", title: "🎛️ Ray's Analog: Control (Knob / Slider)",
     styles: KNOB_STYLES, defaultStyle: DEFAULT_STYLE, valueName: "knob_value",
-    configNames: ["min_value", "max_value", "spin_value", "clamp", "allow_negative"],
-    outputs: [["int", "INT"], ["float", "FLOAT"]], build: buildKnob,
+    configNames: ["min_value", "max_value", "clamp", "allow_negative"],
+    outputs: [["int", "INT"], ["float", "FLOAT"]], build: buildKnob, migrate: removeSpinValue,
 });
