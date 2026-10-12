@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { SWITCH_STYLES, DEFAULT_SWITCH_STYLE, getAllSwitchStyleCSS } from "./switch_styles.js";
 import { createPanel, changeValue, editNode, isLinked, mountControlSVG, registerAnalog } from "./analog_common.js";
+import { playSwitch } from "./analog_audio.js";
 
 function buildSwitch(node, widget) {
     const ui = createPanel(node, "switch", getAllSwitchStyleCSS());
@@ -42,7 +43,9 @@ function buildSwitch(node, widget) {
     host.addEventListener("click", event => {
         event.stopPropagation();
         if (disabled()) return;
-        editNode(node, () => changeValue(node, widget, !widget.value, event));
+        const next = !widget.value;
+        editNode(node, () => changeValue(node, widget, next, event));
+        playSwitch(node.properties.style, next);
         ui.render();
     });
     return ui;

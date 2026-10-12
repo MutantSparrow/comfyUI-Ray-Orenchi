@@ -19,7 +19,7 @@ for naming, categories, colors, widgets, and the web layer.
     spelled out.
   - `<Purpose>` is Title Case, no emoji inside, no trailing punctuation.
   - Examples: `✨ Ray's VFX: Film Stock`, `🔧 Ray's Tools: Folder Scraper`,
-    `💬 Ray's LLM: Ollama Chat`, `🎛️ Ray's Analog: Knob`.
+    `💬 Ray's LLM: Ollama Chat`, `🎛️ Ray's Analog: Control (Knob / Slider)`.
 - **JS extension name.** `Ray.<Feature>` (already the pattern everywhere).
 
 ## Categories
@@ -29,7 +29,7 @@ Two-level tree, one top-level:
 | Bucket  | CATEGORY string        | What lives here                                   |
 |---------|------------------------|---------------------------------------------------|
 | VFX     | `👑 Ray/✨ VFX`         | Image-space effects — CRT, Print, PixelArt, FilmStock, VHS |
-| Analog  | `👑 Ray/🎛️ Analog`     | Analog-style UI widgets — Knob, Switch            |
+| Analog  | `👑 Ray/🎛️ Analog`     | Analog-style UI widgets — Control (knob / slider), Switch, Button Deck |
 | Tools   | `👑 Ray/🔧 Tools`       | Scrapers, prompt fetcher, metadata inspector, TXT folder, Save Image |
 | LLM     | `👑 Ray/💬 LLM`         | Chat, Prompt Iterator, Prompt Library             |
 
