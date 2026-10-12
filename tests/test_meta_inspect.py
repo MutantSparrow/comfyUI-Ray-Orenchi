@@ -317,3 +317,126 @@ def test_resolve_path_missing_file_returns_original(tmp_path, monkeypatch):
     # Resolver falls back to the direct expanduser path.
     assert "does_not_exist.png" in str(out)
     assert not out.is_file()
+
+
+# ---------------------------------------------------------------------------
+# Inspect through the connected image input
+# ---------------------------------------------------------------------------
+
+import torch  # noqa: E402
+
+
+def _folders(monkeypatch, tmp_path):
+    class _Stub:
+        @staticmethod
+        def get_input_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_output_directory():
+            return str(tmp_path)
+
+        @staticmethod
+        def get_temp_directory():
+            return str(tmp_path)
+
+    monkeypatch.setattr(rmi, "folder_paths", _Stub)
+
+
+def _tagged(path, text="a red fox, masterpiece"):
+    return _png(path, info={"parameters": f"{text}\nNegative prompt: blurry\nSteps: 20, Sampler: Euler a, CFG scale: 7, Seed: 42"})
+
+
+_TENSOR = torch.zeros((1, 8, 8, 3))
+
+
+def _graph(loader_inputs, inspector_link=("1", 0), middle=None):
+    graph = {"1": {"class_type": "LoadImage", "inputs": loader_inputs}}
+    link = list(inspector_link)
+    if middle:
+        graph["3"] = {"class_type": "ImageScale", "inputs": {"image": ["1", 0], "width": 4}}
+        link = ["3", 0]
+    graph["2"] = {"class_type": "RayMetaInspect", "inputs": {"mode": "Inspect", "path": "", "image": link}}
+    return graph
+
+
+def test_connected_image_reads_the_metadata_of_the_file_it_was_loaded_from(tmp_path, monkeypatch):
+    _folders(monkeypatch, tmp_path)
+    _tagged(tmp_path / "shot.png")
+    out = rmi.RayMetaInspect().process("Inspect", "", image=_TENSOR, node_id="2", prompt=_graph({"image": "shot.png"}))
+    assert out[0] == "a red fox, masterpiece"
+    assert out[1] == "blurry" and out[2] == "42"
+
+
+def test_connected_image_follows_annotated_names_and_subfolders(tmp_path, monkeypatch):
+    _folders(monkeypatch, tmp_path)
+    (tmp_path / "sub").mkdir()
+    _tagged(tmp_path / "sub" / "x.png", "from a subfolder")
+    _tagged(tmp_path / "gen.png", "from output")
+    node = rmi.RayMetaInspect()
+    assert node.process("Inspect", "", image=_TENSOR, node_id="2", prompt=_graph({"image": "sub/x.png"}))[0] == "from a subfolder"
+    assert node.process("Inspect", "", image=_TENSOR, node_id="2", prompt=_graph({"image": "gen.png [output]"}))[0] == "from output"
+
+
+def test_connected_image_is_traced_through_nodes_that_only_transform_it(tmp_path, monkeypatch):
+    _folders(monkeypatch, tmp_path)
+    _tagged(tmp_path / "shot.png")
+    prompt = _graph({"image": "shot.png"}, middle=True)
+    out = rmi.RayMetaInspect().process("Inspect", "", image=_TENSOR, node_id="2", prompt=prompt)
+    assert out[0] == "a red fox, masterpiece"
+
+
+def test_connected_image_wins_over_a_stale_path(tmp_path, monkeypatch):
+    _folders(monkeypatch, tmp_path)
+    _tagged(tmp_path / "shot.png", "the connected one")
+    _tagged(tmp_path / "old.png", "left over from before")
+    out = rmi.RayMetaInspect().process("Inspect", str(tmp_path / "old.png"), image=_TENSOR, node_id="2",
+                                       prompt=_graph({"image": "shot.png"}))
+    assert out[0] == "the connected one"
+
+
+def test_generated_image_without_a_file_explains_itself_or_falls_back_to_path(tmp_path, monkeypatch):
+    _folders(monkeypatch, tmp_path)
+    _tagged(tmp_path / "typed.png", "from the typed path")
+    generated = {"1": {"class_type": "KSampler", "inputs": {"seed": 1}},
+                 "2": {"class_type": "RayMetaInspect", "inputs": {"mode": "Inspect", "path": "", "image": ["1", 0]}}}
+    node = rmi.RayMetaInspect()
+    out = node.process("Inspect", "", image=_TENSOR, node_id="2", prompt=generated)
+    assert "no source file" in json.loads(out[10])["error"]
+    out = node.process("Inspect", str(tmp_path / "typed.png"), image=_TENSOR, node_id="2", prompt=generated)
+    assert out[0] == "from the typed path"
+
+
+def test_without_a_connected_image_the_path_is_used_as_before(tmp_path, monkeypatch):
+    _folders(monkeypatch, tmp_path)
+    _tagged(tmp_path / "typed.png", "typed")
+    assert rmi.RayMetaInspect().process("Inspect", str(tmp_path / "typed.png"))[0] == "typed"
+    assert json.loads(rmi.RayMetaInspect().process("Inspect", "")[10])["error"] == "path is empty"
+
+
+def test_trace_survives_cycles_and_missing_graph_data(tmp_path, monkeypatch):
+    _folders(monkeypatch, tmp_path)
+    loop = {"1": {"inputs": {"image": ["2", 0]}}, "2": {"inputs": {"image": ["1", 0]}}, "3": {"inputs": {"image": ["1", 0]}}}
+    assert rmi.trace_source_file(loop, "3") is None
+    assert rmi.trace_source_file(None, "3") is None
+    assert rmi.trace_source_file({}, "3") is None
+    assert rmi.trace_source_file({"3": {"inputs": {"image": ["9", 0]}}}, "3") is None
+
+
+def test_embed_mode_still_writes_the_connected_tensor(tmp_path):
+    out_path = tmp_path / "embedded.png"
+    out = rmi.RayMetaInspect().process("Embed", str(out_path), image=torch.rand((1, 8, 8, 3)),
+                                       metadata_json=json.dumps({"parameters": "embedded prompt\nSteps: 5"}),
+                                       node_id="2", prompt={"2": {"inputs": {}}})
+    assert out_path.is_file()
+    assert out[0] == "embedded prompt"
+
+
+def test_node_asks_for_the_graph_and_has_no_drop_zone():
+    spec = rmi.RayMetaInspect.INPUT_TYPES()
+    assert spec["hidden"]["prompt"] == "PROMPT"
+    assert "wins over `path`" in spec["optional"]["image"][1]["tooltip"]
+    assert "drop" not in rmi.RayMetaInspect.DESCRIPTION.lower()
+    script = (pathlib.Path(rmi.__file__).parent / "web" / "ray_meta_inspect.js").read_text(encoding="utf-8")
+    for leftover in ("dragover", "/upload/image", "ray_drop_zone", "ray_preview", "dataTransfer"):
+        assert leftover not in script, leftover
