@@ -1,4 +1,4 @@
-"""Ray's Prompt Fetcher.
+"""Ray's Prompt Scraper.
 
 Single ComfyUI node that unifies the three existing prompt scrapers:
   • Local   — Folder Image Scraper (ray_local_scraper)
@@ -57,7 +57,7 @@ def _empty_tensor():
 
 
 class RayPromptFetcher:
-    """All-in-one prompt fetcher with a mode-selector dropdown."""
+    """All-in-one prompt scraper with a mode-selector dropdown."""
 
     DESCRIPTION = (
         "One node, three prompt sources. Pick a mode and the JS hides "

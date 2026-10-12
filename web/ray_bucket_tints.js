@@ -24,7 +24,6 @@ const RAY_BUCKET = {
     RayPromptFetcher: "Tools",
     RayMetaInspect: "Tools",
     // LLM
-    RayPromptLibrary: "LLM",
 };
 
 app.registerExtension({
