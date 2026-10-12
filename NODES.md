@@ -101,7 +101,7 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | **Output** `int` | INT | Quantized via `clamp`. |
 | **Output** `float` | FLOAT | Raw clamped float in `[min, max]`. |
 
-**Faces.** Nine knobs (console rotary, broadcast ivory, mastering aluminium and the six original legacy faces) and five sliders: console linear fader, console channel fader with a dB scale, rack LED ladder, broadcast pan slider and rack amber slide. The pan slider and amber slide are horizontal; the others are vertical.
+**Faces.** Nine knobs and five sliders, all drawn from one material set with the same 0–10 scale and 270° sweep. Knobs: console blue grey, broadcast ivory, mastering aluminium, mastering chrome notched, console LED ring, broadcast bakelite chickenhead, mastering silver skirted, broadcast knurled brass and console minimal flat. Sliders: console linear fader, console channel fader with a dB scale, rack LED ladder, broadcast pan slider and rack amber slide. The pan slider and amber slide are horizontal; the others are vertical.
 
 **Dragging.** Every knob sweeps 270° from `min_value` to `max_value`, and the dial follows the pointer around its centre, so a 0–1 range is as controllable as 0–1000. Hold **Shift** for 20× finer movement. Arrow keys step 1/200 of the range (Shift: 1/2000), PageUp/PageDown step ten times that, and Home/End jump to the limits. Older workflows that saved a `spin_value` setting are migrated on load; that setting no longer exists.
 
@@ -124,7 +124,7 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | **Control** `state` | bool | Toggle. |
 | **Output** `bool` | BOOLEAN | Mirror of `state`. |
 
-**Right-click menu.** Style picker with rack power rocker, broadcast steel lever, illuminated console key, and the original Chrome Rocker, Bakelite Flip, Silver Paddle, Brass Slider, Minimal Pill, and Dark Studio Dome faces, plus **Mute sound** (shared with the Control). Every face has its own click, clack or thunk. **Compact mode** hides only unlinked setup controls and keeps the real output slot available. Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
+**Right-click menu.** **Switch Style…** opens a picker with nine faces: rack power rocker, broadcast steel lever, console illuminated key, rack chrome rocker, console dome button, broadcast bakelite flip, mastering silver paddle, broadcast brass slide and console minimal pill. **Mute sound** is shared with the Control. Every face has its own click, clack or thunk. **Compact mode** hides only unlinked setup controls and keeps the real output slot available. Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
 
 ---
 

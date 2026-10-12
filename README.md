@@ -161,8 +161,8 @@ and saved values. The controls support Legacy and Nodes 2.0 frontends.
 Choose a theme from the right-click menu: nine knob themes include rotary dials
 and a chickenhead, five slider themes include faders, an LED ladder and horizontal
 slides; nine switch themes include rockers, levers,
-sliders, and an illuminated key. The original twelve themes have refreshed
-metal, Bakelite, and indicator artwork with their existing style IDs preserved.
+sliders, and an illuminated key. Every theme keeps a stable style ID, so saved
+workflows always load with the face they were saved with.
 
 Drag a knob or slider (click a slider track to jump there), hold Shift for fine
 adjustment, or enter an exact value in its readout. Arrow keys adjust values and Home/End reach the configured limits.
