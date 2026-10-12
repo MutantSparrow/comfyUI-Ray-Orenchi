@@ -4,6 +4,7 @@ import '/extensions/ray/ray_switch.js';
 import '/extensions/ray/ray_button_deck.js';
 import { DECK_STYLES, gridShape } from '/extensions/ray/deck_styles.js';
 import { parseEntries } from '/extensions/ray/ray_button_deck.js';
+import { migrateClipInput } from '/extensions/ray/ray_vlm_folder.js';
 import { KNOB_STYLES } from '/extensions/ray/knob_styles.js';
 import { SWITCH_STYLES } from '/extensions/ray/switch_styles.js';
 import { quantizeInt, boundValue } from '/extensions/ray/ray_knob.js';
@@ -284,6 +285,25 @@ try {
         const arc=ui.host.querySelector('[data-arc]');
         check(arc.getAttribute('stroke-dasharray')==='75.00 100' && arc.getAttribute('transform')==='rotate(135)','LED ring arc starts at 7:30 and covers the 270 degree sweep');
         node.onRemoved(); ui.element.remove();
+    }
+    {
+        // Folder Captioner: the clip_name dropdown became a CLIP socket.
+        const widgets=()=>['qwen3vl_8b_fp8.safetensors','C:/imgs',false,0,-1,'Describe',1024,.25,40,.9,.05,1.05,7,'randomize',false];
+        const graph={nodes:[
+            {id:2,type:'CLIPLoader',outputs:[{name:'CLIP',links:[4,9]}]},
+            {id:3,type:'RayVLMFolder',inputs:[{name:'clip_name',widget:{name:'clip_name'},link:4},{name:'folder',widget:{name:'folder'},link:null},{name:'user_prompt',widget:{name:'user_prompt'},link:9}],widgets_values:widgets()},
+            {id:5,type:'RayVLMFolder',inputs:[{name:'clip_name',widget:{name:'clip_name'},link:null},{name:'folder',widget:{name:'folder'},link:null}],widgets_values:widgets()},
+            {id:6,type:'RayVLMFolder',inputs:[],widgets_values:['C:/other',false]}],
+            links:[[4,2,0,3,0,'COMBO'],[9,2,0,3,2,'STRING']]};
+        migrateClipInput(graph);
+        const [linked,plain,untouched]=graph.nodes.slice(1);
+        check(plain.widgets_values.length===14 && plain.widgets_values[0]==='C:/imgs' && plain.widgets_values[12]==='randomize','Captioner migration drops the saved model name and keeps every other value in place');
+        check(plain.inputs[0].name==='clip' && plain.inputs[0].type==='CLIP' && plain.inputs[0].link===null && plain.inputs.length===2 && plain.inputs[1].name==='folder','The old dropdown slot becomes the CLIP socket in the same position');
+        check(linked.inputs[0].name==='clip' && linked.inputs[0].link===null && graph.links.length===1 && graph.links[0][0]===9 && graph.links[0][4]===2,'A link into the old dropdown is dropped and other links keep their slots');
+        check(JSON.stringify(graph.nodes[0].outputs[0].links)==='[9]','The dropped link is removed from its source output');
+        check(JSON.stringify(untouched.widgets_values)==='["C:/other",false]','Workflows already using the CLIP socket are left alone');
+        const again=JSON.stringify(graph); migrateClipInput(graph);
+        check(again===JSON.stringify(graph),'Captioner migration is idempotent');
     }
     const linked={nodes:[{type:'RaySwitch',outputs:[{name:'bool',type:'BOOLEAN',links:[77]}]}]};
     for(const extension of app.extensions) extension.beforeConfigureGraph(linked);
