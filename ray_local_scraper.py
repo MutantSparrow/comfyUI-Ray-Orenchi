@@ -354,13 +354,85 @@ def _resolve_encoder_text(node: dict, graph: dict) -> str:
     return ""
 
 
+def _api_deps(graph: dict) -> dict:
+    """node id -> {input name: [upstream node ids]} for an API-format graph."""
+    deps: dict = {}
+    for nid, node in graph.items():
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+        deps[nid] = {
+            name: [str(val[0])] for name, val in inputs.items() if _is_link_ref(val)
+        }
+    return deps
+
+
+def _ui_deps(obj: dict) -> dict:
+    """Same shape as _api_deps, built from a UI workflow's nodes/links."""
+    origin_of: dict = {}
+    for link in obj.get("links") or []:
+        if isinstance(link, (list, tuple)) and len(link) >= 3:
+            origin_of[link[0]] = str(link[1])
+        elif isinstance(link, dict) and "id" in link and "origin_id" in link:
+            origin_of[link["id"]] = str(link["origin_id"])
+    deps: dict = {}
+    for node in obj.get("nodes") or []:
+        if not isinstance(node, dict) or "id" not in node:
+            continue
+        found: dict = {}
+        for slot in node.get("inputs") or []:
+            if not isinstance(slot, dict):
+                continue
+            origin = origin_of.get(slot.get("link"))
+            if origin is not None and isinstance(slot.get("name"), str):
+                found[slot["name"]] = [origin]
+        deps[str(node["id"])] = found
+    return deps
+
+
+def _reach(roots, deps: dict, side: str) -> set:
+    """Every node feeding `roots`, following only `side` ("positive" or
+    "negative") through nodes that carry both conditioning inputs (samplers,
+    ControlNet apply nodes) and every input elsewhere."""
+    seen: set = set()
+    stack = list(roots)
+    while stack:
+        nid = stack.pop()
+        if nid in seen:
+            continue
+        seen.add(nid)
+        inputs = deps.get(nid) or {}
+        if "positive" in inputs and "negative" in inputs:
+            stack.extend(inputs.get(side) or [])
+        else:
+            for origins in inputs.values():
+                stack.extend(origins)
+    return seen
+
+
+def _negative_only_ids(deps: dict) -> set:
+    """Ids of nodes that feed a sampler's `negative` input but never its
+    `positive` one. Empty when the graph has no positive/negative pair, so
+    graphs without a sampler keep every encoder."""
+    pos_roots: list = []
+    neg_roots: list = []
+    for inputs in deps.values():
+        if "positive" in inputs and "negative" in inputs:
+            pos_roots.extend(inputs["positive"])
+            neg_roots.extend(inputs["negative"])
+    if not neg_roots:
+        return set()
+    return _reach(neg_roots, deps, "negative") - _reach(pos_roots, deps, "positive")
+
+
 def _extract_prompts_from_comfy_graph(graph_obj) -> list:
     """Walk a ComfyUI prompt graph and return every plausible prompt.
 
     `graph_obj` is the value of either the `prompt` chunk (a node dict
     keyed by node id) or a workflow object with a nested `prompt` key.
 
-    Strategy 1: every text encoder contributes its resolved prompt.
+    Strategy 1: every text encoder contributes its resolved prompt, except
+    encoders that only feed a sampler's negative input.
     Strategy 2 (fallback): harvest literal text from source nodes when
     no encoder produced anything usable.
     """
@@ -380,11 +452,13 @@ def _extract_prompts_from_comfy_graph(graph_obj) -> list:
         if isinstance(node, dict) and "class_type" in node:
             graph[str(nid)] = node
 
+    negative_only = _negative_only_ids(_api_deps(graph))
+
     # --- Strategy 1: every text encoder contributes its resolved prompt.
     encoder_prompts: list = []
     for nid, node in graph.items():
         ct = node.get("class_type") or ""
-        if not _node_matches(ct, _COMFY_ENCODER_HINTS):
+        if nid in negative_only or not _node_matches(ct, _COMFY_ENCODER_HINTS):
             continue
         text = _resolve_encoder_text(node, graph)
         if text:
@@ -395,10 +469,10 @@ def _extract_prompts_from_comfy_graph(graph_obj) -> list:
 
     # --- Strategy 2: harvest from source nodes.
     candidates: list = []  # (priority, length, text)
-    for _nid, node in graph.items():
+    for nid, node in graph.items():
         ct = node.get("class_type") or ""
         inputs = node.get("inputs") or {}
-        if not isinstance(inputs, dict):
+        if not isinstance(inputs, dict) or nid in negative_only:
             continue
         if not _node_matches(ct, _COMFY_TEXT_SOURCE_HINTS):
             continue
@@ -491,11 +565,12 @@ def _extract_prompts_from_ui_workflow(obj) -> list:
                     if isinstance(iv, str):
                         _push(iv)
 
+    negative_only = _negative_only_ids(_ui_deps(obj))
     encoder_hits = []
     source_hits = []
     has_wired_encoder = False
     for n in nodes:
-        if not isinstance(n, dict):
+        if not isinstance(n, dict) or str(n.get("id")) in negative_only:
             continue
         ct = n.get("type") or ""
         if not isinstance(ct, str):

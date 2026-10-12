@@ -222,6 +222,7 @@ export const RAY_HELP_DEFS = {
             bullets: [
                 "Reads A1111/Forge `parameters`, ComfyUI `prompt` / `workflow` graphs, other prompt-like PNG keys, EXIF comments and `<image>.txt` sidecars.",
                 "When an image holds several prompts, each is emitted as a separate list entry.",
+                "Only positive prompts are returned: in ComfyUI graphs, text encoders that feed only a sampler's negative input are skipped. Graphs without a sampler's positive/negative wiring keep every encoder.",
                 "`seed` -1 picks randomly; any value ≥ 0 always picks the same image. Skipping and repeat avoidance only apply with `seed` -1.",
             ],
         }],
@@ -234,6 +235,7 @@ export const RAY_HELP_DEFS = {
             bullets: [
                 "Widgets are prefixed by source: `local__`, `dexter__` and `civitai__`. Hidden widgets keep their values.",
                 "Every mode produces the same four outputs; `image_path` is empty for the web sources.",
+                "Local Folder mode returns positive prompts only; text encoders that feed only a sampler's negative input are skipped.",
             ],
         }],
     },
