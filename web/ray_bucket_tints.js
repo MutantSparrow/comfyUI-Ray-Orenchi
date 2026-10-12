@@ -7,7 +7,7 @@
 // hasn't been touched yet.
 
 import { app } from "../../scripts/app.js";
-import { applyBucketTint } from "./_common.js";
+import { applyBucketTint, isLegacyBodyColor } from "./_common.js";
 
 const RAY_BUCKET = {
     // VFX
@@ -31,6 +31,14 @@ const RAY_BUCKET = {
 
 app.registerExtension({
     name: "Ray.BucketTints",
+    // Workflows saved before the black-body palette restore a tinted body over
+    // the new one. Blacken those; keep the saved title color and any body the
+    // user colored by hand.
+    loadedGraphNode(node) {
+        if (node?.comfyClass?.startsWith("Ray") && isLegacyBodyColor(node.bgcolor)) {
+            node.bgcolor = "#000000";
+        }
+    },
     async beforeRegisterNodeDef(nodeType, nodeData) {
         const bucket = RAY_BUCKET[nodeData?.name];
         if (!bucket) return;
