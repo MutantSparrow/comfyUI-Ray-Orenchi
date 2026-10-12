@@ -172,6 +172,8 @@ export const RAY_HELP_DEFS = {
             heading: "Notes",
             bullets: [
                 "The Save Image buttons choose None, 1, 2 or Both; saving happens when the workflow runs. None only previews.",
+                "With two images connected, drag the ‹ › handle to compare them. The preview is otherwise click-through, so right-click, middle-drag and the wheel still reach the canvas.",
+                "The picture fills the node: resize the node to enlarge it. Image sizes and the save status sit on the picture, and with several images the arrows at the bottom right step through the pairs.",
                 "Browse… picks a folder on the ComfyUI host; the arrow recalls the last three save folders.",
                 "Right-click → Save without metadata omits workflow data; Open image location in Explorer opens the last save folder (Windows host).",
                 "Files are 8-bit PNGs at input resolution, alpha included, with unique names.",
