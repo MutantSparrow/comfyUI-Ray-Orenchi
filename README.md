@@ -30,7 +30,7 @@ analog controls. Nodes appear under the `👑 Ray` category in four groups:
 | Ray's VFX: Pixel Art | VFX | Pixel-grid repair and illustration abstraction with palette reduction, selective dithering, outlines, native-size output, and comparison preview |
 | Ray's VFX: Film Stock | VFX | Film response, grain, halation, and optional LUT/XMP assets |
 | Ray's VFX: VHS / Tape | VFX | YUV tape degradation, tracking faults, dropouts, noise, and OSD |
-| Ray's Analog: Knob | Analog | Float control with min/max, spin, and clamp behavior |
+| Ray's Analog: Control (Knob / Slider) | Analog | Knob or slider with min/max, spin, and clamp behavior, plus hardware sound feedback |
 | Ray's Analog: Switch | Analog | Boolean toggle control |
 | Ray's LLM: Fast Qwen3-VL Infer | LLM | Fast image-to-text generation through an already loaded native Qwen3-VL CLIP, with no duplicate model |
 | Ray's LLM: Folder Captioner | LLM | Caption a sorted local image range with a full GPU VLM and return aligned text, image, and path lists |
@@ -153,21 +153,23 @@ the next destination or run preview-only. Explorer opens on the Windows ComfyUI 
 
 ## Analog controls
 
-**Knob** outputs both a raw float and a quantized integer; **Switch** outputs a
-boolean. Both provide vintage studio hardware faces, editable tape labels, and
+**Control** (a knob or a slider) outputs both a raw float and a quantized integer;
+**Switch** outputs a boolean. Both provide vintage studio hardware faces, editable tape labels, and
 compact mode, which hides unlinked setup widgets while preserving connections
 and saved values. The controls support Legacy and Nodes 2.0 frontends.
 
-Choose a theme from the right-click menu: ten knob themes include rotary dials,
-a chickenhead, and a linear fader; nine switch themes include rockers, levers,
+Choose a theme from the right-click menu: nine knob themes include rotary dials
+and a chickenhead, five slider themes include faders, an LED ladder and horizontal
+slides; nine switch themes include rockers, levers,
 sliders, and an illuminated key. The original twelve themes have refreshed
 metal, Bakelite, and indicator artwork with their existing style IDs preserved.
 
-Drag a knob, hold Shift for fine adjustment, or enter an exact value in its
-readout. Arrow keys adjust values and Home/End reach the configured limits.
+Drag a knob or slider (click a slider track to jump there), hold Shift for fine
+adjustment, or enter an exact value in its readout. Arrow keys adjust values and Home/End reach the configured limits.
 Click a switch or focus it and press Space/Enter. Double-click the tape label
-(or focus it and press Enter) to rename it. Refresh the ComfyUI frontend after
-updating to load the new artwork.
+(or focus it and press Enter) to rename it. Controls and switches make synthesized
+hardware sounds, voiced to each theme; right-click → Mute sound turns them off.
+Refresh the ComfyUI frontend after updating to load the new artwork.
 
 ## Ollama and network-backed nodes
 

@@ -4,7 +4,7 @@ All nodes live under `👑 Ray/` in the ComfyUI add-node menu, split across
 four bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
-- `👑 Ray/🎛️ Analog` — analog-style UI widgets (Knob, Switch).
+- `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch).
 - `👑 Ray/🔧 Tools` — scrapers, prompt fetcher, metadata inspector, TXT folder, Save Image.
 - `👑 Ray/💬 LLM` — chat, prompt iterator, prompt library.
 
@@ -85,9 +85,9 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 
 ---
 
-## 🎛️ Ray's Analog: Knob (`RayKnob`)
+## 🎛️ Ray's Analog: Control (`RayKnob`)
 
-**Purpose.** Analog-style float knob widget. Drag rotates the knob face; outputs both an `INT` (quantized by `clamp`) and a raw `FLOAT` so it plugs into either side without a converter.
+**Purpose.** Analog-style float control, either a rotary knob or a slider, themed after studio hardware. Drag rotates a knob face or moves a slider cap; outputs both an `INT` (quantized by `clamp`) and a raw `FLOAT` so it plugs into either side without a converter. The node keeps its original `RayKnob` ID, so existing workflows load unchanged.
 
 **Category:** `👑 Ray/🎛️ Analog`
 
@@ -102,7 +102,13 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | **Output** `int` | INT | Quantized via `clamp`. |
 | **Output** `float` | FLOAT | Raw clamped float in `[min, max]`. |
 
-**Right-click menu.** Style picker with console rotary, broadcast ivory, mastering aluminium, linear fader, and the original legacy faces. **Compact mode** hides only unlinked setup controls while preserving real slots and workflow data. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Drag around a rotary control, use Shift for fine movement, or use Arrow/Home/End keys. Exact values can be entered in the readout. Style, compact flag, and label text persist with the workflow.
+**Faces.** Nine knobs (console rotary, broadcast ivory, mastering aluminium and the six original legacy faces) and five sliders: console linear fader, console channel fader with a dB scale, rack LED ladder, broadcast pan slider and rack amber slide. The pan slider and amber slide are horizontal; the others are vertical.
+
+**Sliders.** Drag the cap, or click the track to jump the cap there. The LED ladder lights segments as the value rises and the amber slide fills behind its cap.
+
+**Sound.** Knobs click through detents that match their printed scale, sliders scrape and tick as they move and thud at the end stops, and the pan slider taps at its centre. Switches voice each face: a thump and clack for the rack rocker, a ringing strike and spring for the steel lever, a push-and-latch for the illuminated key, a clunk for the bakelite flip, a tick-tack for the paddle, a scrape and detent for the brass slider, a soft tap for the pill and a hollow thock for the dome. The sounds are synthesized with Web Audio in `web/analog_audio.js`; there are no audio files. **Mute sound** in the right-click menu (on both the Control and the Switch) silences every analog control and is remembered per browser.
+
+**Right-click menu.** Style picker (knobs and sliders under separate headings) and **Mute sound**. **Compact mode** hides only unlinked setup controls while preserving real slots and workflow data. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Drag around a rotary control or along a slider, use Shift for fine movement, or use Arrow/Home/End keys. Exact values can be entered in the readout. Style, compact flag, and label text persist with the workflow.
 
 ---
 
@@ -117,7 +123,7 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | **Control** `state` | bool | Toggle. |
 | **Output** `bool` | BOOLEAN | Mirror of `state`. |
 
-**Right-click menu.** Style picker with rack power rocker, broadcast steel lever, illuminated console key, and the original Chrome Rocker, Bakelite Flip, Silver Paddle, Brass Slider, Minimal Pill, and Dark Studio Dome faces. **Compact mode** hides only unlinked setup controls and keeps the real output slot available. Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
+**Right-click menu.** Style picker with rack power rocker, broadcast steel lever, illuminated console key, and the original Chrome Rocker, Bakelite Flip, Silver Paddle, Brass Slider, Minimal Pill, and Dark Studio Dome faces, plus **Mute sound** (shared with the Control). Every face has its own click, clack or thunk. **Compact mode** hides only unlinked setup controls and keeps the real output slot available. Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
 
 ---
 

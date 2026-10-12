@@ -1,5 +1,6 @@
 import { applyBucketTint, findWidget, mountDymoLabel, setWidgetHidden } from "./_common.js";
 import { getBrushedAluminumURL } from "./knob_styles.js";
+import { isMuted, setMuted } from "./analog_audio.js";
 
 let nextSvgId = 0;
 
@@ -74,6 +75,9 @@ function injectStyles() {
     outline:2px solid #185d89; outline-offset:2px;
 }
 .ray-analog-face[aria-disabled="true"] { opacity:.55; cursor:not-allowed; }
+.ray-analog-face:hover:not([aria-disabled="true"]) svg { filter:brightness(1.04); }
+.ray-knob-wrap[data-dragging="true"] .ray-analog-face svg [data-slide],
+.ray-knob-wrap[data-dragging="true"] .ray-analog-face svg [data-rotate] { filter:brightness(1.13); }
 .ray-knob-wrap .ray-analog-face { cursor:grab; }
 .ray-knob-wrap[data-dragging="true"] .ray-analog-face { cursor:grabbing; }
 .ray-analog-readout {
@@ -247,21 +251,32 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
             const menu = proto.getExtraMenuOptions;
             proto.getExtraMenuOptions = function (canvas, options) {
                 const result = menu?.apply(this, arguments);
+                // Knob styles are listed before slider styles, each group under a heading.
+                const grouped = Object.entries(styles).sort(([, a], [, b]) => (a.kind === "slider") - (b.kind === "slider"));
+                const styleOptions = [];
+                let group = null;
+                for (const [key, style] of grouped) {
+                    const heading = kind === "knob" ? (style.kind === "slider" ? "Sliders" : "Knobs") : null;
+                    if (heading && heading !== group) styleOptions.push({ content: heading, disabled: true });
+                    group = heading;
+                    styleOptions.push({
+                        content: `${this.properties.style === key ? "● " : ""}${style.label}`,
+                        callback: () => editNode(this, () => {
+                            this.properties.style = key;
+                            this._rayAnalog?.render();
+                        }),
+                    });
+                }
                 options.unshift(
-                    { content: `${kind === "knob" ? "Knob" : "Switch"} Style`, has_submenu: true,
-                        submenu: { options: Object.entries(styles).map(([key, style]) => ({
-                            content: `${this.properties.style === key ? "● " : ""}${style.label}`,
-                            callback: () => editNode(this, () => {
-                                this.properties.style = key;
-                                this._rayAnalog?.render();
-                            }),
-                        })) } },
+                    { content: `${kind === "knob" ? "Control" : "Switch"} Style`, has_submenu: true,
+                        submenu: { options: styleOptions } },
                     { content: `${this.properties.compact ? "● " : ""}Compact mode`,
                         callback: () => editNode(this, () => {
                             this.properties.compact = !this.properties.compact;
                             this._rayAnalog?.applyCompact();
                         }) },
                     { content: "Edit label…", callback: () => this._rayDymo?.beginEdit() },
+                    { content: isMuted() ? "🔈 Unmute sound" : "🔇 Mute sound", callback: () => setMuted(!isMuted()) },
                 );
                 return result;
             };
