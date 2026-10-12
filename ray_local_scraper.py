@@ -935,7 +935,7 @@ class RayLocalScraper:
     )
     OUTPUT_IS_LIST = (True, True, True, True)
     FUNCTION = "process"
-    CATEGORY = "👑 Ray/📝 Prompts"
+    CATEGORY = "👑 Ray/🔧 Tools"
 
     @classmethod
     def IS_CHANGED(cls, *args, **kwargs):
