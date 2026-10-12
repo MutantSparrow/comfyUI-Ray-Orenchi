@@ -62,8 +62,8 @@ Generated colors can be consolidated into distinct shades; restrained dither
 protects fills and contours; colored outlines follow existing nearby shading.
 Weak isolated shades can merge while high-contrast eyes, highlights and thin
 strokes survive. No automatic limb thickening, blanket antialias removal, or
-synthetic concentric shading was introduced. See PIXEL_ART.md for Derek Yu links
-and the precise behavior of each option.
+synthetic concentric shading was introduced. The Pixel Art entry in NODES.md
+describes the precise behavior of each option.
 
 22 Python behavior tests and JavaScript tests for original/v1 workflow migration,
 links, idempotence and conditional widgets passed. Runtime tests use the local

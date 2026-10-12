@@ -6,10 +6,7 @@ four bucket sub-categories:
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
 - `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck).
 - `👑 Ray/🔧 Tools` — scrapers, prompt fetcher, metadata inspector, TXT folder, Save Image.
-- `👑 Ray/💬 LLM` — chat, prompt iterator, prompt library.
-
-See [UI.md](UI.md) for the pack's UI/UX canon (naming, category, color,
-widget, and web-layer rules).
+- `👑 Ray/💬 LLM` — local vision-language inference, folder captioning, prompt library.
 
 Every node has a black body and a header colored by its bucket. Mode-tinted
 nodes (`RayCivitAI`, `RayPromptFetcher`, `RayPromptLibrary`) hue-shift their
@@ -58,7 +55,7 @@ header color rather than pick a bespoke one.
 
 ## ✨ Ray's VFX: Pixel Art (`RayPixelArtDetector`)
 
-**Purpose.** Repair an existing pixel grid or abstract illustrations/photos into readable regions. Preserve exact aspect ratio, fit perceptual palettes and optionally add restrained dithering or colored outlines. See [PIXEL_ART.md](PIXEL_ART.md).
+**Purpose.** Repair an existing pixel grid or abstract illustrations/photos into readable regions. Preserve exact aspect ratio, fit perceptual palettes and optionally add restrained dithering or colored outlines. Benchmark methodology and results are in [benchmarks/pixel_art](benchmarks/pixel_art/README.md).
 
 **Category:** `👑 Ray/✨ VFX`
 
@@ -159,64 +156,6 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 Pressing a button plays its latch sound, followed by a softer release as the previously pressed button pops out. **Mute sound** in the right-click menu silences every analog control.
 
 **Right-click menu.** **Deck Style…** (the picker used by the other analog nodes), **Edit entries…**, **Compact mode**, **Edit label…** (the Dymo tape above the deck) and **Mute sound**. Style, compact flag and label persist with the workflow.
-
----
-
-## 💬 Ray's LLM: Ollama Chat (`RayOllamaChat`)
-
-**Purpose.** Inline chat node with two backends:
-- **Ollama** — talks to a local Ollama server; supports image and audio attachments.
-- **CLIP** — drives the text encoder of a ComfyUI-loaded CLIP model directly, no external server. Vision-language CLIPs are rejected.
-
-The chat UI is rendered inside the node; conversation history is stored on the node so workflows reload chats after restart.
-
-**Category:** `👑 Ray/💬 LLM`
-
-| Pin | Type | Notes |
-|-----|------|-------|
-| **Input** `system_prompt` (optional) | STRING (forced) | System message. |
-| **Input** `user_prompt` (optional) | STRING (forced) | One-shot user message (alternative to chatbox). |
-| **Input** `image` (optional) | IMAGE | Attached when `attach_image` is on. |
-| **Input** `audio` (optional) | AUDIO | Attached as base64 WAV when `attach_audio` is on. |
-| **Input** `clip` (optional) | CLIP | Required for `inference_mode = clip`. |
-| **Control** `inference_mode` | enum | `ollama` or `clip`. |
-| **Control** `server_url` | string | Ollama server URL. |
-| **Control** `model` | string | Ollama model name (or hint for CLIP mode). |
-| **Control** `keep_alive` | string | Ollama keep-alive (e.g. `5m`). |
-| **Control** `temperature` | float 0–2 | Sampling temperature. |
-| **Control** `seed` | int | `-1` for random. |
-| **Control** `think` | bool | Toggle Ollama "thinking" mode where supported. |
-| **Control** `max_new_tokens` | int 1–4096 | CLIP-mode generation cap. |
-| **Control** `top_p` | float 0–1 | CLIP-mode nucleus sampling. |
-| **Control** `repetition_penalty` | float 1–2 | CLIP-mode repetition penalty. |
-| **Control** `attach_image` | bool | Attach the IMAGE input to the next user turn. |
-| **Control** `attach_audio` | bool | Attach the AUDIO input to the next user turn. |
-| **Control** `chat_history` | string (multiline) | JSON-encoded turn list maintained by the widget. |
-| **Control** `last_message` / `pending_user_prompt` | string | Wire-state for the chat UI; usually left alone. |
-| **Output** `last_message` | STRING | Last assistant reply. |
-
----
-
-## 💬 Ray's LLM: Prompt Iterator (`RayPromptIterator`)
-
-**Purpose.** Image-prompt judge + rewriter via Ollama. Given the original prompt and (optionally) the rendered image, returns a confidence score `[0, 1]` for how well the image matches the prompt and a revised prompt aimed at fixing visible mismatches. System prompt loaded from `iterator_sysprompt.txt` (overridable by editing that file).
-
-**Category:** `👑 Ray/💬 LLM`
-
-| Pin | Type | Notes |
-|-----|------|-------|
-| **Input** `original_prompt` | STRING (forced) | Original generation prompt. |
-| **Input** `image` (optional) | IMAGE | Generated image to score against the prompt. |
-| **Input** `changes_required` (optional) | STRING (forced) | Free-form user guidance for the rewrite. |
-| **Control** `server_url` | string | Ollama server URL. |
-| **Control** `model` | string | Vision-capable Ollama model recommended when an image is attached. |
-| **Control** `keep_alive` | string | Ollama keep-alive. |
-| **Control** `temperature` | float 0–2 | Sampling temperature. |
-| **Control** `seed` | int | `-1` for random. |
-| **Control** `copy_to_clipboard` | bool | Tells the frontend to copy `new_prompt` to the clipboard on execute. |
-| **Output** `new_prompt` | STRING | Revised prompt. |
-| **Output** `confidence` | FLOAT | Image-vs-prompt match score `[0, 1]`. |
-| **Output** `image` | IMAGE | Pass-through of the input image (so it stays on the wire). |
 
 ---
 
@@ -425,7 +364,7 @@ Each slider defaults to `-1.0` (meaning "use the preset value") and `0..1` overr
 | **Control** `mode` | enum | `Save` / `Browse`. Legacy `Fetch` from older workflows migrates to `Browse`. |
 | **Control** `prompt_in` | string (multiline) | Save mode: prompt text to store. Passed through on the outputs regardless of mode. |
 | **Control** `seed` | int | `-1` for random. |
-| **Save** `save__source` | string | Label attached to this row (`manual` / `local` / `dexter` / `civitai` / `ollama` / free-form). |
+| **Save** `save__source` | string | Label attached to this row (`manual` / `local` / `dexter` / `civitai` / free-form). |
 | **Save** `save__tags` | string | Comma-separated tags. |
 | **Save** `save__image_path` | string | Optional path to the image this prompt produced. |
 | **Save** `save__model` | string | Optional model / checkpoint that produced the row. |
