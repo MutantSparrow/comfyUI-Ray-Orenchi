@@ -5,7 +5,7 @@ four bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
 - `👑 Ray/🎛️ Analog` — analog-style UI widgets (Knob, Switch).
-- `👑 Ray/📝 Prompts` — scrapers, hub fetcher, metadata inspector.
+- `👑 Ray/🔧 Tools` — scrapers, prompt fetcher, metadata inspector, TXT folder, Save Image.
 - `👑 Ray/💬 LLM` — chat, prompt iterator, prompt library.
 
 See [UI.md](UI.md) for the pack's UI/UX canon (naming, category, color,
@@ -179,11 +179,11 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 
 ---
 
-## 📝 Ray's Prompts: PromptDexter Scraper (`RayPromptDexter`)
+## 🔧 Ray's Tools: PromptDexter Scraper (`RayPromptDexter`)
 
 **Purpose.** Fetches a random prompt + matching image from [promptdexter.com](https://promptdexter.com/). Discovery is **sitemap-driven**, so picks reach deep content (not just homepage top row). Seed-deterministic — freeze the seed for reproducible output. Maintains a per-node 20-entry LRU cache so consecutive runs avoid recent repeats; with a frozen seed, the cache forces a deterministic skip to the next seed-shuffled candidate. When a prompt page has no associated image, the IMAGE output falls back to a 1×1 black tensor so downstream nodes never break.
 
-**Category:** `👑 Ray/📝 Prompts`
+**Category:** `👑 Ray/🔧 Tools`
 
 | Pin | Type | Notes |
 |-----|------|-------|
@@ -198,13 +198,13 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 
 ---
 
-## 📝 Ray's Prompts: CivitAI Gallery Scraper (`RayCivitAI`)
+## 🔧 Ray's Tools: CivitAI Gallery Scraper (`RayCivitAI`)
 
 **Purpose.** Fetches a random gallery image + its prompt from [civitai.com](https://civitai.com/) via the public REST API (`GET /api/v1/images`). Items with a usable prompt are kept — either the direct `meta.prompt` field, or, when missing, the text salvaged from a ComfyUI workflow blob embedded in `meta.comfy` (CLIPTextEncode / Text Multiline nodes etc.). Items with no extractable prompt are skipped. Seed-deterministic, per-node 20-entry LRU to avoid consecutive repeats, page cache keyed by (mode, period, sort, base_model, username). 1×1 black tensor fallback if an image fails to download.
 
 **Access strategy.** REST API (not scraping, not MCP). Public endpoint, no key required for read access. Higher-tier content unlocks if a token file is present at `civitai.secret` inside the node-pack directory — never hard-coded. The legacy `nsfw` filter is bypassed in favour of `browsingLevel` (bitmask: PG=1, PG13=2, R=4, X=8, XXX=16), which the API documents as taking precedence. Blue = `PG | PG13` = `3`; Red = all levels OR'd = `31`.
 
-**Category:** `👑 Ray/📝 Prompts`
+**Category:** `👑 Ray/🔧 Tools`
 
 | Pin | Type | Notes |
 |-----|------|-------|
@@ -224,7 +224,7 @@ The chat UI is rendered inside the node; conversation history is stored on the n
 
 ---
 
-## 📝 Ray's Prompts: Folder Image Scraper (`RayLocalScraper`)
+## 🔧 Ray's Tools: Folder Image Scraper (`RayLocalScraper`)
 
 **Purpose.** Picks a random image from a local folder and extracts any generation prompt found in its metadata. Functional sibling to the PromptDexter and CivitAI scrapers, but read off disk instead of HTTP. Seed-deterministic; per-node 20-entry LRU avoids consecutive repeats; folder listing cached until `refresh_listing` is set or the cache is cleared.
 
@@ -242,7 +242,7 @@ Every candidate is passed through a path-rejection filter that drops strings tha
 
 If the image carries multiple positive prompts (e.g. a ComfyUI workflow with several `CLIPTextEncode` nodes), every output is emitted as a ComfyUI **list** — one entry per prompt — so downstream nodes iterate once per prompt. The `image` and `image_path` outputs are broadcast (repeated) across each prompt entry so each iteration sees a matching `(prompt, image, path)` triple. Single-prompt images still return lists of length 1; if no prompt is found and `skip_no_prompt` is off, the output is a single-entry list with an empty string in both prompt slots.
 
-**Category:** `👑 Ray/📝 Prompts`
+**Category:** `👑 Ray/🔧 Tools`
 
 | Pin | Type | Notes |
 |-----|------|-------|
@@ -261,11 +261,11 @@ Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.
 
 ---
 
-## 📝 Ray's Prompts: Prompt Fetcher (`RayPromptFetcher`)
+## 🔧 Ray's Tools: Prompt Fetcher (`RayPromptFetcher`)
 
 **Purpose.** One node, three prompt sources. A `scraper_mode` dropdown picks between `Local Folder`, `PromptDexter`, and `CivitAI`; the frontend hides widgets that don't belong to the active mode. Outputs are harmonized to the local-scraper shape `(prompt_single, prompt_multiline, image, image_path)` so any mode is drop-in compatible with downstream wiring.
 
-**Category:** `👑 Ray/📝 Prompts`
+**Category:** `👑 Ray/🔧 Tools`
 
 | Pin | Type | Notes |
 |-----|------|-------|
@@ -294,7 +294,7 @@ Node tint hue-shifts by active mode.
 
 ---
 
-## 📝 Ray's Prompts: Metadata Inspector (`RayMetaInspect`)
+## 🔧 Ray's Tools: Metadata Inspector (`RayMetaInspect`)
 
 **Purpose.** Read or write image generation metadata. Two modes:
 
@@ -303,7 +303,7 @@ Node tint hue-shifts by active mode.
 
 Drag an image into the inline drop-zone to prefill `path` and preview it in-node.
 
-**Category:** `👑 Ray/📝 Prompts`
+**Category:** `👑 Ray/🔧 Tools`
 
 | Pin | Type | Notes |
 |-----|------|-------|
@@ -397,9 +397,9 @@ Each slider defaults to `-1.0` (meaning "use the preset value") and `0..1` overr
 
 **Browse panel.** Full-text search, tag + source filters, and multiple sort orders (most recent, longest, similarity by embedding). Click a row to select — the node then serves that row on every subsequent run.
 
-## 📝 Ray's Prompts: TXT Folder (`RayTextFolder`)
+## 🔧 Ray's Tools: TXT Folder (`RayTextFolder`)
 
-**Category:** `👑 Ray/📝 Prompts`
+**Category:** `👑 Ray/🔧 Tools`
 
 Read UTF-8 .txt files from one folder, alphabetically by filename; subfolders
 are excluded. Each non-empty file is one prompt, including its paragraphs
@@ -462,9 +462,9 @@ large folders. ComfyUI manages model offloading; CPU staging is allowed, but
 the inference device must be a GPU. The checkpoint must fit the available resources.
 
 
-## Ray Save Image (`RaySaveImage`)
+## 🔧 Ray's Tools: Save Image (`RaySaveImage`)
 
-**Category:** `👑 Ray/✨ VFX`. Output node; no output sockets.
+**Category:** `👑 Ray/🔧 Tools`. Output node; no output sockets.
 
 | Input | Purpose |
 |---|---|
@@ -483,7 +483,7 @@ other batch, and unequal non-singleton batches show unpaired trailing images.
 Drag the divider or focus it and use Left/Right/Home/End. Folder history holds
 three successful destinations per browser, independently of workflow values.
 
-Right-click **Ray Save Image → Open image location in Explorer** to open the
-folder from its latest successful save. The option becomes available after a
-save in the current session and stays tied to that folder if you edit the next
-destination or run preview-only. Explorer opens on the Windows ComfyUI host.
+Right-click **Ray's Tools: Save Image → Open image location in Explorer** to
+open the folder from its latest successful save. The option becomes available
+after a save in the current session and stays tied to that folder if you edit
+the next destination or run preview-only. Explorer opens on the Windows ComfyUI host.

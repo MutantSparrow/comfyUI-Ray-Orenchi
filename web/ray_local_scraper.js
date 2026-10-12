@@ -1,4 +1,4 @@
-// ray_local_scraper.js — Prompts bucket tint.
+// ray_local_scraper.js — Tools bucket tint.
 
 import { app } from "../../scripts/app.js";
 import { applyBucketTint } from "./_common.js";
@@ -6,7 +6,7 @@ import { applyBucketTint } from "./_common.js";
 const NODE_NAME = "RayLocalScraper";
 
 function bootstrap(node) {
-    applyBucketTint(node, "Prompts");
+    applyBucketTint(node, "Tools");
 }
 
 app.registerExtension({

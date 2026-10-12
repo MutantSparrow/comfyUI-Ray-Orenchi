@@ -31,11 +31,11 @@ async function fetchOptions() {
 }
 
 function applyModeStyling(node, mode) {
-    // Prompts bucket base tint; Red mode hue-shifts toward violet/red.
-    applyBucketTint(node, "Prompts");
+    // Tools bucket base tint; Red mode hue-shifts toward violet/red.
+    applyBucketTint(node, "Tools");
     if (mode && mode.toLowerCase().startsWith("red")) {
-        node.bgcolor = shiftTint(RAY_PALETTE.Prompts.bg, -110);
-        node.color = shiftTint(RAY_PALETTE.Prompts.edge, -110);
+        node.bgcolor = shiftTint(RAY_PALETTE.Tools.bg, -110);
+        node.color = shiftTint(RAY_PALETTE.Tools.edge, -110);
     }
     node.setDirtyCanvas?.(true, true);
 }

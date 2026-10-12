@@ -14,15 +14,20 @@
 //
 // helpDef shape:
 //   {
-//     title:   "Ray's VFX: CRT",
-//     tagline: "Optional one-line summary.",
-//     sections: [
-//       { heading: "What it does", body: "One or more paragraphs.\n\nBlank line = new paragraph." },
-//       { heading: "Key inputs",   bullets: ["`preset` — SOTA-inspired CRT model.", "`intensity` — master mix."] },
-//       { heading: "Modes",        defs: [ ["Term", "meaning"], ... ] },
+//     title:    "Ray's VFX: CRT",          // optional; node display name wins
+//     summary:  "Brief description of what the node does.",
+//     details:  { intensity: "Longer text overriding the Python tooltip." },
+//     sections: [                           // optional notes after the reference
+//       { heading: "Notes", bullets: ["Right-click menu …"] },
+//       { heading: "Modes", defs: [ ["Term", "meaning"], ... ] },
+//       { heading: "About", body: "Paragraphs.\n\nBlank line = new paragraph." },
 //     ],
 //     footer: "Optional tip line at the bottom.",
 //   }
+//
+// openHelpPopup(helpDef, nodeData) renders: summary, then Inputs (sockets),
+// Widgets and Outputs generated from the node definition (types, choices,
+// defaults, ranges and Python tooltips), then the authored sections.
 
 import { app } from "../../scripts/app.js";
 
@@ -86,7 +91,7 @@ const CSS = `
 .ray-help-ul li { margin: 0 0 4px 0; }
 .ray-help-defs { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; align-items: baseline; }
 .ray-help-defs dt { color: #fff; font-weight: 600; white-space: nowrap; }
-.ray-help-defs dd { margin: 0; color: #bcbcbc; }
+.ray-help-defs dd { margin: 0; color: #bcbcbc; white-space: pre-line; }
 .ray-help code {
     background: rgba(255,255,255,0.08); border-radius: 3px; padding: 1px 5px;
     font-family: monospace; font-size: 11.5px; color: #ffd2c4;
@@ -163,6 +168,88 @@ function buildSection(section) {
     return sec;
 }
 
+// ── Reference generated from the node definition ───────────────────────
+const WIDGET_TYPES = new Set(["INT", "FLOAT", "STRING", "BOOLEAN", "COMBO"]);
+const MAX_CHOICES = 12;
+
+function fmtNumber(v) {
+    return typeof v === "number" && !Number.isInteger(v) ? String(+v.toFixed(4)) : String(v);
+}
+
+function choicesOf(type, opts) {
+    if (Array.isArray(type)) return type;
+    if (type === "COMBO" && Array.isArray(opts.options)) return opts.options;
+    return null;
+}
+
+function widgetMeta(type, opts, choices) {
+    const parts = [];
+    if (choices) {
+        const shown = choices.slice(0, MAX_CHOICES).map((c) => `\`${c}\``).join(", ");
+        const more = choices.length > MAX_CHOICES ? ` (+${choices.length - MAX_CHOICES} more)` : "";
+        parts.push(`Choices: ${shown}${more}`);
+    }
+    if (type === "INT" || type === "FLOAT") {
+        if (opts.min !== undefined && opts.max !== undefined) {
+            parts.push(`Range ${fmtNumber(opts.min)} – ${fmtNumber(opts.max)}`);
+        }
+    }
+    if (opts.default !== undefined && opts.default !== "") {
+        const d = type === "BOOLEAN" ? (opts.default ? "on" : "off") : fmtNumber(opts.default);
+        if (String(d).length <= 60) parts.push(`Default \`${d}\``);
+    }
+    return parts.join(" · ");
+}
+
+function orderedInputs(nodeData) {
+    const input = nodeData?.input || {};
+    const order = nodeData?.input_order || {};
+    const out = [];
+    for (const group of ["required", "optional"]) {
+        const specs = input[group] || {};
+        const names = Array.isArray(order[group]) ? order[group] : Object.keys(specs);
+        for (const name of names) {
+            if (specs[name]) out.push({ name, spec: specs[name], optional: group === "optional" });
+        }
+    }
+    return out;
+}
+
+export function buildReferenceSections(nodeData, details = {}) {
+    if (!nodeData) return [];
+    const sockets = [];
+    const widgets = [];
+    for (const { name, spec, optional } of orderedInputs(nodeData)) {
+        const [type, opts = {}] = Array.isArray(spec) ? spec : [spec];
+        const choices = choicesOf(type, opts);
+        const typeName = choices ? "COMBO" : String(type);
+        const isWidget = (choices || WIDGET_TYPES.has(typeName)) && !opts.forceInput;
+        const desc = details[name] || opts.tooltip || "";
+        const tag = optional ? " (optional)" : "";
+        if (isWidget) {
+            const meta = widgetMeta(typeName, opts, choices);
+            widgets.push([`\`${name}\``, [desc, meta].filter(Boolean).join("\n")]);
+        } else {
+            sockets.push([`\`${name}\` · ${typeName}${tag}`, desc]);
+        }
+    }
+    const outputs = [];
+    const types = nodeData.output || [];
+    const names = nodeData.output_name || [];
+    const tips = nodeData.output_tooltips || [];
+    const lists = nodeData.output_is_list || [];
+    types.forEach((type, i) => {
+        const name = names[i] || String(type).toLowerCase();
+        const list = lists[i] ? " list" : "";
+        outputs.push([`\`${name}\` · ${type}${list}`, details[`output:${name}`] || tips[i] || ""]);
+    });
+    const sections = [];
+    sections.push({ heading: "Inputs", defs: sockets.length ? sockets : [["—", "No input sockets; configure the node with its widgets."]] });
+    if (widgets.length) sections.push({ heading: "Widgets", defs: widgets });
+    sections.push({ heading: "Outputs", defs: outputs.length ? outputs : [["—", "No output sockets; this is an output node."]] });
+    return sections;
+}
+
 // ── Popup ──────────────────────────────────────────────────────────────
 let _openCleanup = null;
 
@@ -184,7 +271,7 @@ function ensureGraphCloseHook() {
     };
 }
 
-export function openHelpPopup(helpDef) {
+export function openHelpPopup(helpDef, nodeData = null) {
     helpDef = helpDef || {};
     injectHelpCSS();
     ensureGraphCloseHook();
@@ -205,7 +292,7 @@ export function openHelpPopup(helpDef) {
     icon.textContent = "?";
     const title = document.createElement("div");
     title.className = "ray-help-h-title";
-    title.textContent = helpDef.title || "Help";
+    title.textContent = nodeData?.display_name || helpDef.title || "Help";
     const close = document.createElement("button");
     close.className = "ray-help-close";
     close.type = "button";
@@ -219,14 +306,18 @@ export function openHelpPopup(helpDef) {
     // body
     const body = document.createElement("div");
     body.className = "ray-help-body";
-    if (helpDef.tagline) {
+    const summary = helpDef.summary || helpDef.tagline || nodeData?.description;
+    if (summary) {
         const tag = document.createElement("p");
         tag.className = "ray-help-p";
-        tag.style.color = "#e6e6e6";
-        tag.innerHTML = fmt(helpDef.tagline);
+        tag.style.color = "#e6e6e6"; tag.style.marginBottom = "14px";
+        tag.innerHTML = fmt(summary);
         body.appendChild(tag);
     }
-    const sections = Array.isArray(helpDef.sections) ? helpDef.sections : [];
+    const sections = [
+        ...buildReferenceSections(nodeData, helpDef.details),
+        ...(Array.isArray(helpDef.sections) ? helpDef.sections : []),
+    ];
     for (const section of sections) {
         try {
             body.appendChild(buildSection(section));

@@ -95,7 +95,7 @@ function injectStatusWidget(node) {
 }
 
 async function bootstrap(node) {
-    applyBucketTint(node, "Prompts");
+    applyBucketTint(node, "Tools");
     const statusEl = injectStatusWidget(node);
     injectRefreshButton(node, statusEl);
 
