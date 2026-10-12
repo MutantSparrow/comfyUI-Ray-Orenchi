@@ -12,8 +12,6 @@ Bundles:
   • RaySwitch                — Ray's Analog: Switch
   • RayButtonDeck            — Ray's Analog: Button Deck
   💬 LLM
-  • RayOllamaChat            — Ray's LLM: Ollama Chat
-  • RayPromptIterator        — Ray's LLM: Prompt Iterator
   • RayPromptLibrary         — Ray's LLM: Prompt Library (SQLite)
   • RayVLMFolder             — Ray's LLM: Folder Captioner
   • RayFastQwen3VL           — Ray's LLM: Fast Qwen3-VL Infer
@@ -42,8 +40,6 @@ _NODE_MODULES = {
     "RayKnob":             "ray_knob",
     "RaySwitch":           "ray_switch",
     "RayButtonDeck":       "ray_button_deck",
-    "RayOllamaChat":       "ray_ollama_chat",
-    "RayPromptIterator":   "ray_prompt_iterator",
     "RayPromptDexter":     "ray_promptdexter",
     "RayCivitAI":          "ray_civitai",
     "RayLocalScraper":     "ray_local_scraper",
@@ -59,7 +55,6 @@ _NODE_MODULES = {
 
 # These register aiohttp routes on import.
 _ROUTE_MODULES = (
-    "ollama_routes",
     "promptdexter_routes",
     "civitai_routes",
     "prompt_library_routes",
@@ -107,8 +102,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RaySwitch":           "🎛️ Ray's Analog: Switch",
     "RayButtonDeck":       "🎛️ Ray's Analog: Button Deck",
     # 👑 Ray/💬 LLM
-    "RayOllamaChat":       "💬 Ray's LLM: Ollama Chat",
-    "RayPromptIterator":   "💬 Ray's LLM: Prompt Iterator",
     "RayPromptLibrary":    "💬 Ray's LLM: Prompt Library",
     "RayVLMFolder":        "💬 Ray's LLM: Folder Captioner",
     "RayFastQwen3VL":      "💬 Ray's LLM: Fast Qwen3-VL Infer",
