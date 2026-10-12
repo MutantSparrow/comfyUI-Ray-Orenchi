@@ -1095,3 +1095,108 @@ def test_best_try_does_not_flip_flop_with_two_prompts(tmp_path):
     # raise 'no new best-try prompt' rather than silently flip-flop.
     with pytest.raises(RuntimeError, match="new best-try prompt"):
         _run()
+
+
+# ---------------------------------------------------------------------------
+# Positive-only extraction: encoders that only feed a sampler's negative input
+# ---------------------------------------------------------------------------
+
+
+def _encoder(text):
+    return {"class_type": "CLIPTextEncode", "inputs": {"text": text, "clip": ["9", 0]}}
+
+
+def _sampler(positive, negative):
+    return {"class_type": "KSampler",
+            "inputs": {"positive": positive, "negative": negative, "model": ["8", 0]}}
+
+
+def _prompts_for(tmp_path, graph):
+    p = tmp_path / "g.png"
+    _make_solid_png(p, info={"prompt": json.dumps(graph)})
+    with Image.open(p) as im:
+        return rls.extract_prompts(p, im)
+
+
+def test_sampler_negative_encoder_is_dropped(tmp_path):
+    graph = {
+        "1": _encoder("a fox in the forest, masterpiece"),
+        "2": _encoder("blurry, lowres, watermark"),
+        "3": _sampler(["1", 0], ["2", 0]),
+    }
+    assert _prompts_for(tmp_path, graph) == ["a fox in the forest, masterpiece"]
+
+
+def test_sampler_negative_text_source_is_dropped_when_wired(tmp_path):
+    graph = {
+        "1": {"class_type": "Text Multiline", "inputs": {"text": "a fox in the forest"}},
+        "2": {"class_type": "Text Multiline", "inputs": {"text": "blurry, lowres, watermark"}},
+        "3": {"class_type": "CLIPTextEncode", "inputs": {"text": ["1", 0]}},
+        "4": {"class_type": "CLIPTextEncode", "inputs": {"text": ["2", 0]}},
+        "5": _sampler(["3", 0], ["4", 0]),
+    }
+    assert _prompts_for(tmp_path, graph) == ["a fox in the forest"]
+
+
+def test_two_positive_encoders_combined_are_both_kept(tmp_path):
+    graph = {
+        "1": _encoder("first positive prompt about a fox"),
+        "2": _encoder("second positive prompt about a hawk"),
+        "3": {"class_type": "ConditioningCombine",
+              "inputs": {"conditioning_1": ["1", 0], "conditioning_2": ["2", 0]}},
+        "4": _encoder("blurry, lowres, watermark"),
+        "5": _sampler(["3", 0], ["4", 0]),
+    }
+    prompts = _prompts_for(tmp_path, graph)
+    assert "first positive prompt about a fox" in prompts
+    assert "second positive prompt about a hawk" in prompts
+    assert "blurry, lowres, watermark" not in prompts
+
+
+def test_controlnet_pair_keeps_positive_and_drops_negative(tmp_path):
+    graph = {
+        "1": _encoder("a fox in the forest, masterpiece"),
+        "2": _encoder("blurry, lowres, watermark"),
+        "3": {"class_type": "ControlNetApplyAdvanced",
+              "inputs": {"positive": ["1", 0], "negative": ["2", 0], "image": ["7", 0]}},
+        "4": _sampler(["3", 0], ["3", 1]),
+    }
+    assert _prompts_for(tmp_path, graph) == ["a fox in the forest, masterpiece"]
+
+
+def test_zeroed_negative_sharing_the_positive_encoder_keeps_it(tmp_path):
+    graph = {
+        "1": _encoder("a fox in the forest, masterpiece"),
+        "2": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["1", 0]}},
+        "3": _sampler(["1", 0], ["2", 0]),
+    }
+    assert _prompts_for(tmp_path, graph) == ["a fox in the forest, masterpiece"]
+
+
+def test_graph_without_sampler_keeps_every_encoder(tmp_path):
+    graph = {
+        "1": _encoder("first positive prompt about a fox"),
+        "2": _encoder("blurry, lowres, watermark"),
+    }
+    prompts = _prompts_for(tmp_path, graph)
+    assert "first positive prompt about a fox" in prompts
+    assert "blurry, lowres, watermark" in prompts
+
+
+def test_ui_workflow_drops_negative_encoder(tmp_path):
+    workflow = {
+        "nodes": [
+            {"id": 1, "type": "CLIPTextEncode", "inputs": [{"name": "clip", "link": None}],
+             "widgets_values": ["a fox in the forest, masterpiece"]},
+            {"id": 2, "type": "CLIPTextEncode", "inputs": [{"name": "clip", "link": None}],
+             "widgets_values": ["blurry, lowres, watermark"]},
+            {"id": 3, "type": "KSampler",
+             "inputs": [{"name": "positive", "link": 10}, {"name": "negative", "link": 11}],
+             "widgets_values": [1, "fixed", 20, 7, "euler", "normal", 1]},
+        ],
+        "links": [[10, 1, 0, 3, 1, "CONDITIONING"], [11, 2, 0, 3, 2, "CONDITIONING"]],
+    }
+    p = tmp_path / "ui.png"
+    _make_solid_png(p, info={"workflow": json.dumps(workflow)})
+    with Image.open(p) as im:
+        assert rls.extract_prompts(p, im) == ["a fox in the forest, masterpiece"]
