@@ -1,7 +1,6 @@
 numpy
 torch
 scikit-learn
-ollama>=0.6.0
 Pillow
 aiohttp
 requests

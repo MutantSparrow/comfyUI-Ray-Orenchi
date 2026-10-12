@@ -579,7 +579,7 @@ class RayPromptLibrary:
                 # Save mode widgets
                 "save__source": ("STRING", {
                     "default": "manual",
-                    "placeholder": "manual / local / dexter / civitai / ollama",
+                    "placeholder": "manual / local / dexter / civitai",
                     "tooltip": "Save mode: source label attached to this row.",
                 }),
                 "save__tags": ("STRING", {
