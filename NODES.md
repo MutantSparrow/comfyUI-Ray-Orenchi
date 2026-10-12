@@ -408,15 +408,16 @@ normal counter suffix. Use limit 3 for a small test, then -1 for the folder.
 
 **Category:** `👑 Ray/💬 LLM`
 
-Load one full vision-language checkpoint from ComfyUI's `text_encoders`
-model list and caption each selected image independently on GPU. The node
+Connect a full vision-language `CLIP` (for example Qwen3-VL from a
+`CLIPLoader` with type `qwen_image`, the same setup as Fast Qwen3-VL) and caption
+each selected image independently on GPU. The node
 uses native `CLIP.tokenize/generate/decode` with the image template enabled,
 and preserves the supplied instruction and decoded answer. It does not write
 sidecars, resize source images, or add a conversation history.
 
 | Control | Behavior |
 |---|---|
-| `clip_name` | Full generative VLM, e.g. Qwen3-VL; ordinary text-only CLIP is unsuitable |
+| `clip` (input) | Full generative VLM CLIP, e.g. Qwen3-VL from `CLIPLoader`; an ordinary text-only CLIP is unsuitable |
 | `folder`, `recurse_subfolders` | Source folder and optional recursive scan |
 | `start_index`, `limit` | Zero-based alphabetical relative-path range; -1 means all remaining files |
 | `user_prompt` | Multiline instruction used independently for each image |
