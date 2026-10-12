@@ -1,6 +1,6 @@
 # comfyUI-Ray-Orenchi
 
-18 ComfyUI custom nodes for retro image effects, pixel art, local vision-language
+17 ComfyUI custom nodes for retro image effects, pixel art, local vision-language
 inference, prompt tooling and analog-console controls. Find them under the
 **👑 Ray** category in the add-node menu.
 
@@ -18,7 +18,6 @@ inference, prompt tooling and analog-console controls. Find them under the
 | | **Button Deck** | A bank of push buttons that replaces a dropdown; outputs the pressed button's text |
 | **💬 LLM** | **Fast Qwen3-VL Infer** | Fast image-to-text through an already loaded Qwen3-VL CLIP, with no second model copy |
 | | **Folder Captioner** | Caption a range of images in a folder with a full VLM; aligned text, image and path lists |
-| | **Prompt Library** | Local SQLite library to save and browse prompts, with tags and sources |
 | **🔧 Tools** | **Save Image** | Save PNGs or preview them, with a two-image comparison slider and folder picker |
 | | **TXT Folder** | Read text files as prompts, with matching save prefixes |
 | | **Metadata Inspector** | Read generation metadata from an image, or embed it into one |

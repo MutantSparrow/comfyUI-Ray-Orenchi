@@ -6,10 +6,10 @@ four bucket sub-categories:
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
 - `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck).
 - `👑 Ray/🔧 Tools` — scrapers, prompt fetcher, metadata inspector, TXT folder, Save Image.
-- `👑 Ray/💬 LLM` — local vision-language inference, folder captioning, prompt library.
+- `👑 Ray/💬 LLM` — local vision-language inference and folder captioning.
 
 Every node has a black body and a header colored by its bucket. Mode-tinted
-nodes (`RayCivitAI`, `RayPromptFetcher`, `RayPromptLibrary`) hue-shift their
+nodes (`RayCivitAI`, `RayPromptFetcher`) hue-shift their
 header color rather than pick a bespoke one.
 
 ---
@@ -352,30 +352,6 @@ Each slider defaults to `-1.0` (meaning "use the preset value") and `0..1` overr
 | **Output** `image` | IMAGE | Tape-degraded image with the OSD overlay applied. |
 
 ---
-
-## 💬 Ray's LLM: Prompt Library (`RayPromptLibrary`)
-
-**Purpose.** Local SQLite prompt library. Two modes on the same node — `Save` writes `prompt_in` to the DB with source, tags, image path, and model; `Browse` serves rows from an inline searchable table. Node tint hue-shifts between the two modes.
-
-**Category:** `👑 Ray/💬 LLM`
-
-| Pin | Type | Notes |
-|-----|------|-------|
-| **Control** `mode` | enum | `Save` / `Browse`. Legacy `Fetch` from older workflows migrates to `Browse`. |
-| **Control** `prompt_in` | string (multiline) | Save mode: prompt text to store. Passed through on the outputs regardless of mode. |
-| **Control** `seed` | int | `-1` for random. |
-| **Save** `save__source` | string | Label attached to this row (`manual` / `local` / `dexter` / `civitai` / free-form). |
-| **Save** `save__tags` | string | Comma-separated tags. |
-| **Save** `save__image_path` | string | Optional path to the image this prompt produced. |
-| **Save** `save__model` | string | Optional model / checkpoint that produced the row. |
-| **Browse** `browse__selected_id` | int | DB row id selected in the panel. |
-| **Browse** `browse__last_query` | string | Managed by the panel. |
-| **Output** `prompt_single` | STRING (list) | Single-line prompt. |
-| **Output** `prompt_multiline` | STRING (list) | Prompt with newlines preserved. |
-| **Output** `image` | IMAGE (list) | Image stored with the selected row. |
-| **Output** `image_path` | STRING (list) | Path to the associated image on disk, if any. |
-
-**Browse panel.** Full-text search, tag + source filters, and multiple sort orders (most recent, longest, similarity by embedding). Click a row to select — the node then serves that row on every subsequent run.
 
 ## 🔧 Ray's Tools: TXT Folder (`RayTextFolder`)
 
