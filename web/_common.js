@@ -54,12 +54,26 @@ export function getRadialBrushedURL(palette = ["#f5f5f5", "#c8c8c8", "#7a7a7a"])
 // Palette + tint helpers
 // ---------------------------------------------------------------------------
 
+// `bg` is the node body (always black); `edge` is the title-bar color that
+// identifies the bucket.
 export const RAY_PALETTE = {
-    VFX:     { bg: "#2a1f3a", edge: "#8a3ac8" },  // violet
+    VFX:     { bg: "#000000", edge: "#8a3ac8" },  // violet header
     Analog:  { bg: "#000000", edge: "#000000" },  // black — knob / switch
-    Tools:   { bg: "#3a2a1a", edge: "#c8873a" },  // amber
-    LLM:     { bg: "#1f2a4a", edge: "#3a73c8" },  // blue
+    Tools:   { bg: "#000000", edge: "#c8873a" },  // amber header
+    LLM:     { bg: "#000000", edge: "#3a73c8" },  // blue header
 };
+
+// Body colors used before the black-body palette, including the hue-shifted
+// variants of the mode-tinted nodes. Saved workflows still carry them.
+const _LEGACY_BG = ["#2a1f3a", "#3a2a1a", "#1f2a4a"];
+const _LEGACY_SHIFTS = [0, 90, -90, -110, 150];
+let _legacyBodies = null;
+export function isLegacyBodyColor(hex) {
+    if (typeof hex !== "string") return false;
+    _legacyBodies ||= new Set(_LEGACY_BG.flatMap(
+        (base) => _LEGACY_SHIFTS.map((deg) => shiftTint(base, deg).toLowerCase())));
+    return _legacyBodies.has(hex.toLowerCase());
+}
 
 export function applyBucketTint(node, bucketKey) {
     const pair = RAY_PALETTE[bucketKey];

@@ -38,7 +38,9 @@ function styles() {
     if (document.getElementById("ray-save-style")) return;
     const css = element("style"); css.id = "ray-save-style";
     css.textContent = `
-.ray-save {box-sizing:border-box;width:100%;height:100%;padding:5px;display:flex;flex-direction:column;gap:4px;background:#000;color:#eee;font:12px system-ui;border-radius:8px;overflow:hidden}
+.dom-widget:has(> .ray-save) {pointer-events:none !important}
+.ray-save {box-sizing:border-box;width:100%;height:100%;padding:2px;display:flex;flex-direction:column;gap:2px;background:#000;color:#eee;font:12px system-ui;border-radius:8px;overflow:hidden;pointer-events:none}
+.ray-save button,.ray-save select,.ray-save-handle {pointer-events:auto}
 .ray-save *, .ray-save-dialog * {box-sizing:border-box}
 .ray-save button,.ray-save select,.ray-save-dialog button,.ray-save-dialog input,.ray-save-dialog select {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:4px;padding:3px 6px;min-width:0}
 .ray-save button:disabled {opacity:.4}
@@ -50,17 +52,18 @@ function styles() {
 .ray-save-stops {display:flex;flex-shrink:0;gap:0;margin-right:auto;border:1px solid #444;border-radius:4px;overflow:hidden}
 .ray-save-stops button {flex:0 0 auto;padding:3px 6px;font-size:11px;background:transparent;border:0;border-radius:0}
 .ray-save-stops button[aria-pressed=true] {background:#ddd;color:#111}
-.ray-save-stage {position:relative;flex:1;min-height:140px;overflow:hidden;border-radius:5px;background:#000;touch-action:none}
+.ray-save-stage {position:relative;flex:1 1 0;min-height:0;overflow:hidden;border-radius:5px;background:#000}
 .ray-save-stage img {position:absolute;width:100%;height:100%;object-fit:contain;inset:0;pointer-events:none}
 .ray-save-overlay {position:absolute;inset:0;pointer-events:none;background:#000}
 .ray-save-divider {position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 2px #000;pointer-events:none}
-.ray-save-divider::after {content:'‹ ›';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#f5f3fa;color:#222;border-radius:12px;padding:6px 4px;white-space:nowrap;font:bold 13px system-ui;box-shadow:0 1px 5px #0008}
+.ray-save-handle {position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#f5f3fa;color:#222;border-radius:12px;padding:8px 5px;white-space:nowrap;font:bold 13px system-ui;box-shadow:0 1px 5px #0008;cursor:ew-resize;touch-action:none}
 .ray-save-empty {position:absolute;inset:0;display:grid;place-items:center;color:#bbb;text-align:center;padding:24px;pointer-events:none}
 .ray-save-badge {position:absolute;top:8px;background:#111b;padding:3px 6px;border-radius:3px;pointer-events:none;font-size:10px}
-.ray-save-status {font-size:11px;color:#c0bdc8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:15px}
-.ray-save-footer {display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;min-height:16px}
-.ray-save-sizes {font-size:11px;line-height:1.4;color:#c0bdc8;min-width:0;white-space:pre-line}
-.ray-save-footer .ray-save-toolbar {margin-left:auto;flex-shrink:0}
+.ray-save-info {position:absolute;left:6px;bottom:6px;max-width:calc(100% - 120px);display:flex;flex-direction:column;align-items:flex-start;gap:2px;pointer-events:none}
+.ray-save-info > span {max-width:100%;padding:2px 5px;border-radius:3px;background:#000b;color:#ddd;font-size:10px;line-height:1.3;white-space:pre-line;overflow:hidden;text-overflow:ellipsis}
+.ray-save-info > span:empty {display:none}
+.ray-save-nav {position:absolute;right:6px;bottom:6px;display:flex;align-items:center;gap:3px;padding:2px;border-radius:5px;background:#000b;font-size:10px;color:#ddd}
+.ray-save-nav button {padding:1px 6px}
 .ray-save-dialog {width:min(620px,90vw);max-height:80vh;background:#24252b;color:#eee;border:1px solid #62616d;border-radius:10px;padding:16px;font:13px system-ui}
 .ray-save-dialog::backdrop {background:#0008}
 .ray-save-dialog h3 {margin:0 0 12px;font-size:16px}
@@ -130,23 +133,24 @@ function build(node) {
     recent.style.width = "25px"; recentOptions();
     recent.addEventListener("pointerdown", recentOptions);
     recent.onchange = () => { if (recent.selectedIndex > 0) update(node, "directory", recent.value); recent.selectedIndex = 0; };
-    const label = element("label", "", "Save Image"), state = element("span", "ray-save-status");
+    const state = element("span", "ray-save-status");
     const stops = element("div", "ray-save-stops");
     stops.setAttribute("role", "group"); stops.setAttribute("aria-label", "Save Image");
     modes.forEach(mode => stops.append(button(mode === "none" ? "None" : mode === "both" ? "Both" : mode, () => update(node, "save_image", mode))));
-    toolbar.append(label, stops, browse, recent);
+    toolbar.append(stops, browse, recent);
     const stage = element("div", "ray-save-stage"), first = element("img"), second = element("img"), overlay = element("div", "ray-save-overlay");
     first.alt = "Image 1"; second.alt = "Image 2"; overlay.append(first);
-    const divider = element("div", "ray-save-divider"), empty = element("div", "ray-save-empty", "Queue the workflow to preview images");
+    const divider = element("div", "ray-save-divider"), handle = element("span", "ray-save-handle", "‹ ›"), empty = element("div", "ray-save-empty", "Queue the workflow to preview images");
     const left = element("span", "ray-save-badge", "1"), right = element("span", "ray-save-badge", "2");
     left.style.left = "8px"; right.style.right = "8px";
-    stage.append(second, overlay, divider, left, right, empty);
-    stage.tabIndex = 0; stage.setAttribute("role", "slider"); stage.setAttribute("aria-label", "Image comparison divider");
-    stage.setAttribute("aria-valuemin", "0"); stage.setAttribute("aria-valuemax", "100");
+    divider.append(handle);
+    handle.tabIndex = 0; handle.setAttribute("role", "slider"); handle.setAttribute("aria-label", "Image comparison divider");
+    handle.setAttribute("aria-valuemin", "0"); handle.setAttribute("aria-valuemax", "100");
     let fraction = .5, arrays = [[], []], index = 0, comparing = false, activePointer = null;
-    const batch = element("div", "ray-save-toolbar"), count = element("span", "ray-save-status");
-    const footer = element("div", "ray-save-footer"), sizes = element("span", "ray-save-sizes");
-    footer.append(sizes, batch);
+    const batch = element("div", "ray-save-nav"), count = element("span", "ray-save-status");
+    const info = element("div", "ray-save-info"), sizes = element("span", "ray-save-sizes");
+    info.append(sizes, state);
+    stage.append(second, overlay, divider, left, right, empty, info, batch);
     function updateSizes() {
         sizes.textContent = [first, second].flatMap((img, n) =>
             !img.hidden && img.complete && img.naturalWidth
@@ -161,17 +165,19 @@ function build(node) {
         fraction = Math.max(0, Math.min(1, value));
         overlay.style.clipPath = comparing ? `inset(0 ${(1 - fraction) * 100}% 0 0)` : "none";
         divider.style.left = `${fraction * 100}%`;
-        stage.setAttribute("aria-valuenow", String(Math.round(fraction * 100)));
+        handle.setAttribute("aria-valuenow", String(Math.round(fraction * 100)));
     }
     function drag(e) {
         const rect = stage.getBoundingClientRect();
         if (rect.width) position((e.clientX - rect.left) / rect.width);
     }
-    stage.onpointerdown = e => { if (spaceHeld || !comparing || e.button !== 0) return; activePointer = e.pointerId; stage.setPointerCapture(e.pointerId); drag(e); e.preventDefault(); };
-    stage.onpointermove = e => { if (activePointer === e.pointerId) drag(e); };
-    stage.onpointerup = stage.onpointercancel = e => { if (stage.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId); activePointer = null; };
-    stage.onlostpointercapture = () => { activePointer = null; };
-    stage.onkeydown = e => {
+    // Only the handle takes pointer input; the rest of the preview is
+    // transparent to the mouse so the canvas keeps its menu, pan and zoom.
+    handle.onpointerdown = e => { if (spaceHeld || !comparing || e.button !== 0) return; activePointer = e.pointerId; handle.setPointerCapture(e.pointerId); drag(e); e.preventDefault(); };
+    handle.onpointermove = e => { if (activePointer === e.pointerId) drag(e); };
+    handle.onpointerup = handle.onpointercancel = e => { if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId); activePointer = null; };
+    handle.onlostpointercapture = () => { activePointer = null; };
+    handle.onkeydown = e => {
         if (!comparing) return;
         const values = {ArrowLeft: fraction - .02, ArrowRight: fraction + .02, Home: 0, End: 1};
         if (Object.hasOwn(values, e.key)) { e.preventDefault(); position(values[e.key]); }
@@ -188,7 +194,7 @@ function build(node) {
             else img.removeAttribute("src");
         });
         divider.hidden = !comparing; left.hidden = !pair[0]; right.hidden = !pair[1];
-        stage.setAttribute("aria-disabled", String(!comparing)); stage.style.cursor = comparing ? "ew-resize" : "default";
+        handle.setAttribute("aria-disabled", String(!comparing));
         empty.hidden = !!(pair[0] || pair[1]); empty.style.display = empty.hidden ? "none" : "grid";
         batch.hidden = total <= 1; batch.style.display = batch.hidden ? "none" : "flex";
         count.textContent = `${index + 1} / ${total}${!comparing && arrays[1].length ? " · Unpaired image" : ""}`;
@@ -197,7 +203,7 @@ function build(node) {
         updateSizes();
     }
     [first, second].forEach(img => img.addEventListener("error", () => { state.textContent = "Preview expired. Queue again to refresh."; }));
-    root.append(toolbar, stage, footer, state);
+    root.append(toolbar, stage);
     // Keep canvas navigation alive over DOM widgets. Only ordinary control
     // interactions belong to this panel; wheel, Space-pan and middle-pan bubble.
     root.addEventListener("pointerdown", e => { panClick = spaceHeld || e.button === 1; }, true);
@@ -241,7 +247,7 @@ app.registerExtension({
             this._raySave = build(this);
             for (const name of ["save_image", "save_without_metadata"]) setWidgetHidden(this, findWidget(this, name), true);
             this.addDOMWidget("ray_save_preview", "RAY_SAVE_IMAGE", this._raySave.root, {
-                serialize: false, hideOnZoom: false, getMinHeight: () => 220, getMaxHeight: () => 600, getHeight: () => 300,
+                serialize: false, hideOnZoom: false, getMinHeight: () => 120, getHeight: () => 300,
             });
             this.setSize?.([Math.max(this.size?.[0] || 0, 320), Math.max(this.size?.[1] || 0, 400)]);
             return result;
