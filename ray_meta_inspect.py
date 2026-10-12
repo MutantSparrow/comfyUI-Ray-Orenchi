@@ -163,6 +163,67 @@ def _resolve_path(path_str: str) -> pathlib.Path:
     return direct
 
 
+# String inputs on an upstream node (Load Image and similar) that name an image file, and the inputs that
+# carry the image further upstream through nodes that only transform it (resize, crop, ...).
+_FILE_INPUTS = ("image", "filename", "image_path", "path", "file")
+_IMAGE_INPUTS = ("image", "images", "pixels", "image_1", "image1")
+
+
+def _is_link(value) -> bool:
+    return (isinstance(value, (list, tuple)) and len(value) == 2
+            and isinstance(value[0], (str, int)) and isinstance(value[1], int))
+
+
+def _named_image_file(value):
+    """The existing file a loader node's filename value points at, or None.
+
+    Load Image stores a plain name like `example.png` (a file in ComfyUI's input folder), or an annotated
+    `name [output]`; the resolver handles the annotated and `input/...` shapes, so the plain name is looked
+    up in the input folder here."""
+    text = _strip_path_quotes(str(value or "").strip())
+    if not text:
+        return None
+    candidate = _resolve_path(text)
+    if candidate.is_file():
+        return candidate
+    if folder_paths is not None:
+        try:
+            base = folder_paths.get_input_directory()
+        except Exception:
+            base = None
+        if base and (pathlib.Path(base) / text).is_file():
+            return pathlib.Path(base) / text
+    return None
+
+
+def trace_source_file(prompt, node_id, input_name="image", max_hops=8):
+    """Follow `input_name` of node `node_id` upstream through the graph to the file the image came from.
+
+    An IMAGE tensor carries no file metadata, but the node that loaded it knows its file. Walk up from this
+    node's image connection, through nodes that only transform an image, until a node names an existing image
+    file in one of `_FILE_INPUTS`. Returns that path, or None when the image was generated rather than loaded.
+    """
+    if not isinstance(prompt, dict):
+        return None
+    node = prompt.get(str(node_id)) or {}
+    link = (node.get("inputs") or {}).get(input_name)
+    seen = set()
+    for _ in range(max_hops):
+        if not _is_link(link):
+            return None
+        source_id = str(link[0])
+        if source_id in seen:
+            return None
+        seen.add(source_id)
+        inputs = (prompt.get(source_id) or {}).get("inputs") or {}
+        for key in _FILE_INPUTS:
+            found = _named_image_file(inputs.get(key)) if isinstance(inputs.get(key), str) else None
+            if found is not None:
+                return found
+        link = next((inputs[key] for key in _IMAGE_INPUTS if _is_link(inputs.get(key))), None)
+    return None
+
+
 _A1111_NEG_RE = re.compile(r"\nNegative prompt:\s*(.*?)(?=\n[A-Z][a-z]+ ?[A-Za-z]*:|$)", re.DOTALL)
 _A1111_SCALAR_RE = re.compile(r"(?:^|[\n,])\s*([A-Z][A-Za-z][A-Za-z ]*?):\s*([^,\n]+)")
 _XMP_TAG_RE = re.compile(r"<(?:dc|xmp|exif|Iptc4xmpCore):([\w]+)>\s*([^<]+)\s*</", re.IGNORECASE)
@@ -493,7 +554,8 @@ class RayMetaInspect:
         "  • `Embed`   — writes an IMAGE tensor + `metadata_json` dict "
         "back to disk at `path`, then re-parses the file for round-trip "
         "verification.\n\n"
-        "Drag an image onto the inline drop-zone to prefill `path`."
+        "In Inspect, connect a Load Image node to read that file's metadata "
+        "(a connected image wins), or leave it unconnected and enter a path."
     )
 
     @classmethod
@@ -508,11 +570,11 @@ class RayMetaInspect:
                     "default": "",
                     "multiline": False,
                     "placeholder": "Path to image (Inspect) or output path (Embed)",
-                    "tooltip": "Source file (Inspect) or destination file (Embed).",
+                    "tooltip": "Inspect: source file, used when no image is connected. Embed: destination file.",
                 }),
             },
             "optional": {
-                "image": ("IMAGE", {"tooltip": "Embed mode: tensor to write."}),
+                "image": ("IMAGE", {"tooltip": "Inspect: connect a Load Image node (or one that passes its image on) to read that file's metadata; this wins over `path`. Embed: tensor to write."}),
                 "metadata_json": ("STRING", {
                     "default": "",
                     "multiline": True,
@@ -520,7 +582,7 @@ class RayMetaInspect:
                     "tooltip": "Embed mode: JSON dict of metadata fields to attach.",
                 }),
             },
-            "hidden": {"node_id": "UNIQUE_ID"},
+            "hidden": {"node_id": "UNIQUE_ID", "prompt": "PROMPT"},
         }
 
     RETURN_TYPES = (
@@ -554,12 +616,20 @@ class RayMetaInspect:
     def IS_CHANGED(cls, *args, **kwargs):
         return float("nan")
 
-    def process(self, mode, path, image=None, metadata_json="", node_id=None):
+    def process(self, mode, path, image=None, metadata_json="", node_id=None, prompt=None):
         mode = (mode or MODE_INSPECT).strip()
         path_str = (path or "").strip()
 
         if mode == MODE_EMBED:
             return self._do_embed(path_str, image, metadata_json)
+        if image is not None:
+            source = trace_source_file(prompt, node_id)
+            if source is not None:
+                return self._do_inspect(str(source))
+            if not path_str:
+                return self._empty_outputs(
+                    "The connected image has no source file to read. Connect a Load Image node "
+                    "(or one that passes its image through), or enter a path.")
         return self._do_inspect(path_str)
 
     # --- Inspect ----------------------------------------------------------
