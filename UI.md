@@ -15,10 +15,10 @@ for naming, categories, colors, widgets, and the web layer.
       <bucket-emoji> Ray's <Bucket>: <Purpose>
 
   - `<bucket-emoji>` is the emoji for the node's bucket (see Categories).
-  - `<Bucket>` is `VFX`, `Analog`, `Prompts`, or `LLM` — the bucket name
+  - `<Bucket>` is `VFX`, `Analog`, `Tools`, or `LLM` — the bucket name
     spelled out.
   - `<Purpose>` is Title Case, no emoji inside, no trailing punctuation.
-  - Examples: `✨ Ray's VFX: Film Stock`, `📁 Ray's Prompts: Folder Scraper`,
+  - Examples: `✨ Ray's VFX: Film Stock`, `🔧 Ray's Tools: Folder Scraper`,
     `💬 Ray's LLM: Ollama Chat`, `🎛️ Ray's Analog: Knob`.
 - **JS extension name.** `Ray.<Feature>` (already the pattern everywhere).
 
@@ -30,7 +30,7 @@ Two-level tree, one top-level:
 |---------|------------------------|---------------------------------------------------|
 | VFX     | `👑 Ray/✨ VFX`         | Image-space effects — CRT, Print, PixelArt, FilmStock, VHS |
 | Analog  | `👑 Ray/🎛️ Analog`     | Analog-style UI widgets — Knob, Switch            |
-| Prompts | `👑 Ray/📝 Prompts`     | Scrapers, hub fetcher, metadata inspector         |
+| Tools   | `👑 Ray/🔧 Tools`       | Scrapers, prompt fetcher, metadata inspector, TXT folder, Save Image |
 | LLM     | `👑 Ray/💬 LLM`         | Chat, Prompt Iterator, Prompt Library             |
 
 The bucket is the single visual cue that groups a node — it drives category,
@@ -44,7 +44,7 @@ One palette. Shared in `web/_common.js` as `RAY_PALETTE`:
 export const RAY_PALETTE = {
   VFX:     { bg: "#2a1f3a", edge: "#8a3ac8" },  // violet
   Analog:  { bg: "#000000", edge: "#000000" },  // pitch black (knob / switch)
-  Prompts: { bg: "#1f3a2a", edge: "#3aa867" },  // green
+  Tools:   { bg: "#3a2a1a", edge: "#c8873a" },  // amber
   LLM:     { bg: "#1f2a4a", edge: "#3a73c8" },  // blue
 };
 ```
@@ -146,10 +146,11 @@ the `image` output pin. Users route it to a downstream Preview Image or
 Save Image node — the pack does not paint an inline preview inside its
 own node bodies.
 
-**Ray Save Image** is the dedicated output-node exception: it embeds an image
-comparison preview, keeps its requested display name, and defaults to a black
-node and preview background. Its segmented save buttons share a row with Browse
-and recent folders; dimensions and batch navigation sit below the preview.
+**Save Image** (`🔧 Ray's Tools: Save Image`) is the dedicated output-node
+exception: it embeds an image comparison preview and defaults to a black node
+and preview background instead of the Tools tint. Its segmented save buttons
+share a row with Browse and recent folders; dimensions and batch navigation sit
+below the preview.
 
 ## Per-node quality checklist
 
@@ -159,10 +160,12 @@ Every node must:
 - [ ] Display name follows the pattern.
 - [ ] Class-level `DESCRIPTION` set — plain-text fallback surfaced by
       ComfyUI's built-in Info tab. Terse.
-- [ ] Rich help entry in `web/help_defs.mjs` — powers the `?` button in
-      the selection toolbar. Follows the `{title, tagline, sections[]}`
-      shape (see `web/help.mjs`).
-- [ ] Every widget has a tooltip.
+- [ ] Help entry in `web/help_defs.mjs` for the `?` button in the
+      selection toolbar: a one- or two-sentence `summary` plus optional
+      `sections` (notes on menus, modes, formats). The card lists inputs,
+      widgets and outputs automatically from the node definition, so
+      describe each of them through its tooltip (see `web/help.mjs`).
+- [ ] Every input and widget has a tooltip.
 - [ ] `RETURN_NAMES` uses snake_case; `OUTPUT_TOOLTIPS` is present.
 - [ ] JS calls `applyBucketTint(node, "<bucket>")`.
 - [ ] JS uses the shared `setWidgetHidden`.

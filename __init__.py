@@ -1,126 +1,99 @@
 """Ray's Orenchi — single ComfyUI custom-node package consolidating all Ray nodes.
 
 Bundles:
+  ✨ VFX
   • RayCRT                   — Ray's VFX: CRT
   • RayOffsetPrint           — Ray's VFX: Offset Print
   • RayPixelArtDetector      — Ray's VFX: Pixel Art
-  • RayKnob / RaySwitch      — analog-series UI widgets
-  • RayOllamaChat            — Ray's LM: Ollama + Clip Chat
-  • RayPromptIterator        — Ray's LM: LM Prompt Iterator
-  • RayPromptDexter          — Ray's Web: PromptDexter Scraper
-  • RayCivitAI               — Ray's Web: CivitAI Gallery Scraper
-  • RayLocalScraper          — Ray's Local: Folder Image Scraper
-  • RayPromptFetcher         — Ray's Prompt Fetcher (Local + Web combined)
-  • RayMetaInspect           — Ray's Local: Metadata Inspector (read/embed)
-  • RayPromptLibrary         — Ray's LM: Local Prompt Library (SQLite)
-  • RayFilmStock             — Ray's VFX: Film Stock emulation
-  • RayVHS                   — Ray's VFX: VHS / Tape degradation
+  • RayFilmStock             — Ray's VFX: Film Stock
+  • RayVHS                   — Ray's VFX: VHS / Tape
+  🎛️ Analog
+  • RayKnob                  — Ray's Analog: Knob
+  • RaySwitch                — Ray's Analog: Switch
+  💬 LLM
+  • RayOllamaChat            — Ray's LLM: Ollama Chat
+  • RayPromptIterator        — Ray's LLM: Prompt Iterator
+  • RayPromptLibrary         — Ray's LLM: Prompt Library (SQLite)
+  • RayVLMFolder             — Ray's LLM: Folder Captioner
+  • RayFastQwen3VL           — Ray's LLM: Fast Qwen3-VL Infer
+  🔧 Tools
+  • RayPromptDexter          — Ray's Tools: PromptDexter Scraper
+  • RayCivitAI               — Ray's Tools: CivitAI Gallery Scraper
+  • RayLocalScraper          — Ray's Tools: Folder Image Scraper
+  • RayPromptFetcher         — Ray's Tools: Prompt Fetcher (local + web)
+  • RayMetaInspect           — Ray's Tools: Metadata Inspector (read/embed)
+  • RayTextFolder            — Ray's Tools: TXT Folder
+  • RaySaveImage             — Ray's Tools: Save Image (save + comparison preview)
 
 Web assets live under ./web and are served at /extensions/comfyUI-Ray-Orenchi/.
 """
 
-# Tolerate standalone import (e.g. pytest collection) where relative imports fail.
-try:
-    from .ray_save_image import RaySaveImage
-    from .ray_save_image import register_routes as register_save_image_routes
-    from .ray_crt import RayCRT
-    from .ray_offset_print import RayOffsetPrint
-    from .ray_pixel_detector import RayPixelArtDetector
-    from .ray_knob import RayKnob
-    from .ray_switch import RaySwitch
-    from .ray_ollama_chat import RayOllamaChat
-    from .ray_prompt_iterator import RayPromptIterator
-    from .ray_promptdexter import RayPromptDexter
-    from .ray_civitai import RayCivitAI
-    from .ray_local_scraper import RayLocalScraper
-    from .ray_txt_folder import RayTextFolder
-    from .ray_vlm_folder import RayVLMFolder
-    from .ray_fast_vlm import RayFastQwen3VL
-    from .ray_prompt_fetcher import RayPromptFetcher
-    from .ray_meta_inspect import RayMetaInspect
-    from .ray_prompt_library import RayPromptLibrary
-    from .ray_film_stock import RayFilmStock
-    from .ray_vhs import RayVHS
-    from . import ollama_routes  # noqa: F401  registers aiohttp routes on import
-    from . import promptdexter_routes  # noqa: F401
-    from . import civitai_routes  # noqa: F401
-    from . import prompt_library_routes  # noqa: F401
-    from . import film_stock_routes  # noqa: F401
-except ImportError:
-    from ray_save_image import RaySaveImage
-    from ray_save_image import register_routes as register_save_image_routes
-    from ray_crt import RayCRT
-    from ray_offset_print import RayOffsetPrint
-    from ray_pixel_detector import RayPixelArtDetector
-    from ray_knob import RayKnob
-    from ray_switch import RaySwitch
-    from ray_ollama_chat import RayOllamaChat
-    from ray_prompt_iterator import RayPromptIterator
-    from ray_promptdexter import RayPromptDexter
-    from ray_civitai import RayCivitAI
-    from ray_local_scraper import RayLocalScraper
-    from ray_txt_folder import RayTextFolder
-    from ray_vlm_folder import RayVLMFolder
-    from ray_fast_vlm import RayFastQwen3VL
-    from ray_prompt_fetcher import RayPromptFetcher
-    from ray_meta_inspect import RayMetaInspect
-    from ray_prompt_library import RayPromptLibrary
-    from ray_film_stock import RayFilmStock
-    from ray_vhs import RayVHS
-    try:
-        import ollama_routes  # noqa: F401
-    except ImportError:
-        pass
-    try:
-        import promptdexter_routes  # noqa: F401
-    except ImportError:
-        pass
-    try:
-        import civitai_routes  # noqa: F401
-    except ImportError:
-        pass
-    try:
-        import prompt_library_routes  # noqa: F401
-    except ImportError:
-        pass
-    try:
-        import film_stock_routes  # noqa: F401
-    except ImportError:
-        pass
+import importlib
 
 
+# Class name -> module. Class names are registered IDs; keep them stable so
+# existing workflows keep loading.
+_NODE_MODULES = {
+    "RaySaveImage":        "ray_save_image",
+    "RayCRT":              "ray_crt",
+    "RayOffsetPrint":      "ray_offset_print",
+    "RayPixelArtDetector": "ray_pixel_detector",
+    "RayKnob":             "ray_knob",
+    "RaySwitch":           "ray_switch",
+    "RayOllamaChat":       "ray_ollama_chat",
+    "RayPromptIterator":   "ray_prompt_iterator",
+    "RayPromptDexter":     "ray_promptdexter",
+    "RayCivitAI":          "ray_civitai",
+    "RayLocalScraper":     "ray_local_scraper",
+    "RayTextFolder":       "ray_txt_folder",
+    "RayVLMFolder":        "ray_vlm_folder",
+    "RayFastQwen3VL":      "ray_fast_vlm",
+    "RayPromptFetcher":    "ray_prompt_fetcher",
+    "RayMetaInspect":      "ray_meta_inspect",
+    "RayPromptLibrary":    "ray_prompt_library",
+    "RayFilmStock":        "ray_film_stock",
+    "RayVHS":              "ray_vhs",
+}
+
+# These register aiohttp routes on import.
+_ROUTE_MODULES = (
+    "ollama_routes",
+    "promptdexter_routes",
+    "civitai_routes",
+    "prompt_library_routes",
+    "film_stock_routes",
+)
+
+# Tolerate standalone import (e.g. pytest collection) where relative imports
+# fail; route modules are then optional.
 try:
-    register_save_image_routes()
+    _modules = {name: importlib.import_module(f".{name}", __package__)
+                for name in _NODE_MODULES.values()}
+    for _name in _ROUTE_MODULES:
+        importlib.import_module(f".{_name}", __package__)
+except (ImportError, TypeError):
+    _modules = {name: importlib.import_module(name)
+                for name in _NODE_MODULES.values()}
+    for _name in _ROUTE_MODULES:
+        try:
+            importlib.import_module(_name)
+        except ImportError:
+            pass
+
+NODE_CLASS_MAPPINGS = {
+    class_name: getattr(_modules[module], class_name)
+    for class_name, module in _NODE_MODULES.items()
+}
+
+try:
+    _modules["ray_save_image"].register_routes()
 except ImportError:
     pass
 
 
 WEB_DIRECTORY = "./web"
 
-NODE_CLASS_MAPPINGS = {
-    "RaySaveImage": RaySaveImage,
-    "RayCRT":              RayCRT,
-    "RayOffsetPrint":      RayOffsetPrint,
-    "RayPixelArtDetector": RayPixelArtDetector,
-    "RayKnob":             RayKnob,
-    "RaySwitch":           RaySwitch,
-    "RayOllamaChat":       RayOllamaChat,
-    "RayPromptIterator":   RayPromptIterator,
-    "RayPromptDexter":     RayPromptDexter,
-    "RayCivitAI":          RayCivitAI,
-    "RayLocalScraper":     RayLocalScraper,
-    "RayTextFolder":       RayTextFolder,
-    "RayVLMFolder":        RayVLMFolder,
-    "RayFastQwen3VL":     RayFastQwen3VL,
-    "RayPromptFetcher":    RayPromptFetcher,
-    "RayMetaInspect":      RayMetaInspect,
-    "RayPromptLibrary":    RayPromptLibrary,
-    "RayFilmStock":        RayFilmStock,
-    "RayVHS":              RayVHS,
-}
-
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "RaySaveImage": "Ray Save Image",
     # 👑 Ray/✨ VFX
     "RayCRT":              "✨ Ray's VFX: CRT",
     "RayOffsetPrint":      "✨ Ray's VFX: Offset Print",
@@ -135,14 +108,15 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayPromptIterator":   "💬 Ray's LLM: Prompt Iterator",
     "RayPromptLibrary":    "💬 Ray's LLM: Prompt Library",
     "RayVLMFolder":        "💬 Ray's LLM: Folder Captioner",
-    "RayFastQwen3VL":     "💬 Ray's LLM: Fast Qwen3-VL Infer",
-    # 👑 Ray/📝 Prompts
-    "RayPromptDexter":     "📝 Ray's Prompts: PromptDexter Scraper",
-    "RayCivitAI":          "📝 Ray's Prompts: CivitAI Gallery Scraper",
-    "RayLocalScraper":     "📝 Ray's Prompts: Folder Image Scraper",
-    "RayPromptFetcher":    "📝 Ray's Prompts: Prompt Fetcher",
-    "RayMetaInspect":      "📝 Ray's Prompts: Metadata Inspector",
-    "RayTextFolder":       "📝 Ray's Prompts: TXT Folder",
+    "RayFastQwen3VL":      "💬 Ray's LLM: Fast Qwen3-VL Infer",
+    # 👑 Ray/🔧 Tools
+    "RayPromptDexter":     "🔧 Ray's Tools: PromptDexter Scraper",
+    "RayCivitAI":          "🔧 Ray's Tools: CivitAI Gallery Scraper",
+    "RayLocalScraper":     "🔧 Ray's Tools: Folder Image Scraper",
+    "RayPromptFetcher":    "🔧 Ray's Tools: Prompt Fetcher",
+    "RayMetaInspect":      "🔧 Ray's Tools: Metadata Inspector",
+    "RayTextFolder":       "🔧 Ray's Tools: TXT Folder",
+    "RaySaveImage":        "🔧 Ray's Tools: Save Image",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
