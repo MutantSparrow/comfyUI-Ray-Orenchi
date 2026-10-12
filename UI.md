@@ -42,12 +42,16 @@ One palette. Shared in `web/_common.js` as `RAY_PALETTE`:
 
 ```js
 export const RAY_PALETTE = {
-  VFX:     { bg: "#2a1f3a", edge: "#8a3ac8" },  // violet
+  VFX:     { bg: "#000000", edge: "#8a3ac8" },  // violet header
   Analog:  { bg: "#000000", edge: "#000000" },  // pitch black (knob / switch)
-  Tools:   { bg: "#3a2a1a", edge: "#c8873a" },  // amber
-  LLM:     { bg: "#1f2a4a", edge: "#3a73c8" },  // blue
+  Tools:   { bg: "#000000", edge: "#c8873a" },  // amber header
+  LLM:     { bg: "#000000", edge: "#3a73c8" },  // blue header
 };
 ```
+
+Every node body is black; `edge` is the title-bar color and the only thing that
+identifies the bucket. Workflows saved with the older tinted bodies are
+blackened on load (`Ray.BucketTints` `loadedGraphNode`).
 
 - Every node's JS calls `applyBucketTint(node, "<bucket>")` on
   `onNodeCreated` and reasserts it on `onDrawBackground` (the knob/switch
