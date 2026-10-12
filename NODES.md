@@ -281,15 +281,15 @@ Node tint hue-shifts by active mode.
 - `Inspect` — parses every known chunk (A1111 `parameters`, ComfyUI `prompt` / `workflow` graph, EXIF UserComment, sidecar text) and exposes the extracted fields as separate STRING outputs plus the raw JSON blob.
 - `Embed` — writes an IMAGE tensor + `metadata_json` dict back to disk at `path`, then re-parses the file for round-trip verification.
 
-Drag an image into the inline drop-zone to prefill `path` and preview it in-node.
+In `Inspect`, connect a **Load Image** node to `image` and the node reads the metadata of the file it loaded: the connection is traced upstream, through nodes that only transform the image (resize, crop and similar), to the file's name. A connected image wins over `path`. An image that was generated rather than loaded has no file, so enter a `path` instead.
 
 **Category:** `👑 Ray/🔧 Tools`
 
 | Pin | Type | Notes |
 |-----|------|-------|
 | **Control** `mode` | enum | `Inspect` / `Embed`. |
-| **Control** `path` | string | Source file (Inspect) or destination file (Embed). |
-| **Input** `image` (optional) | IMAGE | Embed mode: tensor to write. |
+| **Control** `path` | string | Inspect: source file, used when no image is connected (absolute, `input/...` or `name [input]`). Embed: destination file. |
+| **Input** `image` (optional) | IMAGE | Inspect: connect a Load Image node to read that file's metadata. Embed: tensor to write. |
 | **Control** `metadata_json` (optional) | string (multiline) | Embed mode: JSON dict of metadata fields to attach. Visible only in Embed mode. |
 | **Output** `prompt_positive` | STRING | Positive prompt extracted from the file. |
 | **Output** `prompt_negative` | STRING | Negative prompt extracted from the file. |
