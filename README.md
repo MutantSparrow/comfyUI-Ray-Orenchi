@@ -24,7 +24,7 @@ inference, prompt tooling and analog-console controls. Find them under the
 | | **Folder Image Scraper** | Pick a local image and extract its generation prompt |
 | | **PromptDexter Scraper** | Fetch a random prompt and image from PromptDexter |
 | | **CivitAI Gallery Scraper** | Fetch prompts and images from the CivitAI API, SFW or NSFW |
-| | **Prompt Fetcher** | Local, PromptDexter and CivitAI prompt sources in one node |
+| | **Prompt Scraper** | Local, PromptDexter and CivitAI prompt sources in one node |
 
 Nodes are named *Ray's &lt;Group&gt;: &lt;Node&gt;* in the menu. Select any Ray node and click the
 **?** in its selection toolbar for built-in help: what it does, every input and output,
@@ -47,7 +47,7 @@ the browser. After updating the pack, restart again so new and changed nodes loa
   ComfyUI's `CLIPLoader` (type `qwen_image`, or `krea2`). Connect its `CLIP`, an image and
   a prompt. Details and measurements are in [FAST_VLM.md](FAST_VLM.md).
 - **Folder Captioner** needs a GPU and the same kind of full Qwen3-VL `CLIP` from `CLIPLoader` as Fast Qwen3-VL.
-- **PromptDexter**, **CivitAI** and the matching **Prompt Fetcher** modes need network
+- **PromptDexter**, **CivitAI** and the matching **Prompt Scraper** modes need network
   access. CivitAI can read an optional local `civitai.secret` file; it is ignored by Git.
 - Works in both the classic canvas and Nodes 2.0. Node IDs are stable, so saved workflows
   keep loading.

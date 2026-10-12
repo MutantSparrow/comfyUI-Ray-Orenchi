@@ -18,7 +18,7 @@ Bundles:
   • RayPromptDexter          — Ray's Tools: PromptDexter Scraper
   • RayCivitAI               — Ray's Tools: CivitAI Gallery Scraper
   • RayLocalScraper          — Ray's Tools: Folder Image Scraper
-  • RayPromptFetcher         — Ray's Tools: Prompt Fetcher (local + web)
+  • RayPromptFetcher         — Ray's Tools: Prompt Scraper (local + web)
   • RayMetaInspect           — Ray's Tools: Metadata Inspector (read/embed)
   • RayTextFolder            — Ray's Tools: TXT Folder
   • RaySaveImage             — Ray's Tools: Save Image (save + comparison preview)
@@ -105,7 +105,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayPromptDexter":     "🔧 Ray's Tools: PromptDexter Scraper",
     "RayCivitAI":          "🔧 Ray's Tools: CivitAI Gallery Scraper",
     "RayLocalScraper":     "🔧 Ray's Tools: Folder Image Scraper",
-    "RayPromptFetcher":    "🔧 Ray's Tools: Prompt Fetcher",
+    "RayPromptFetcher":    "🔧 Ray's Tools: Prompt Scraper",
     "RayMetaInspect":      "🔧 Ray's Tools: Metadata Inspector",
     "RayTextFolder":       "🔧 Ray's Tools: TXT Folder",
     "RaySaveImage":        "🔧 Ray's Tools: Save Image",

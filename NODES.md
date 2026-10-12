@@ -5,7 +5,7 @@ four bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
 - `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck).
-- `👑 Ray/🔧 Tools` — scrapers, prompt fetcher, metadata inspector, TXT folder, Save Image.
+- `👑 Ray/🔧 Tools` — scrapers, prompt scraper, metadata inspector, TXT folder, Save Image.
 - `👑 Ray/💬 LLM` — local vision-language inference and folder captioning.
 
 Every node has a black body and a header colored by its bucket. Mode-tinted
@@ -241,7 +241,7 @@ Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.
 
 ---
 
-## 🔧 Ray's Tools: Prompt Fetcher (`RayPromptFetcher`)
+## 🔧 Ray's Tools: Prompt Scraper (`RayPromptFetcher`)
 
 **Purpose.** One node, three prompt sources. A `scraper_mode` dropdown picks between `Local Folder`, `PromptDexter`, and `CivitAI`; the frontend hides widgets that don't belong to the active mode. Outputs are harmonized to the local-scraper shape `(prompt_single, prompt_multiline, image, image_path)` so any mode is drop-in compatible with downstream wiring.
 
