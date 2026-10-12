@@ -11,9 +11,9 @@ four bucket sub-categories:
 See [UI.md](UI.md) for the pack's UI/UX canon (naming, category, color,
 widget, and web-layer rules).
 
-Every node is tinted by its bucket. Mode-tinted nodes (`RayCivitAI`,
-`RayPromptFetcher`, `RayPromptLibrary`) hue-shift their bucket color rather
-than pick a bespoke one.
+Every node has a black body and a header colored by its bucket. Mode-tinted
+nodes (`RayCivitAI`, `RayPromptFetcher`, `RayPromptLibrary`) hue-shift their
+header color rather than pick a bespoke one.
 
 ---
 
