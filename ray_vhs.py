@@ -9,7 +9,7 @@ Multi-pass simulation in YUV (BT.601):
   6. Dropouts: scattered white streaks
   7. Tape hiss: gaussian noise on Y
   8. YUV → RGB
-  9. (Optional) OSD overlay (camcorder-style date/time/PLAY/REC) drawn via PIL
+  9. (Optional) OSD overlay (camcorder-style date/time/PLAY/REC) drawn in a built-in 5x7 pixel font
 
 Output preserves BHWC float32 [0,1] shape.
 """
@@ -17,6 +17,7 @@ Output preserves BHWC float32 [0,1] shape.
 from __future__ import annotations
 
 import datetime
+import unicodedata
 import math
 import random
 from dataclasses import dataclass
@@ -25,7 +26,7 @@ from typing import Optional, Tuple
 import numpy as np
 import torch
 import torch.nn.functional as F
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 try:
     from ._common import normalize_image, rgb_to_yuv, yuv_to_rgb
@@ -240,11 +241,79 @@ def _hiss(
 # ---------------------------------------------------------------------------
 
 
+# 5 x 7 pixel glyphs in the style of a VCR's on-screen-display character generator. Rows are joined with
+# "|"; X is a lit cell. Drawn as blocks so the OSD looks the same on every machine and needs no font file.
+_OSD_GLYPHS = {
+    "A": ".XXX.|X...X|X...X|XXXXX|X...X|X...X|X...X",
+    "B": "XXXX.|X...X|X...X|XXXX.|X...X|X...X|XXXX.",
+    "C": ".XXX.|X...X|X....|X....|X....|X...X|.XXX.",
+    "D": "XXXX.|X...X|X...X|X...X|X...X|X...X|XXXX.",
+    "E": "XXXXX|X....|X....|XXXX.|X....|X....|XXXXX",
+    "F": "XXXXX|X....|X....|XXXX.|X....|X....|X....",
+    "G": ".XXX.|X...X|X....|X.XXX|X...X|X...X|.XXXX",
+    "H": "X...X|X...X|X...X|XXXXX|X...X|X...X|X...X",
+    "I": ".XXX.|..X..|..X..|..X..|..X..|..X..|.XXX.",
+    "J": "..XXX|...X.|...X.|...X.|...X.|X..X.|.XX..",
+    "K": "X...X|X..X.|X.X..|XX...|X.X..|X..X.|X...X",
+    "L": "X....|X....|X....|X....|X....|X....|XXXXX",
+    "M": "X...X|XX.XX|X.X.X|X.X.X|X...X|X...X|X...X",
+    "N": "X...X|XX..X|X.X.X|X..XX|X...X|X...X|X...X",
+    "O": ".XXX.|X...X|X...X|X...X|X...X|X...X|.XXX.",
+    "P": "XXXX.|X...X|X...X|XXXX.|X....|X....|X....",
+    "Q": ".XXX.|X...X|X...X|X...X|X.X.X|X..X.|.XX.X",
+    "R": "XXXX.|X...X|X...X|XXXX.|X.X..|X..X.|X...X",
+    "S": ".XXXX|X....|X....|.XXX.|....X|....X|XXXX.",
+    "T": "XXXXX|..X..|..X..|..X..|..X..|..X..|..X..",
+    "U": "X...X|X...X|X...X|X...X|X...X|X...X|.XXX.",
+    "V": "X...X|X...X|X...X|X...X|X...X|.X.X.|..X..",
+    "W": "X...X|X...X|X...X|X.X.X|X.X.X|XX.XX|X...X",
+    "X": "X...X|X...X|.X.X.|..X..|.X.X.|X...X|X...X",
+    "Y": "X...X|X...X|.X.X.|..X..|..X..|..X..|..X..",
+    "Z": "XXXXX|....X|...X.|..X..|.X...|X....|XXXXX",
+    "0": ".XXX.|X...X|X..XX|X.X.X|XX..X|X...X|.XXX.",
+    "1": "..X..|.XX..|..X..|..X..|..X..|..X..|.XXX.",
+    "2": ".XXX.|X...X|....X|...X.|..X..|.X...|XXXXX",
+    "3": "XXXXX|...X.|..X..|...X.|....X|X...X|.XXX.",
+    "4": "...X.|..XX.|.X.X.|X..X.|XXXXX|...X.|...X.",
+    "5": "XXXXX|X....|XXXX.|....X|....X|X...X|.XXX.",
+    "6": "..XX.|.X...|X....|XXXX.|X...X|X...X|.XXX.",
+    "7": "XXXXX|....X|...X.|..X..|.X...|.X...|.X...",
+    "8": ".XXX.|X...X|X...X|.XXX.|X...X|X...X|.XXX.",
+    "9": ".XXX.|X...X|X...X|.XXXX|....X|...X.|.XX..",
+    ":": ".....|..X..|..X..|.....|..X..|..X..|.....",
+    ".": ".....|.....|.....|.....|.....|..X..|..X..",
+    ",": ".....|.....|.....|.....|..X..|..X..|.X...",
+    "-": ".....|.....|.....|XXXXX|.....|.....|.....",
+    "_": ".....|.....|.....|.....|.....|.....|XXXXX",
+    "+": ".....|..X..|..X..|XXXXX|..X..|..X..|.....",
+    "/": "....X|....X|...X.|..X..|.X...|X....|X....",
+    "'": "..X..|..X..|.X...|.....|.....|.....|.....",
+    "!": "..X..|..X..|..X..|..X..|..X..|.....|..X..",
+    "?": ".XXX.|X...X|....X|...X.|..X..|.....|..X..",
+    "(": "...X.|..X..|.X...|.X...|.X...|..X..|...X.",
+    ")": ".X...|..X..|...X.|...X.|...X.|..X..|.X...",
+    "%": "XX..X|XX..X|...X.|..X..|.X...|X..XX|X..XX",
+}
+# The PLAY triangle and REC dot, on the same 5 x 7 grid.
+_OSD_ICONS = {
+    "play": "X....|XX...|XXX..|XXXX.|XXX..|XX...|X....",
+    "rec": ".....|.XXX.|XXXXX|XXXXX|XXXXX|.XXX.|.....",
+}
+_OSD_ADVANCE = 6      # cells per character (5 wide plus a 1 cell gap)
+_OSD_SPACE = 4        # cells a space advances
+_OSD_ICON_GAP = 2     # cells between an icon and the text
+
+
+def _osd_icon(mode: str):
+    """Symbol drawn before the OSD text, as part of the pixel font."""
+    return {"▶ PLAY": "play", "● REC": "rec"}.get(mode)
+
+
 def _osd_text(mode: str, custom_date: str) -> str:
     if mode == "▶ PLAY":
-        return "▶  PLAY"
+        return "PLAY"
     if mode == "● REC":
-        return "● REC"
+        return "REC"
     if mode in ("Date", "Date+Time"):
         try:
             if custom_date.strip():
@@ -261,55 +330,71 @@ def _osd_text(mode: str, custom_date: str) -> str:
     return ""
 
 
+def _osd_glyph(char: str):
+    """The 7 rows for `char`: uppercase, accents stripped, anything unknown shown as "?"."""
+    char = char.upper()
+    if char not in _OSD_GLYPHS:
+        base = unicodedata.normalize("NFKD", char)[:1].upper()
+        char = base if base in _OSD_GLYPHS else "?"
+    return _OSD_GLYPHS[char].split("|")
+
+
+def _osd_cells(text: str, icon=None):
+    """Lit (column, row) cells for one line of OSD, and the line's width in cells."""
+    cells, col = [], 0
+    if icon in _OSD_ICONS:
+        for y, row in enumerate(_OSD_ICONS[icon].split("|")):
+            cells += [(col + x, y) for x, c in enumerate(row) if c == "X"]
+        col += 5 + _OSD_ICON_GAP
+    for char in text.strip():
+        if char.isspace():
+            col += _OSD_SPACE
+            continue
+        for y, row in enumerate(_osd_glyph(char)):
+            cells += [(col + x, y) for x, c in enumerate(row) if c == "X"]
+        col += _OSD_ADVANCE
+    return cells, max(0, col - (_OSD_ADVANCE - 5))
+
+
 def _draw_osd(
     rgb_bhwc: torch.Tensor,
     text: str,
     corner: str,
+    icon: str = None,
 ) -> torch.Tensor:
-    """Composite OSD text into the bottom-left of the image (or chosen corner).
-    Uses a CRT-style chunky look via the PIL default bitmap font scaled up."""
+    """Composite a VCR-style OSD line into the chosen corner: chunky 5 x 7 pixel characters in
+    cream with a black outline and drop shadow, like a tape deck's character generator."""
+    text = str(text or "").strip()
     if not text:
         return rgb_bhwc
     B, H, W, _ = rgb_bhwc.shape
+    cells, cols = _osd_cells(text, icon)
+    scale = max(1, int(round(H * 0.0057)))        # pixels per cell; the text is about 4% of the height
+    edge = max(1, scale // 3)                     # outline thickness
+    shadow = max(1, scale // 4)                   # drop-shadow offset
+    tw, th = cols * scale, 7 * scale
+    pad = max(4, int(H * 0.01)) + edge
+    if corner == "TL":
+        x0, y0 = pad, pad
+    elif corner == "TR":
+        x0, y0 = W - tw - pad, pad
+    elif corner == "BR":
+        x0, y0 = W - tw - pad, H - th - pad
+    else:
+        x0, y0 = pad, H - th - pad
     out_list = []
     for b in range(B):
         arr = (rgb_bhwc[b].cpu().numpy().clip(0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
         pil = Image.fromarray(arr, mode="RGB")
         draw = ImageDraw.Draw(pil)
-        # Try to find a TrueType font for scaling. Fall back to default bitmap.
-        font = None
-        font_size = max(12, int(H * 0.045))
-        for candidate in (
-            "C:/Windows/Fonts/consola.ttf",
-            "C:/Windows/Fonts/cour.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
-        ):
-            try:
-                font = ImageFont.truetype(candidate, font_size)
-                break
-            except Exception:
-                continue
-        if font is None:
-            font = ImageFont.load_default()
-
-        try:
-            bbox = draw.textbbox((0, 0), text, font=font)
-            tw = bbox[2] - bbox[0]
-            th = bbox[3] - bbox[1]
-        except Exception:
-            tw, th = (len(text) * font_size // 2, font_size)
-        pad = max(4, int(H * 0.01))
-        if corner == "TL":
-            xy = (pad, pad)
-        elif corner == "TR":
-            xy = (W - tw - pad, pad)
-        elif corner == "BR":
-            xy = (W - tw - pad, H - th - pad)
-        else:
-            xy = (pad, H - th - pad)
-        # Faux CRT "glow" — two-pass: black shadow offset, then bright fg.
-        draw.text((xy[0] + 1, xy[1] + 1), text, fill=(0, 0, 0), font=font)
-        draw.text(xy, text, fill=(255, 255, 240), font=font)
+        for cx, cy in cells:                      # outline and shadow first, so they never cover a neighbour
+            x, y = x0 + cx * scale, y0 + cy * scale
+            draw.rectangle([x - edge + shadow, y - edge + shadow, x + scale - 1 + edge + shadow, y + scale - 1 + edge + shadow],
+                           fill=(0, 0, 0))
+            draw.rectangle([x - edge, y - edge, x + scale - 1 + edge, y + scale - 1 + edge], fill=(0, 0, 0))
+        for cx, cy in cells:
+            x, y = x0 + cx * scale, y0 + cy * scale
+            draw.rectangle([x, y, x + scale - 1, y + scale - 1], fill=(255, 255, 240))
         out_arr = np.asarray(pil, dtype=np.float32) / 255.0
         out_list.append(torch.from_numpy(out_arr))
     return torch.stack(out_list, dim=0).to(rgb_bhwc.device).contiguous()
@@ -354,7 +439,7 @@ def apply_vhs(
 
     if osd_mode and osd_mode != "Off":
         text = _osd_text(osd_mode, osd_date)
-        rgb = _draw_osd(rgb, text, osd_corner)
+        rgb = _draw_osd(rgb, text, osd_corner, _osd_icon(osd_mode))
 
     return rgb.clamp(0.0, 1.0).to(dtype=dtype, device=device)
 
