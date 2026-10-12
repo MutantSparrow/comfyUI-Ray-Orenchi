@@ -20,18 +20,15 @@ const MODE_PREFIX = {
     [MODE_CIVITAI]: "civitai__",
 };
 
-// Widgets that always stay visible regardless of mode.
-const ALWAYS_VISIBLE = new Set(["scraper_mode", "seed"]);
-
 function applyMode(node, mode) {
     const keep = MODE_PREFIX[mode] || MODE_PREFIX[MODE_LOCAL];
+    const prefixes = Object.values(MODE_PREFIX);
     for (const w of node.widgets || []) {
-        if (ALWAYS_VISIBLE.has(w.name)) {
-            commonSetHidden(node, w, false);
-            continue;
-        }
-        const hide = !w.name?.startsWith(keep);
-        commonSetHidden(node, w, hide);
+        // Only hide widgets owned by another mode. Shared widgets
+        // (scraper_mode, seed, and the frontend's control_after_generate)
+        // stay visible.
+        const owned = prefixes.some((p) => w.name?.startsWith(p));
+        commonSetHidden(node, w, owned && !w.name.startsWith(keep));
     }
     applyModeStyling(node, mode);
     if (typeof node.computeSize === "function") {
@@ -43,16 +40,16 @@ function applyMode(node, mode) {
 }
 
 function applyModeStyling(node, mode) {
-    // Prompts bucket base tint, hue-shifted per mode.
-    applyBucketTint(node, "Prompts");
+    // Tools bucket base tint, hue-shifted per mode.
+    applyBucketTint(node, "Tools");
     if (mode === MODE_DEXTER) {
-        node.bgcolor = shiftTint(RAY_PALETTE.Prompts.bg, 90);
-        node.color = shiftTint(RAY_PALETTE.Prompts.edge, 90);
+        node.bgcolor = shiftTint(RAY_PALETTE.Tools.bg, 90);
+        node.color = shiftTint(RAY_PALETTE.Tools.edge, 90);
     } else if (mode === MODE_CIVITAI) {
-        node.bgcolor = shiftTint(RAY_PALETTE.Prompts.bg, -90);
-        node.color = shiftTint(RAY_PALETTE.Prompts.edge, -90);
+        node.bgcolor = shiftTint(RAY_PALETTE.Tools.bg, -90);
+        node.color = shiftTint(RAY_PALETTE.Tools.edge, -90);
     }
-    // MODE_LOCAL keeps the canonical Prompts tint.
+    // MODE_LOCAL keeps the canonical Tools tint.
 }
 
 // PromptDexter category list arrives async via /ray_promptdexter/categories.
