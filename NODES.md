@@ -55,7 +55,7 @@ header color rather than pick a bespoke one.
 
 ## ✨ Ray's VFX: Pixel Art (`RayPixelArtDetector`)
 
-**Purpose.** Repair an existing pixel grid or abstract illustrations/photos into readable regions. Preserve exact aspect ratio, fit perceptual palettes and optionally add restrained dithering or colored outlines. Benchmark methodology and results are in [benchmarks/pixel_art](benchmarks/pixel_art/README.md).
+**Purpose.** Repair an existing pixel grid or abstract illustrations/photos into readable regions. Preserve exact aspect ratio, fit perceptual palettes and optionally add restrained dithering or colored outlines.
 
 **Category:** `👑 Ray/✨ VFX`
 
@@ -78,7 +78,7 @@ header color rather than pick a bespoke one.
 | Output `image` | Actual pixel-resolution result. |
 | Output `preview` | Nearest-neighbor preview at input dimensions. |
 
-Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally. No model or server is required. Irrelevant controls are hidden. See [benchmark methodology](benchmarks/pixel_art/README.md) and [results](benchmarks/pixel_art/RESULTS.md); these development results do not establish SOTA quality.
+Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally. No model or server is required. Irrelevant controls are hidden.
 
 ---
 
