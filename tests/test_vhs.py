@@ -147,3 +147,62 @@ def test_common_yuv_round_trip():
     img = torch.rand((1, 16, 16, 3))
     rt = yuv_to_rgb(rgb_to_yuv(img))
     assert torch.allclose(img, rt, atol=1e-4)
+
+
+def _lit(img):
+    """(rows, cols) of pixels bright enough to be the cream OSD text."""
+    return (img[0].max(dim=-1).values > 0.8).nonzero(as_tuple=True)
+
+
+def test_osd_needs_no_system_font_glyphs():
+    # Consolas and Courier New have no ▶, which used to print a missing-glyph box. The OSD is drawn from a
+    # built-in pixel font, so its text is plain ASCII and the symbols are icons.
+    for mode in rv.OSD_MODES:
+        assert rv._osd_text(mode, "").isascii(), mode
+    assert rv._osd_icon("▶ PLAY") == "play" and rv._osd_icon("● REC") == "rec"
+    assert rv._osd_icon("Date") is None and rv._osd_icon("Off") is None
+
+
+def test_pixel_font_covers_everything_the_osd_can_show():
+    for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:.,-_+/'!?()%":
+        rows = rv._OSD_GLYPHS[char].split("|")
+        assert len(rows) == 7 and all(len(row) == 5 for row in rows), char
+        assert any("X" in row for row in rows), char
+    for icon, bitmap in rv._OSD_ICONS.items():
+        rows = bitmap.split("|")
+        assert len(rows) == 7 and all(len(row) == 5 for row in rows), icon
+    # Lowercase, accents and unknown characters never raise and never print a missing-glyph box.
+    assert rv._osd_glyph("a") == rv._osd_glyph("A")
+    assert rv._osd_glyph("É") == rv._osd_glyph("E")
+    assert rv._osd_glyph("☃") == rv._osd_glyph("?")
+
+
+def test_osd_text_is_drawn_in_pixels_for_every_mode():
+    img = _flat(h=128, w=256, color=(0.0, 0.0, 0.0))
+    for mode, icon in (("PLAY", "play"), ("REC", "rec"), ("2026 10 12", None), ("12:30", None)):
+        rows, cols = _lit(rv._draw_osd(img, mode, "BL", icon))
+        assert len(rows) > 20, mode
+        assert cols.max() < 128, f"{mode} should stay in the left half"
+
+
+def test_osd_icon_sits_left_of_the_text_and_pushes_it_right():
+    img = _flat(h=128, w=256, color=(0.0, 0.0, 0.0))
+    _, plain_cols = _lit(rv._draw_osd(img, "PLAY", "BL"))
+    for icon in ("play", "rec"):
+        _, cols = _lit(rv._draw_osd(img, "PLAY", "BL", icon))
+        assert cols.min() == plain_cols.min()                   # the icon starts where the text used to
+        assert cols.max() > plain_cols.max(), icon              # and the text moved right to make room
+
+
+def test_osd_stays_inside_every_corner():
+    img = _flat(h=128, w=256, color=(0.0, 0.0, 0.0))
+    for corner, left, top in (("TL", True, True), ("TR", False, True), ("BL", True, False), ("BR", False, False)):
+        rows, cols = _lit(rv._draw_osd(img, "REC", corner, "rec"))
+        assert rows.min() >= 0 and rows.max() < 128 and cols.min() >= 0 and cols.max() < 256, corner
+        assert (cols.float().mean() < 128) == left and (rows.float().mean() < 64) == top, corner
+
+
+def test_osd_scales_with_the_image():
+    small = _lit(rv._draw_osd(_flat(h=128, w=256, color=(0, 0, 0)), "PLAY", "BL", "play"))[0]
+    big = _lit(rv._draw_osd(_flat(h=1024, w=2048, color=(0, 0, 0)), "PLAY", "BL", "play"))[0]
+    assert (big.max() - big.min()) > 4 * (small.max() - small.min())
