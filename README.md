@@ -30,6 +30,7 @@ analog controls. Nodes appear under the `👑 Ray` category in four groups:
 | Ray's VFX: Pixel Art | VFX | Pixel-grid repair and illustration abstraction with palette reduction, selective dithering, outlines, native-size output, and comparison preview |
 | Ray's VFX: Film Stock | VFX | Film response, grain, halation, and optional LUT/XMP assets |
 | Ray's VFX: VHS / Tape | VFX | YUV tape degradation, tracking faults, dropouts, noise, and OSD |
+| Ray's Analog: Button Deck | Analog | A bank of analog push buttons that replaces a dropdown: one value per line, the pressed button's text is the output |
 | Ray's Analog: Control (Knob / Slider) | Analog | Knob or slider with min/max and clamp behavior, plus hardware sound feedback |
 | Ray's Analog: Switch | Analog | Boolean toggle control |
 | Ray's LLM: Fast Qwen3-VL Infer | LLM | Fast image-to-text generation through an already loaded native Qwen3-VL CLIP, with no duplicate model |

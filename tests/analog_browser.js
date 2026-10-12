@@ -1,6 +1,9 @@
 import { app, nodeClass } from '/scripts/app.js';
 import '/extensions/ray/ray_knob.js';
 import '/extensions/ray/ray_switch.js';
+import '/extensions/ray/ray_button_deck.js';
+import { DECK_STYLES, gridShape } from '/extensions/ray/deck_styles.js';
+import { parseEntries } from '/extensions/ray/ray_button_deck.js';
 import { KNOB_STYLES } from '/extensions/ray/knob_styles.js';
 import { SWITCH_STYLES } from '/extensions/ray/switch_styles.js';
 import { quantizeInt, boundValue } from '/extensions/ray/ray_knob.js';
@@ -15,8 +18,8 @@ function check(condition, message) {
 const widget = (node,name) => node.widgets.find(w => w.name === name);
 const make = (kind,accessor=false,dom=true) => {
     const Type = nodeClass(kind,accessor,dom);
-    const extension = app.extensions.find(e => e.name === (kind==='knob'?'Ray.Knob':'Ray.Switch'));
-    extension.beforeRegisterNodeDef(Type,{name:kind==='knob'?'RayKnob':'RaySwitch'});
+    const extension = app.extensions.find(e => e.name === {knob:'Ray.Knob',switch:'Ray.Switch',deck:'Ray.ButtonDeck'}[kind]);
+    extension.beforeRegisterNodeDef(Type,{name:{knob:'RayKnob',switch:'RaySwitch',deck:'RayButtonDeck'}[kind]});
     const node = new Type(); node.onNodeCreated(); return node;
 };
 try {
@@ -153,6 +156,89 @@ try {
             const peak=(await o.startRendering()).getChannelData(0).reduce((m,x)=>Math.max(m,Math.abs(x)),0);
             check(peak>0.02 && peak<1,`Tick voice ${voice} is audible and does not clip`); }
         node.onRemoved(); toggle.onRemoved();
+    }
+    {
+        // Button deck: grid rule, exclusive pressed state, keyboard, entries popout, styles, sound.
+        const shapes={1:[1,1],2:[2,1],3:[2,2],4:[2,2],5:[3,2],6:[3,2],7:[3,3],9:[3,3],10:[4,3],12:[4,3],13:[4,4]};
+        for (const [n,[cols,rows]] of Object.entries(shapes)) { const g=gridShape(Number(n)); check(g.cols===cols && g.rows===rows,`${n} buttons arrange as ${cols} x ${rows}`); }
+        check(JSON.stringify(parseEntries('  a \r\n\r\nb\na\n c'))==='["a","b","c"]','Entries: one per line, trimmed, blanks and repeats dropped');
+        for (const accessor of [false,true]) {
+            const deck=make('deck',accessor), ui=deck._rayAnalog; document.body.append(ui.element);
+            const entriesW=widget(deck,'entries'), selectedW=widget(deck,'selected');
+            check(entriesW.hidden===true,'The raw entries box is hidden');
+            const editW=deck.widgets.find(w=>w.name==='✎ Edit entries…');
+            check(!!editW && editW.type==='button','An Edit entries button widget sits above the deck');
+            entriesW.value='Alpha\nBeta\nGamma\nDelta\nEpsilon'; ui.render();
+            const buttons=()=>[...ui.host.querySelectorAll('.ray-deck-button')];
+            const lit=()=>buttons().filter(b=>b.getAttribute('aria-checked')==='true').map(b=>b.title);
+            check(buttons().length===5 && ui.host.style.getPropertyValue('--deck-cols')==='3','Five entries make five buttons in three columns');
+            check(JSON.stringify(lit())==='["Alpha"]','With nothing stored the first button is the lit one');
+            buttons()[2].click();
+            check(selectedW.value==='Gamma' && JSON.stringify(lit())==='["Gamma"]' && deck.callbacks===1,'Pressing a button stores its text and lights only that button');
+            buttons()[2].click();
+            check(deck.callbacks===1,'Pressing the lit button again changes nothing');
+            buttons()[4].click(); buttons()[1].click();
+            check(JSON.stringify(lit())==='["Beta"]' && buttons().filter(b=>b.dataset.state==='on').length===1,'Only one button is ever pressed');
+            const pressed=buttons().find(b=>b.dataset.state==='on');
+            check([...pressed.querySelectorAll('[data-on-only]')].every(el=>el.style.display!=='none') && [...pressed.querySelectorAll('[data-off-only]')].every(el=>el.style.display==='none'),'The pressed button shows its lit layers');
+            const unlit=buttons().find(b=>b.dataset.state==='off');
+            check([...unlit.querySelectorAll('[data-on-only]')].every(el=>el.style.display==='none') && [...unlit.querySelectorAll('[data-off-only]')].every(el=>el.style.display!=='none'),'Released buttons hide their lit layers');
+            buttons()[1].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));
+            check(selectedW.value==='Gamma' && document.activeElement===buttons()[2],'Arrow keys move the pressed button and focus');
+            buttons()[2].dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true,cancelable:true}));
+            check(selectedW.value==='Epsilon','End presses the last button');
+            selectedW.value='removed'; ui.render();
+            check(JSON.stringify(lit())==='["Alpha"]','A stored value missing from the list falls back to the first button');
+            check(ui.element.querySelector('.ray-analog-readout').textContent.includes('Alpha'),'The readout shows the output value');
+            deck.inputs=[{name:'selected',link:5}]; deck.onConnectionsChange(); selectedW.value='Beta'; ui.render(); buttons()[3].click();
+            check(selectedW.value==='Beta','A wired selected input cannot be changed from the deck');
+            deck.inputs=[]; deck.onConnectionsChange();
+            for (const key of Object.keys(DECK_STYLES)) {
+                deck.properties.style=key; selectedW.value='Beta'; ui.render();
+                const style=DECK_STYLES[key];
+                check(buttons().length===5 && buttons().every(b=>!!b.querySelector('svg')) && JSON.stringify(lit())==='["Beta"]',`Deck style ${key} draws five buttons with one lit`);
+                if (style.legend==='tape') check([...ui.host.querySelectorAll('.ray-deck-sticker')].map(s=>s.textContent).join()==='Alpha,Beta,Gamma,Delta,Epsilon',`Deck style ${key} puts each entry on a Dymo sticker`);
+                else check([...buttons()[1].querySelectorAll('[data-label]')].every(t=>t.textContent==='Beta'),`Deck style ${key} cuts each entry into its button`);
+            }
+            deck.properties.compact=true; ui.applyCompact();
+            check(editW.hidden===true,'Compact mode hides the Edit entries button');
+            deck.properties.compact=false; ui.applyCompact();
+            check(editW.hidden===false && entriesW.hidden===true,'Expanding restores the button and keeps the raw entries box hidden');
+            ui.openEditor(); await new Promise(r=>setTimeout(r,30));
+            const dialog=document.querySelector('.ray-deck-editor'), area=dialog.querySelector('textarea');
+            check(area.value===entriesW.value,'The popout starts with the current entries');
+            area.value='One\nTwo\n\nTwo\nThree\nFour'; area.dispatchEvent(new Event('input'));
+            check(/4 buttons · 2 × 2 grid · 1 repeated or extra line ignored/.test(dialog.querySelector('.ray-deck-editor-info').textContent),'The popout previews the button count and grid');
+            [...dialog.querySelectorAll('button')].find(b=>b.textContent==='Apply').click();
+            await new Promise(r=>setTimeout(r,30));
+            check(entriesW.value==='One\nTwo\nThree\nFour' && buttons().length===4 && !document.querySelector('.ray-deck-editor'),'Applying stores normalized entries, rebuilds the deck and closes');
+            ui.openEditor(); await new Promise(r=>setTimeout(r,30));
+            const second=document.querySelector('.ray-deck-editor textarea'); second.value='Discarded'; second.dispatchEvent(new Event('input'));
+            [...document.querySelectorAll('.ray-deck-editor button')].find(b=>b.textContent==='Cancel').click();
+            await new Promise(r=>setTimeout(r,30));
+            check(entriesW.value==='One\nTwo\nThree\nFour' && !document.querySelector('.ray-deck-editor'),'Cancel leaves the entries alone');
+            ui.openEditor(); await new Promise(r=>setTimeout(r,30));
+            const third=document.querySelector('.ray-deck-editor textarea'); third.value='  \n '; third.dispatchEvent(new Event('input'));
+            check([...document.querySelectorAll('.ray-deck-editor button')].find(b=>b.textContent==='Apply').disabled,'An empty list cannot be applied');
+            document.querySelector('.ray-deck-editor').close();
+            const items=[]; deck.getExtraMenuOptions({},items);
+            check(items.some(o=>o.content==='Edit entries…') && items.some(o=>/^Deck Style…$/.test(o.content)),'Right-click offers Edit entries… and Deck Style…');
+            deck.onRemoved(); ui.element.remove();
+        }
+        const octx=new OfflineAudioContext(1,22050,44100), bank=createBank(octx,octx.destination);
+        for (const [key,style] of Object.entries(DECK_STYLES)) {
+            check(bank.voices.decks.includes(style.sound),`Deck style ${key} has a sound`);
+            const o=new OfflineAudioContext(1,22050,44100), b=createBank(o,o.destination); b.deck(style.sound,true,0);
+            const peak=(await o.startRendering()).getChannelData(0).reduce((m,x)=>Math.max(m,Math.abs(x)),0);
+            check(peak>0.05 && peak<1,`Deck sound ${style.sound} is audible and does not clip`);
+        }
+        for (const [key,style] of Object.entries(DECK_STYLES)) {
+            const deck=make('deck'); deck.properties.style=key; const ui=deck._rayAnalog;
+            widget(deck,'entries').value='Mic 1\nMic 2\nLine In\nPhono\nAux Return Long Name'; widget(deck,'selected').value='Line In'; ui.render();
+            const card=document.createElement('section');card.className='card';card.style.gridColumn='span 2';
+            const heading=document.createElement('header');heading.textContent=style.label;
+            card.append(heading,ui.element);document.querySelector('#gallery').append(card);
+        }
     }
     for (const kind of ['knob','switch']) {
         const node=make(kind,false,false);
