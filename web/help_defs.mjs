@@ -108,17 +108,6 @@ export const RAY_HELP_DEFS = {
     },
 
     // ── 💬 LLM ─────────────────────────────────────────────────────────
-    RayPromptLibrary: {
-        summary: "A local SQLite prompt library. Save mode stores prompts with tags and source; Browse mode searches the library and outputs the selected row.",
-        sections: [{
-            heading: "Notes",
-            bullets: [
-                "The Browse panel offers full-text search, tag and source filters, and several sort orders. Click a row to select it; the node serves that row on later runs.",
-                "`browse__selected_id` and `browse__last_query` are managed by the panel.",
-            ],
-        }],
-    },
-
     RayVLMFolder: {
         summary: "Captions every image in a folder range with a local vision-language model on the GPU, returning aligned lists of captions, images and source paths.",
         sections: [{

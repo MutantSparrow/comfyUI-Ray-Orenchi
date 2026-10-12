@@ -12,7 +12,6 @@ Bundles:
   • RaySwitch                — Ray's Analog: Switch
   • RayButtonDeck            — Ray's Analog: Button Deck
   💬 LLM
-  • RayPromptLibrary         — Ray's LLM: Prompt Library (SQLite)
   • RayVLMFolder             — Ray's LLM: Folder Captioner
   • RayFastQwen3VL           — Ray's LLM: Fast Qwen3-VL Infer
   🔧 Tools
@@ -48,7 +47,6 @@ _NODE_MODULES = {
     "RayFastQwen3VL":      "ray_fast_vlm",
     "RayPromptFetcher":    "ray_prompt_fetcher",
     "RayMetaInspect":      "ray_meta_inspect",
-    "RayPromptLibrary":    "ray_prompt_library",
     "RayFilmStock":        "ray_film_stock",
     "RayVHS":              "ray_vhs",
 }
@@ -57,7 +55,6 @@ _NODE_MODULES = {
 _ROUTE_MODULES = (
     "promptdexter_routes",
     "civitai_routes",
-    "prompt_library_routes",
     "film_stock_routes",
 )
 
@@ -102,7 +99,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RaySwitch":           "🎛️ Ray's Analog: Switch",
     "RayButtonDeck":       "🎛️ Ray's Analog: Button Deck",
     # 👑 Ray/💬 LLM
-    "RayPromptLibrary":    "💬 Ray's LLM: Prompt Library",
     "RayVLMFolder":        "💬 Ray's LLM: Folder Captioner",
     "RayFastQwen3VL":      "💬 Ray's LLM: Fast Qwen3-VL Infer",
     # 👑 Ray/🔧 Tools
