@@ -34,7 +34,12 @@ export function getBrushedAluminumURL() {
     return _brushedNodeURL;
 }
 
-export const KNOB_STYLES = { ...STUDIO_KNOBS, ...LEGACY_KNOBS, ...STUDIO_SLIDERS };
+// The original faces drew an indicator pointing right at zero and spun endlessly. They now sweep
+// min..max over 270° like the studio knobs, starting at 7:30 (-225° from their 3 o'clock zero).
+const SWEEPING_LEGACY = Object.fromEntries(Object.entries(LEGACY_KNOBS).map(
+    ([key, style]) => [key, { sweep: true, zero: -225, ...style }]));
+
+export const KNOB_STYLES = { ...STUDIO_KNOBS, ...SWEEPING_LEGACY, ...STUDIO_SLIDERS };
 
 export const DEFAULT_STYLE = "console_rotary";
 

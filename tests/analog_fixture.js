@@ -11,7 +11,7 @@ export function nodeClass(kind, accessor = false, dom = true) {
         constructor() {
             this.title = kind === 'knob' ? "🎛️ Ray's Analog: Knob" : "🎛️ Ray's Analog: Switch";
             this.widgets = Object.entries(kind === 'knob' ? {
-                min_value:-100,max_value:100,spin_value:20,clamp:0,allow_negative:true,knob_value:0,
+                min_value:-100,max_value:100,clamp:0,allow_negative:true,knob_value:0,
             } : {state:false}).map(([name,value]) => {
                 const data = { name, value, type:typeof value === 'boolean' ? 'toggle' : 'number', options:{},
                     callback: () => { this.callbacks++; } };

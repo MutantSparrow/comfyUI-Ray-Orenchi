@@ -74,7 +74,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
-                "Drag the face (Shift for fine steps), use Arrow/Home/End keys, or type an exact value in the readout. On a slider, click the track to jump the cap there.",
+                "Drag the face: the dial sweeps 270° from min to max and Shift slows it 20×. Use Arrow/Home/End keys, or type an exact value in the readout. On a slider, click the track to jump the cap there.",
                 "Right-click → Control Style picks one of nine knobs or five sliders; Compact mode hides unlinked setup widgets; Edit label… renames the tape label (or double-click it).",
                 "Knobs, sliders and switches make hardware sounds, voiced to each style. Right-click → Mute sound turns them off for every analog control; the choice is remembered in this browser.",
                 "Style, compact mode and label are saved with the workflow.",
