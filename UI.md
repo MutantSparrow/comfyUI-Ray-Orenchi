@@ -29,7 +29,7 @@ Two-level tree, one top-level:
 | Bucket  | CATEGORY string        | What lives here                                   |
 |---------|------------------------|---------------------------------------------------|
 | VFX     | `👑 Ray/✨ VFX`         | Image-space effects — CRT, Print, PixelArt, FilmStock, VHS |
-| Analog  | `👑 Ray/🎛️ Analog`     | Analog-style UI widgets — Control (knob / slider), Switch |
+| Analog  | `👑 Ray/🎛️ Analog`     | Analog-style UI widgets — Control (knob / slider), Switch, Button Deck |
 | Tools   | `👑 Ray/🔧 Tools`       | Scrapers, prompt fetcher, metadata inspector, TXT folder, Save Image |
 | LLM     | `👑 Ray/💬 LLM`         | Chat, Prompt Iterator, Prompt Library             |
 

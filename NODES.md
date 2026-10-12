@@ -4,7 +4,7 @@ All nodes live under `👑 Ray/` in the ComfyUI add-node menu, split across
 four bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
-- `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch).
+- `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck).
 - `👑 Ray/🔧 Tools` — scrapers, prompt fetcher, metadata inspector, TXT folder, Save Image.
 - `👑 Ray/💬 LLM` — chat, prompt iterator, prompt library.
 
@@ -125,6 +125,40 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | **Output** `bool` | BOOLEAN | Mirror of `state`. |
 
 **Right-click menu.** **Switch Style…** opens a picker with nine faces: rack power rocker, broadcast steel lever, console illuminated key, rack chrome rocker, console dome button, broadcast bakelite flip, mastering silver paddle, broadcast brass slide and console minimal pill. **Mute sound** is shared with the Control. Every face has its own click, clack or thunk. **Compact mode** hides only unlinked setup controls and keeps the real output slot available. Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
+
+---
+
+## 🎛️ Ray's Analog: Button Deck (`RayButtonDeck`)
+
+**Purpose.** A bank of analog push buttons that replaces a dropdown. Enter one value per line; each line becomes a button, and the pressed button's text comes out as a `STRING`. Styled after retro console hardware, in the same family as the Control and Switch.
+
+**Category:** `👑 Ray/🎛️ Analog`
+
+| Pin | Type | Notes |
+|-----|------|-------|
+| **Control** `entries` | multiline string | One value per line. Blank lines and repeated lines are ignored; up to 64 entries. Edited through the **✎ Edit entries…** popout, so the raw text box stays hidden. |
+| **Control** `selected` | string | The pressed button's text, driven by the deck. If it isn't in the list the first entry is used. |
+| **Output** `value` | STRING | The pressed button's text, exactly as typed. |
+
+**Layout.** The buttons form a near-square grid with `ceil(sqrt(n))` columns: 1 → 1×1, 2 → 2×1, 3 and 4 → 2×2, 5 and 6 → 3×2, 7 to 9 → 3×3, 10 to 12 → 4×3, and so on (columns × rows). The node grows to fit the rows it needs, and the buttons scale with the node.
+
+**Pressing.** The bank is interlocked like a radio-preset panel: exactly one button is pressed down and lit, and every other button stays raised and unlit. Pressing a button releases the previous one; pressing the lit one changes nothing. Arrow keys, Home and End move the selection, and Space or Enter presses the focused button. The selection follows the value, so reordering the entries keeps the same button pressed. If the pressed value is deleted, the first entry takes over (the same rule the node applies when it runs). A deck with no entries raises an error when it runs.
+
+**Edit entries…** opens a popout with a text box (one value per line) and a live count of buttons and grid size. **Apply** (or Ctrl+Enter) saves the normalized list; **Cancel** (or Escape) discards the changes.
+
+**Styles.** Five faces; each has its own sound and either prints the text inside the button or puts it on a Dymo sticker below:
+
+| Style | Look | Text | Sound |
+|-------|------|------|-------|
+| Console · Amber Keys | Ivory keycaps with a backlit amber window | Cut into the key | Clean push and latch |
+| Console · Lamp Domes | Chrome-ringed glass domes that glow green | Cut into the lens | Hollow thock |
+| Broadcast · Bakelite Pushbuttons | Brown bakelite buttons with an orange lamp ring | Dymo sticker | Dull clunk |
+| Mastering · Chrome Squares | Brushed-aluminium keys with a green LED | Dymo sticker | Bright double tick |
+| Rack · Tape Deck Keys | Tall rubber keys that sink and light a slot | Dymo sticker | Heavy ka-chunk |
+
+Pressing a button plays its latch sound, followed by a softer release as the previously pressed button pops out. **Mute sound** in the right-click menu silences every analog control.
+
+**Right-click menu.** **Deck Style…** (the picker used by the other analog nodes), **Edit entries…**, **Compact mode**, **Edit label…** (the Dymo tape above the deck) and **Mute sound**. Style, compact flag and label persist with the workflow.
 
 ---
 

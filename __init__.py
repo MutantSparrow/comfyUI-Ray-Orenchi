@@ -10,6 +10,7 @@ Bundles:
   🎛️ Analog
   • RayKnob                  — Ray's Analog: Control (Knob / Slider)
   • RaySwitch                — Ray's Analog: Switch
+  • RayButtonDeck            — Ray's Analog: Button Deck
   💬 LLM
   • RayOllamaChat            — Ray's LLM: Ollama Chat
   • RayPromptIterator        — Ray's LLM: Prompt Iterator
@@ -40,6 +41,7 @@ _NODE_MODULES = {
     "RayPixelArtDetector": "ray_pixel_detector",
     "RayKnob":             "ray_knob",
     "RaySwitch":           "ray_switch",
+    "RayButtonDeck":       "ray_button_deck",
     "RayOllamaChat":       "ray_ollama_chat",
     "RayPromptIterator":   "ray_prompt_iterator",
     "RayPromptDexter":     "ray_promptdexter",
@@ -103,6 +105,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # 👑 Ray/🎛️ Analog
     "RayKnob":             "🎛️ Ray's Analog: Control (Knob / Slider)",
     "RaySwitch":           "🎛️ Ray's Analog: Switch",
+    "RayButtonDeck":       "🎛️ Ray's Analog: Button Deck",
     # 👑 Ray/💬 LLM
     "RayOllamaChat":       "💬 Ray's LLM: Ollama Chat",
     "RayPromptIterator":   "💬 Ray's LLM: Prompt Iterator",
