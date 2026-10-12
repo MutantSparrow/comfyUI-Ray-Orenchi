@@ -70,12 +70,13 @@ export const RAY_HELP_DEFS = {
 
     // ── 🎛️ Analog ─────────────────────────────────────────────────────
     RayKnob: {
-        summary: "An analog-style control knob that outputs a float and a quantized integer, so it can drive either kind of input without a converter.",
+        summary: "An analog-style control, a rotary knob or a slider, that outputs a float and a quantized integer, so it can drive either kind of input without a converter.",
         sections: [{
             heading: "Notes",
             bullets: [
-                "Drag the face (Shift for fine steps), use Arrow/Home/End keys, or type an exact value in the readout.",
-                "Right-click → Knob Style picks one of ten faces; Compact mode hides unlinked setup widgets; Edit label… renames the tape label (or double-click it).",
+                "Drag the face (Shift for fine steps), use Arrow/Home/End keys, or type an exact value in the readout. On a slider, click the track to jump the cap there.",
+                "Right-click → Control Style picks one of nine knobs or five sliders; Compact mode hides unlinked setup widgets; Edit label… renames the tape label (or double-click it).",
+                "Knobs, sliders and switches make hardware sounds, voiced to each style. Right-click → Mute sound turns them off for every analog control; the choice is remembered in this browser.",
                 "Style, compact mode and label are saved with the workflow.",
             ],
         }],
@@ -88,6 +89,7 @@ export const RAY_HELP_DEFS = {
             bullets: [
                 "Click the face, or focus it and press Space/Enter.",
                 "Right-click → Switch Style picks one of nine faces (rockers, levers, sliders, an illuminated key); Compact mode hides setup widgets; Edit label… renames the tape label.",
+                "Each face clicks, clacks or thunks like its hardware. Right-click → Mute sound silences all analog controls.",
             ],
         }],
     },

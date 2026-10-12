@@ -8,7 +8,7 @@ Bundles:
   • RayFilmStock             — Ray's VFX: Film Stock
   • RayVHS                   — Ray's VFX: VHS / Tape
   🎛️ Analog
-  • RayKnob                  — Ray's Analog: Knob
+  • RayKnob                  — Ray's Analog: Control (Knob / Slider)
   • RaySwitch                — Ray's Analog: Switch
   💬 LLM
   • RayOllamaChat            — Ray's LLM: Ollama Chat
@@ -101,7 +101,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayFilmStock":        "✨ Ray's VFX: Film Stock",
     "RayVHS":              "✨ Ray's VFX: VHS / Tape",
     # 👑 Ray/🎛️ Analog
-    "RayKnob":             "🎛️ Ray's Analog: Knob",
+    "RayKnob":             "🎛️ Ray's Analog: Control (Knob / Slider)",
     "RaySwitch":           "🎛️ Ray's Analog: Switch",
     # 👑 Ray/💬 LLM
     "RayOllamaChat":       "💬 Ray's LLM: Ollama Chat",
