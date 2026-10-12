@@ -1,8 +1,7 @@
-// Original style IDs remain stable for saved workflows.
-import { STUDIO_SWITCHES } from "./analog_hardware.js";
-import { LEGACY_SWITCHES } from "./analog_legacy.js";
+// Style IDs stay stable for saved workflows.
+import { SWITCHES } from "./analog_hardware.js";
 
-export const SWITCH_STYLES = { ...STUDIO_SWITCHES, ...LEGACY_SWITCHES };
+export const SWITCH_STYLES = SWITCHES;
 
 export const DEFAULT_SWITCH_STYLE = "console_rocker";
 
@@ -14,6 +13,8 @@ export function getAllSwitchStyleCSS() {
     const base = `
 .rs-host { width:100%; height:100%; display:flex; align-items:center; justify-content:center; cursor:pointer; touch-action:none; user-select:none; }
 .rs-host > svg { width:100%; height:100%; display:block; overflow:visible; pointer-events:none; }
+.rs-host > svg { transition: transform 0.06s ease-out; }
+.rs-host:active > svg { transform: translateY(0.6px) scale(0.988); }
 .rs-host [data-toggle]   { will-change: transform; transition: transform 0.12s ease-out; }
 .rs-host [data-on-only],
 .rs-host [data-off-only] { transition: opacity 0.10s linear; }

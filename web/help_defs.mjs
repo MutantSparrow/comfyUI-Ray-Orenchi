@@ -70,13 +70,27 @@ export const RAY_HELP_DEFS = {
 
     // ── 🎛️ Analog ─────────────────────────────────────────────────────
     RayKnob: {
-        summary: "An analog-style control knob that outputs a float and a quantized integer, so it can drive either kind of input without a converter.",
+        summary: "An analog-style control, a rotary knob or a slider, that outputs a float and a quantized integer, so it can drive either kind of input without a converter.",
         sections: [{
             heading: "Notes",
             bullets: [
-                "Drag the face (Shift for fine steps), use Arrow/Home/End keys, or type an exact value in the readout.",
-                "Right-click → Knob Style picks one of ten faces; Compact mode hides unlinked setup widgets; Edit label… renames the tape label (or double-click it).",
+                "Drag the face: the dial sweeps 270° from min to max and Shift slows it 20×. Use Arrow/Home/End keys, or type an exact value in the readout. On a slider, click the track to jump the cap there.",
+                "Right-click → Control Style picks one of nine knobs or five sliders; Compact mode hides unlinked setup widgets; Edit label… renames the tape label (or double-click it).",
+                "Knobs, sliders and switches make hardware sounds, voiced to each style. Right-click → Mute sound turns them off for every analog control; the choice is remembered in this browser.",
                 "Style, compact mode and label are saved with the workflow.",
+            ],
+        }],
+    },
+
+    RayButtonDeck: {
+        summary: "A bank of analog push buttons that replaces a dropdown. Each line you enter becomes a button, and the pressed button's text is the output.",
+        sections: [{
+            heading: "Notes",
+            bullets: [
+                "Click ✎ Edit entries… (or right-click → Edit entries…) and type one value per line. Apply with the button or Ctrl+Enter.",
+                "The buttons form a near-square grid: 2 entries make 2×1, 3 or 4 make 2×2, 5 or 6 make 3×2, and so on. Exactly one button is pressed and lit.",
+                "Arrow keys, Home and End move the selection. Blank and repeated lines are ignored, and the selection follows its value if you reorder the list.",
+                "Right-click → Deck Style… picks one of five faces. Some print the text inside the button, others use a Dymo sticker below it; each has its own sound. Mute sound silences all analog controls.",
             ],
         }],
     },
@@ -88,6 +102,7 @@ export const RAY_HELP_DEFS = {
             bullets: [
                 "Click the face, or focus it and press Space/Enter.",
                 "Right-click → Switch Style picks one of nine faces (rockers, levers, sliders, an illuminated key); Compact mode hides setup widgets; Edit label… renames the tape label.",
+                "Each face clicks, clacks or thunks like its hardware. Right-click → Mute sound silences all analog controls.",
             ],
         }],
     },
@@ -157,6 +172,8 @@ export const RAY_HELP_DEFS = {
             heading: "Notes",
             bullets: [
                 "The Save Image buttons choose None, 1, 2 or Both; saving happens when the workflow runs. None only previews.",
+                "With two images connected, drag the ‹ › handle to compare them. The preview is otherwise click-through, so right-click, middle-drag and the wheel still reach the canvas.",
+                "The picture fills the node: resize the node to enlarge it. Image sizes and the save status sit on the picture, and with several images the arrows at the bottom right step through the pairs.",
                 "Browse… picks a folder on the ComfyUI host; the arrow recalls the last three save folders.",
                 "Right-click → Save without metadata omits workflow data; Open image location in Explorer opens the last save folder (Windows host).",
                 "Files are 8-bit PNGs at input resolution, alpha included, with unique names.",

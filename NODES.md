@@ -4,7 +4,7 @@ All nodes live under `👑 Ray/` in the ComfyUI add-node menu, split across
 four bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
-- `👑 Ray/🎛️ Analog` — analog-style UI widgets (Knob, Switch).
+- `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck).
 - `👑 Ray/🔧 Tools` — scrapers, prompt fetcher, metadata inspector, TXT folder, Save Image.
 - `👑 Ray/💬 LLM` — chat, prompt iterator, prompt library.
 
@@ -85,9 +85,9 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 
 ---
 
-## 🎛️ Ray's Analog: Knob (`RayKnob`)
+## 🎛️ Ray's Analog: Control (`RayKnob`)
 
-**Purpose.** Analog-style float knob widget. Drag rotates the knob face; outputs both an `INT` (quantized by `clamp`) and a raw `FLOAT` so it plugs into either side without a converter.
+**Purpose.** Analog-style float control, either a rotary knob or a slider, themed after studio hardware. Drag rotates a knob face or moves a slider cap; outputs both an `INT` (quantized by `clamp`) and a raw `FLOAT` so it plugs into either side without a converter. The node keeps its original `RayKnob` ID, so existing workflows load unchanged.
 
 **Category:** `👑 Ray/🎛️ Analog`
 
@@ -95,14 +95,21 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 |-----|------|-------|
 | **Control** `min_value` | float | Range minimum. |
 | **Control** `max_value` | float | Range maximum. |
-| **Control** `spin_value` | float 10–100 | Drag sensitivity (px per full sweep). |
 | **Control** `clamp` | float ≥0 | Quantization step for the INT output (`0` → truncate). |
 | **Control** `allow_negative` | bool | Whether `min_value` may go below 0. |
 | **Control** `knob_value` | float | Current value (driven by the widget). |
 | **Output** `int` | INT | Quantized via `clamp`. |
 | **Output** `float` | FLOAT | Raw clamped float in `[min, max]`. |
 
-**Right-click menu.** Style picker with console rotary, broadcast ivory, mastering aluminium, linear fader, and the original legacy faces. **Compact mode** hides only unlinked setup controls while preserving real slots and workflow data. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Drag around a rotary control, use Shift for fine movement, or use Arrow/Home/End keys. Exact values can be entered in the readout. Style, compact flag, and label text persist with the workflow.
+**Faces.** Nine knobs and five sliders, all drawn from one material set with the same 0–10 scale and 270° sweep. Knobs: console blue grey, broadcast ivory, mastering aluminium, mastering chrome notched, console LED ring, broadcast bakelite chickenhead, mastering silver skirted, broadcast knurled brass and console minimal flat. Sliders: console linear fader, console channel fader with a dB scale, rack LED ladder, broadcast pan slider and rack amber slide. The pan slider and amber slide are horizontal; the others are vertical.
+
+**Dragging.** Every knob sweeps 270° from `min_value` to `max_value`, and the dial follows the pointer around its centre, so a 0–1 range is as controllable as 0–1000. Hold **Shift** for 20× finer movement. Arrow keys step 1/200 of the range (Shift: 1/2000), PageUp/PageDown step ten times that, and Home/End jump to the limits. Older workflows that saved a `spin_value` setting are migrated on load; that setting no longer exists.
+
+**Sliders.** Drag the cap, or click the track to jump the cap there. The LED ladder lights segments as the value rises and the amber slide fills behind its cap.
+
+**Sound.** Knobs click through detents that match their printed scale, sliders scrape and tick as they move and thud at the end stops, and the pan slider taps at its centre. Switches voice each face: a thump and clack for the rack rocker, a ringing strike and spring for the steel lever, a push-and-latch for the illuminated key, a clunk for the bakelite flip, a tick-tack for the paddle, a scrape and detent for the brass slider, a soft tap for the pill and a hollow thock for the dome. The sounds are synthesized with Web Audio in `web/analog_audio.js`; there are no audio files. **Mute sound** in the right-click menu (on both the Control and the Switch) silences every analog control and is remembered per browser.
+
+**Right-click menu.** **Control Style…** opens a floating picker (knobs and sliders under separate headings; arrow keys, Enter and Escape work) rather than a nested submenu, so it stays on screen in both the legacy canvas and Nodes 2.0. **Mute sound** is next to it. **Compact mode** hides only unlinked setup controls while preserving real slots and workflow data. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Drag around a rotary control or along a slider, use Shift for fine movement, or use Arrow/Home/End keys. Exact values can be entered in the readout. Style, compact flag, and label text persist with the workflow.
 
 ---
 
@@ -117,7 +124,41 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | **Control** `state` | bool | Toggle. |
 | **Output** `bool` | BOOLEAN | Mirror of `state`. |
 
-**Right-click menu.** Style picker with rack power rocker, broadcast steel lever, illuminated console key, and the original Chrome Rocker, Bakelite Flip, Silver Paddle, Brass Slider, Minimal Pill, and Dark Studio Dome faces. **Compact mode** hides only unlinked setup controls and keeps the real output slot available. Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
+**Right-click menu.** **Switch Style…** opens a picker with nine faces: rack power rocker, broadcast steel lever, console illuminated key, rack chrome rocker, console dome button, broadcast bakelite flip, mastering silver paddle, broadcast brass slide and console minimal pill. **Mute sound** is shared with the Control. Every face has its own click, clack or thunk. **Compact mode** hides only unlinked setup controls and keeps the real output slot available. Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
+
+---
+
+## 🎛️ Ray's Analog: Button Deck (`RayButtonDeck`)
+
+**Purpose.** A bank of analog push buttons that replaces a dropdown. Enter one value per line; each line becomes a button, and the pressed button's text comes out as a `STRING`. Styled after retro console hardware, in the same family as the Control and Switch.
+
+**Category:** `👑 Ray/🎛️ Analog`
+
+| Pin | Type | Notes |
+|-----|------|-------|
+| **Control** `entries` | multiline string | One value per line. Blank lines and repeated lines are ignored; up to 64 entries. Edited through the **✎ Edit entries…** popout, so the raw text box stays hidden. |
+| **Control** `selected` | string | The pressed button's text, driven by the deck. If it isn't in the list the first entry is used. |
+| **Output** `value` | STRING | The pressed button's text, exactly as typed. |
+
+**Layout.** The buttons form a near-square grid with `ceil(sqrt(n))` columns: 1 → 1×1, 2 → 2×1, 3 and 4 → 2×2, 5 and 6 → 3×2, 7 to 9 → 3×3, 10 to 12 → 4×3, and so on (columns × rows). The node grows to fit the rows it needs, and the buttons scale with the node.
+
+**Pressing.** The bank is interlocked like a radio-preset panel: exactly one button is pressed down and lit, and every other button stays raised and unlit. Pressing a button releases the previous one; pressing the lit one changes nothing. Arrow keys, Home and End move the selection, and Space or Enter presses the focused button. The selection follows the value, so reordering the entries keeps the same button pressed. If the pressed value is deleted, the first entry takes over (the same rule the node applies when it runs). A deck with no entries raises an error when it runs.
+
+**Edit entries…** opens a popout with a text box (one value per line) and a live count of buttons and grid size. **Apply** (or Ctrl+Enter) saves the normalized list; **Cancel** (or Escape) discards the changes.
+
+**Styles.** Five faces; each has its own sound and either prints the text inside the button or puts it on a Dymo sticker below:
+
+| Style | Look | Text | Sound |
+|-------|------|------|-------|
+| Console · Amber Keys | Ivory keycaps with a backlit amber window | Cut into the key | Clean push and latch |
+| Console · Lamp Domes | Chrome-ringed glass domes that glow green | Cut into the lens | Hollow thock |
+| Broadcast · Bakelite Pushbuttons | Brown bakelite buttons with an orange lamp ring | Dymo sticker | Dull clunk |
+| Mastering · Chrome Squares | Brushed-aluminium keys with a green LED | Dymo sticker | Bright double tick |
+| Rack · Tape Deck Keys | Tall rubber keys that sink and light a slot | Dymo sticker | Heavy ka-chunk |
+
+Pressing a button plays its latch sound, followed by a softer release as the previously pressed button pops out. **Mute sound** in the right-click menu silences every analog control.
+
+**Right-click menu.** **Deck Style…** (the picker used by the other analog nodes), **Edit entries…**, **Compact mode**, **Edit label…** (the Dymo tape above the deck) and **Mute sound**. Style, compact flag and label persist with the workflow.
 
 ---
 
