@@ -12,6 +12,7 @@ const MIN_TICK_GAP_MS = 11;
 // Loudness trims measured from offline renders so every voice peaks at a comparable level.
 const TICK_LEVEL = { rubber: .65, bakelite: 1.3, alu: .8, brass: 1.3, fader: 3, plastic: 3.5, pan: 3 };
 const PRESS_LEVEL = { key: 1.7, paddle: 2.4 };
+const DECK_LEVEL = { key: 1.8, chrome: 2.7 };
 
 function readMuted() {
     try { return localStorage.getItem(PREF_KEY) === "1"; } catch { return false; }
@@ -225,6 +226,51 @@ export function createBank(ctx, dest) {
         },
     };
 
+    // ---- button deck: an interlocked bank. The pressed button latches (down) and the one that was
+    // latched pops back out (up), a beat later and softer. ----------------------------------------
+    const decks = {
+        key: {                     // console amber key: clean push, latch
+            down(t) {
+                burst(t, { f: 1900, q: 2, dur: .005, gain: .38 });
+                tone(t, { f0: 620, f1: 300, dur: .02, gain: .2 });
+                ring(t + .001, { f: 2600, q: 20, dur: .03, gain: .07 });
+            },
+            up(t) { burst(t, { f: 2600, q: 2, dur: .004, gain: .14 }); tone(t, { f0: 380, f1: 260, dur: .012, gain: .06 }); },
+        },
+        dome: {                    // lamp dome: hollow thock, membrane click
+            down(t) {
+                tone(t, { f0: 270, f1: 140, dur: .05, gain: .5, type: "triangle" });
+                burst(t, { f: 1700, q: 3, dur: .006, gain: .34 });
+                ring(t + .002, { f: 700, q: 10, dur: .045, gain: .1 });
+            },
+            up(t) { tone(t, { f0: 330, f1: 200, dur: .015, gain: .1 }); burst(t, { f: 1500, q: 2, dur: .004, gain: .1 }); },
+        },
+        bakelite: {                // bakelite pushbutton: dull clunk
+            down(t) {
+                tone(t, { f0: 300, f1: 110, dur: .05, gain: .5, type: "triangle" });
+                burst(t, { f: 1100, q: 1.2, dur: .01, gain: .3 });
+                ring(t + .001, { f: 1500, q: 8, dur: .035, gain: .1 });
+            },
+            up(t) { tone(t, { f0: 220, f1: 150, dur: .025, gain: .16 }); burst(t, { f: 900, q: 1.2, dur: .006, gain: .12 }); },
+        },
+        chrome: {                  // chrome square: bright double tick
+            down(t) {
+                burst(t, { f: 3400, q: 2, dur: .004, gain: .34 });
+                tone(t, { f0: 900, f1: 500, dur: .012, gain: .14 });
+                burst(t + .012, { f: 2600, q: 2, dur: .005, gain: .26 });
+            },
+            up(t) { burst(t, { f: 2800, q: 2, dur: .003, gain: .1 }); },
+        },
+        tape: {                    // tape-deck key: heavy ka-chunk, then the latch lets go
+            down(t) {
+                tone(t, { f0: 120, f1: 55, dur: .09, gain: .55, type: "triangle" });
+                burst(t, { f: 800, q: .8, type: "lowpass", dur: .02, gain: .35 });
+                ring(t + .012, { f: 2000, q: 15, dur: .06, gain: .08 });
+            },
+            up(t) { ring(t, { f: 1800, q: 12, dur: .05, gain: .06 }); tone(t, { f0: 90, f1: 70, dur: .03, gain: .15 }); },
+        },
+    };
+
     // ---- slider scrape: filtered noise that follows drag speed ----------
     function slide(profile) {
         const src = ctx.createBufferSource(); src.buffer = noise; src.loop = true;
@@ -258,8 +304,15 @@ export function createBank(ctx, dest) {
         tick: (voice, velocity = 1, t) => withLevel(TICK_LEVEL[voice] ?? 1, () => (ticks[voice] || ticks.rubber)(when(t), velocity)),
         stop: (kind, t) => (stops[kind] || stops.knob)(when(t)),
         press: (voice, on, t) => withLevel(PRESS_LEVEL[voice] ?? 1, () => (presses[voice] || presses.rocker)(when(t), !!on)),
+        deck(sound, hadPrevious, t) {
+            const voice = decks[sound] || decks.key, at = when(t);
+            withLevel(DECK_LEVEL[sound] ?? 1, () => {
+                voice.down(at);
+                if (hadPrevious) voice.up(at + .045);
+            });
+        },
         slide: voice => slide(SLIDE[voice] || SLIDE.fader),
-        voices: { ticks: Object.keys(ticks), presses: Object.keys(presses), stops: Object.keys(stops) },
+        voices: { ticks: Object.keys(ticks), presses: Object.keys(presses), stops: Object.keys(stops), decks: Object.keys(decks) },
     };
 }
 
@@ -289,6 +342,11 @@ function audio() {
 
 export function playSwitch(styleKey, on) {
     audio()?.press(switchVoice(styleKey), on);
+}
+
+// `sound` is a deck style's sound name; `hadPrevious` adds the release of the button that popped out.
+export function playDeck(sound, hadPrevious) {
+    audio()?.deck(sound, hadPrevious);
 }
 
 // One controller per Knob node. The UI reports every user-driven value change as a move between

@@ -134,7 +134,7 @@ export function openStylePicker(node, kind, styles) {
     const picker = document.createElement("div");
     picker.className = "ray-style-picker";
     picker.setAttribute("role", "menu");
-    picker.setAttribute("aria-label", `${kind === "knob" ? "Control" : "Switch"} style`);
+    picker.setAttribute("aria-label", `${kind === "knob" ? "Control" : kind === "deck" ? "Button deck" : "Switch"} style`);
     // Knob faces first, then sliders, each under a heading.
     const entries = Object.entries(styles).sort(([, a], [, b]) => (a.kind === "slider") - (b.kind === "slider"));
     const items = [];
@@ -208,7 +208,7 @@ export function createPanel(node, kind, css) {
     element.appendChild(dymo.root);
     const host = document.createElement(kind === "switch" ? "button" : "div");
     if (kind === "switch") host.type = "button";
-    host.className = `ray-analog-face ${kind === "knob" ? "rk-host" : "rs-host"}`;
+    host.className = `ray-analog-face ${kind === "knob" ? "rk-host" : kind === "deck" ? "ray-deck-host" : "rs-host"}`;
     host.tabIndex = 0;
     element.appendChild(host);
     const readout = document.createElement("div");
@@ -242,9 +242,14 @@ export function repairAnalogWorkflow(data, name, title, outputs) {
     }
 }
 
-export function registerAnalog(app, { kind, name, title, styles, defaultStyle, valueName, configNames = [], outputs, build, migrate }) {
+// Options beyond the common ones: `extensionName` and `menuName` label the registration and the style
+// menu entry; `heights(ui)` returns {min, max?} when the face is not a fixed 232 px; `menuItems(node)`
+// adds menu entries after the common ones; `ui.compactWidgets()` lists extra widgets compact mode hides.
+export function registerAnalog(app, { kind, name, title, styles, defaultStyle, valueName, configNames = [], outputs, build, migrate,
+    extensionName = `Ray.${kind === "knob" ? "Knob" : "Switch"}`, menuName = kind === "knob" ? "Control" : "Switch",
+    heights = () => ({ min: 232, max: 232 }), menuItems = () => [] }) {
     app.registerExtension({
-        name: `Ray.${kind === "knob" ? "Knob" : "Switch"}`,
+        name: extensionName,
         beforeConfigureGraph(data) { repairAnalogWorkflow(data, name, title, outputs); migrate?.(data); },
         beforeRegisterNodeDef(nodeType, nodeData) {
             if (nodeData.name !== name) return;
@@ -268,7 +273,9 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                 setWidgetHidden(this, widget, true);
                 this.addDOMWidget(`${kind}_ui`, `RAY_${kind.toUpperCase()}`, ui.element, {
                     serialize: false, hideOnZoom: false,
-                    getMinHeight: () => 232, getMaxHeight: () => 232, getHeight: () => 232,
+                    getMinHeight: () => heights(ui).min,
+                    getMaxHeight: () => heights(ui).max,
+                    getHeight: () => heights(ui).min,
                     onDraw: () => ui.render(),
                 });
                 const titleDescriptor = Object.getOwnPropertyDescriptor(this, "title_mode");
@@ -281,6 +288,7 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                         const config = findWidget(this, key);
                         if (config && !isLinked(this, key)) setWidgetHidden(this, config, compact);
                     }
+                    for (const extra of ui.compactWidgets?.() || []) setWidgetHidden(this, extra, compact);
                     // Keep slots and the actual title intact for serialization and Nodes 2.0.
                     if (compact) {
                         Object.defineProperty(this, "title_mode", {
@@ -345,7 +353,7 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                 const result = menu?.apply(this, arguments);
                 options.unshift(
                     // Deferred so the context menu has finished closing before the picker takes focus.
-                    { content: `${kind === "knob" ? "Control" : "Switch"} Style…`,
+                    { content: `${menuName} Style…`,
                         callback: () => setTimeout(() => openStylePicker(this, kind, styles), 0) },
                     { content: `${this.properties.compact ? "● " : ""}Compact mode`,
                         callback: () => editNode(this, () => {
@@ -353,6 +361,7 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                             this._rayAnalog?.applyCompact();
                         }) },
                     { content: "Edit label…", callback: () => this._rayDymo?.beginEdit() },
+                    ...menuItems(this),
                     { content: isMuted() ? "🔈 Unmute sound" : "🔇 Mute sound", callback: () => setMuted(!isMuted()) },
                 );
                 return result;

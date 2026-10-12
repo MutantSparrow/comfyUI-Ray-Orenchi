@@ -82,6 +82,19 @@ export const RAY_HELP_DEFS = {
         }],
     },
 
+    RayButtonDeck: {
+        summary: "A bank of analog push buttons that replaces a dropdown. Each line you enter becomes a button, and the pressed button's text is the output.",
+        sections: [{
+            heading: "Notes",
+            bullets: [
+                "Click ✎ Edit entries… (or right-click → Edit entries…) and type one value per line. Apply with the button or Ctrl+Enter.",
+                "The buttons form a near-square grid: 2 entries make 2×1, 3 or 4 make 2×2, 5 or 6 make 3×2, and so on. Exactly one button is pressed and lit.",
+                "Arrow keys, Home and End move the selection. Blank and repeated lines are ignored, and the selection follows its value if you reorder the list.",
+                "Right-click → Deck Style… picks one of five faces. Some print the text inside the button, others use a Dymo sticker below it; each has its own sound. Mute sound silences all analog controls.",
+            ],
+        }],
+    },
+
     RaySwitch: {
         summary: "An analog-style toggle switch that outputs a boolean.",
         sections: [{
