@@ -226,26 +226,36 @@ class RayFastQwen3VL:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {
-            "clip": ("CLIP",),
-            "image": ("IMAGE",),
-            "prompt": ("STRING", {"default": "Describe this image in detail.", "multiline": True}),
-            "max_tokens": ("INT", {"default": 256, "min": 1, "max": 8192}),
-            "temperature": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 2.0, "step": 0.01}),
-            "top_p": ("FLOAT", {"default": 0.9, "min": 0.01, "max": 1.0, "step": 0.01}),
-            "top_k": ("INT", {"default": 40, "min": 0, "max": 1000}),
-            "seed": ("INT", {"default": 42, "min": 0, "max": 2**63 - 1}),
+            "clip": ("CLIP", {"tooltip": "Native Qwen3-VL 4B or 8B CLIP from CLIPLoader (type qwen_image). Weights are shared, not copied."}),
+            "image": ("IMAGE", {"tooltip": "Image or batch to describe. A batch forms one multi-image conversation, not separate captions."}),
+            "prompt": ("STRING", {"default": "Describe this image in detail.", "multiline": True,
+                "tooltip": "Plain instruction for the model. The chat and image template is added automatically."}),
+            "max_tokens": ("INT", {"default": 256, "min": 1, "max": 8192,
+                "tooltip": "Maximum generated tokens. Reaching the cap truncates the answer; thinking uses part of this budget."}),
+            "temperature": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 2.0, "step": 0.01,
+                "tooltip": "Sampling randomness. 0 is greedy decoding (deterministic); higher values vary the wording."}),
+            "top_p": ("FLOAT", {"default": 0.9, "min": 0.01, "max": 1.0, "step": 0.01,
+                "tooltip": "Sample only from the most likely tokens whose combined probability reaches this value. Ignored at temperature 0."}),
+            "top_k": ("INT", {"default": 40, "min": 0, "max": 1000,
+                "tooltip": "Sample only from the k most likely tokens. 0 disables the filter. Ignored at temperature 0."}),
+            "seed": ("INT", {"default": 42, "min": 0, "max": 2**63 - 1,
+                "tooltip": "Sampling seed. The same seed and settings repeat the same answer when temperature > 0."}),
         }, "optional": {
-            "mode": (["fast", "native"], {"default": "fast"}),
+            "mode": (["fast", "native"], {"default": "fast",
+                "tooltip": "fast: optimized request-local decode path. native: ComfyUI's stock generate, for A/B comparison."}),
             "sync_interval": ("INT", {"default": 8, "min": 1, "max": 32,
                 "tooltip": "Check stop tokens every N steps. May compute up to N-1 extra tokens, which are discarded. Use 1 for immediate stop."}),
-            "thinking": ("BOOLEAN", {"default": False}),
-            "repetition_penalty": ("FLOAT", {"default": 1.0, "min": 1.0, "max": 2.0, "step": 0.01}),
+            "thinking": ("BOOLEAN", {"default": False,
+                "tooltip": "Request the model's thinking mode when the checkpoint supports it. Reasoning stays in the output text."}),
+            "repetition_penalty": ("FLOAT", {"default": 1.0, "min": 1.0, "max": 2.0, "step": 0.01,
+                "tooltip": "Scale down scores of tokens already generated. 1 disables; higher values discourage repetition."}),
             "presence_penalty": ("FLOAT", {"default": 1.5, "min": 0.0, "max": 2.0, "step": 0.1,
                 "tooltip": "Discourage reusing generated tokens. Qwen recommends 1.5 for Instruct; use 0 for Thinking models."}),
             "repeat_guard": ("BOOLEAN", {"default": True, "tooltip": "Fast mode: stop if an identical 8–256-token phrase repeats three times. Retain its first copy."}),
         }}
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("text",)
+    OUTPUT_TOOLTIPS = ("Decoded model answer for the image or image batch.",)
     FUNCTION = "infer"
     CATEGORY = "👑 Ray/💬 LLM"
 
