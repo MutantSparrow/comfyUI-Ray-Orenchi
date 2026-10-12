@@ -58,12 +58,14 @@ export const RAY_HELP_DEFS = {
     },
 
     RayVHS: {
-        summary: "Degrades an image like analog videotape, modeled in YUV: chroma blur, head-switching band, tracking wobble, dropouts, hiss and Y/C separation, with an optional on-screen display.",
+        summary: "Degrades an image like analog videotape, modeled as a signal chain: soft luma with sharpening halos, smeared and lagging colour, rainbows, line wobble, a torn head-switch band, tape noise and dropouts, with an optional VCR on-screen display.",
         sections: [{
             heading: "Notes",
             bullets: [
-                "Effect sliders default to `-1`, which uses the preset value; `0`–`1` overrides that effect.",
-                "Leave `osd_date` blank to stamp today's date.",
+                "The preset is a tape and deck: it sets softness, halos, colour and levels, and the starting value of every slider. Worn EP is the default; Chewed tape is the extreme.",
+                "Effect sliders default to `-1`, which uses the preset value; `0`–`1` overrides that one effect. All sliders at `0` leaves only the preset's softness, colour and levels.",
+                "Effects scale with the image, so a preset looks the same at any size. A fixed `seed` always gives the same tape.",
+                "The OSD (PLAY, REC, date, time) is drawn in a built-in pixel font. Leave `osd_date` blank to stamp today's date.",
             ],
         }],
     },

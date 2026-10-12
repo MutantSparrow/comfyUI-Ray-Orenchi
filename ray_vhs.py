@@ -1,17 +1,20 @@
 """Ray's VFX: VHS / Tape — analog video degradation.
 
-Multi-pass simulation in YUV (BT.601):
-  1. RGB → YUV
-  2. Chroma subsample (decimate UV horizontally) + chroma blur
-  3. Y/C separation artifacts (optional): cross-color rainbow + dot crawl
-  4. Head-switching noise band at bottom (horizontal jitter + noise)
-  5. Tracking jitter: random per-row horizontal offsets
-  6. Dropouts: scattered white streaks
-  7. Tape hiss: gaussian noise on Y
-  8. YUV → RGB
-  9. (Optional) OSD overlay (camcorder-style date/time/PLAY/REC) drawn in a built-in 5x7 pixel font
+A signal-chain simulation in YUV (BT.601). Every effect is sized relative to the picture rather than in
+pixels, so a preset looks the same on a 480-pixel frame and on a 4K one. The stages follow the path a tape
+signal takes:
 
-Output preserves BHWC float32 [0,1] shape.
+  1. Levels: contrast, lifted blacks, soft-clipped highlights, colour phase error and saturation
+  2. Luma bandwidth: VHS luma is soft (about 240 lines); the deck then adds "peaking" halos at edges
+  3. Chroma: colour-under bandwidth (a few dozen samples across), a trail to the right and a small delay
+  4. Cross-colour: luma detail near the NTSC subcarrier leaking into colour (rainbows, dot crawl)
+  5. Time base: smooth per-line wobble, flagging at the top, tracking bands and the head-switch tear
+  6. Tape noise: streaky luma noise and colour noise, snow in tracking bands and head-switch lines
+  7. Dropouts: short bright streaks with soft tails
+  8. YUV -> RGB, then an optional VCR on-screen display in a built-in pixel font
+
+Output preserves BHWC float32 [0,1] shape. Every random draw comes from a seeded generator, so a fixed
+seed always gives the same tape, and changing one control never reshuffles another effect's noise.
 """
 
 from __future__ import annotations
@@ -19,9 +22,9 @@ from __future__ import annotations
 import datetime
 import unicodedata
 import math
-import random
-from dataclasses import dataclass
-from typing import Optional, Tuple
+import secrets
+from dataclasses import dataclass, replace
+from typing import Optional
 
 import numpy as np
 import torch
@@ -42,38 +45,87 @@ except ImportError:
 @dataclass
 class VHSParams:
     label: str
-    chroma_blur: float        # 0..1 (severity)
-    head_switch: float        # 0..1
-    tracking_jitter: float    # 0..1
-    dropout_rate: float       # 0..1 (probability mass)
-    hiss: float               # 0..1
-    yc_separation: float      # 0..1 (cross-color / dot-crawl mix)
+    chroma_blur: float        # 0..1: how far chroma bandwidth drops (160 down to 22 samples across)
+    head_switch: float        # 0..1: the torn band at the bottom of the frame
+    tracking_jitter: float    # 0..1: line wobble and tracking bands
+    dropout_rate: float       # 0..1: how many dropout streaks
+    hiss: float               # 0..1: tape noise
+    yc_separation: float      # 0..1: cross-colour rainbows and dot crawl
+    # Tape and deck character. Each preset sets these; they are not sliders. The defaults change nothing.
+    luma_res: float = 0.0     # horizontal luma resolution, samples across the picture (0 = no limit)
+    vres: float = 0.0         # vertical luma resolution, lines (0 = no limit)
+    ringing: float = 0.0      # 0..1 deck sharpening, halos around edges
+    chroma_shift: float = 0.0  # chroma delay to the right, in VHS samples (320 across the picture)
+    chroma_noise: float = 0.0  # 0..1 colour noise
+    saturation: float = 1.0
+    contrast: float = 1.0
+    black_lift: float = 0.0   # raised blacks, 0..0.1
+    hue_shift: float = 0.0    # colour phase error, degrees
+    flagging: float = 0.0     # 0..1 skew at the top of the frame
 
 
+# NTSC VHS: luma about 240 TVL (~320 samples across), colour-under chroma about 40 samples across.
+# The six slider fields are tuned against that physics; the rest describe the tape and deck.
 PRESETS = {
     "Pristine SP": VHSParams(
-        "Pristine SP", chroma_blur=0.2, head_switch=0.05, tracking_jitter=0.05,
-        dropout_rate=0.02, hiss=0.05, yc_separation=0.10,
+        "Pristine SP", chroma_blur=0.55, head_switch=0.10, tracking_jitter=0.06,
+        dropout_rate=0.03, hiss=0.14, yc_separation=0.22,
+        luma_res=330, vres=420, ringing=0.35, chroma_shift=0.8, chroma_noise=0.15,
+        saturation=0.95, contrast=0.98, black_lift=0.02, hue_shift=0.0, flagging=0.0,
+    ),
+    "S-VHS": VHSParams(
+        "S-VHS", chroma_blur=0.34, head_switch=0.08, tracking_jitter=0.04,
+        dropout_rate=0.02, hiss=0.08, yc_separation=0.04,
+        luma_res=470, vres=450, ringing=0.30, chroma_shift=0.4, chroma_noise=0.10,
+        saturation=1.0, contrast=1.0, black_lift=0.01, hue_shift=0.0, flagging=0.0,
     ),
     "Worn EP": VHSParams(
-        "Worn EP", chroma_blur=0.55, head_switch=0.35, tracking_jitter=0.25,
-        dropout_rate=0.20, hiss=0.20, yc_separation=0.40,
+        "Worn EP", chroma_blur=0.70, head_switch=0.35, tracking_jitter=0.30,
+        dropout_rate=0.22, hiss=0.38, yc_separation=0.40,
+        luma_res=250, vres=360, ringing=0.45, chroma_shift=1.4, chroma_noise=0.35,
+        saturation=0.88, contrast=0.92, black_lift=0.035, hue_shift=2.5, flagging=0.15,
     ),
     "Gen-3 dub": VHSParams(
-        "Gen-3 dub", chroma_blur=0.75, head_switch=0.50, tracking_jitter=0.40,
-        dropout_rate=0.35, hiss=0.35, yc_separation=0.55,
+        "Gen-3 dub", chroma_blur=0.86, head_switch=0.45, tracking_jitter=0.45,
+        dropout_rate=0.40, hiss=0.55, yc_separation=0.55,
+        luma_res=205, vres=320, ringing=0.60, chroma_shift=2.0, chroma_noise=0.55,
+        saturation=0.78, contrast=0.88, black_lift=0.05, hue_shift=-4.0, flagging=0.30,
     ),
     "VHS-C camcorder": VHSParams(
-        "VHS-C camcorder", chroma_blur=0.45, head_switch=0.20, tracking_jitter=0.15,
-        dropout_rate=0.10, hiss=0.25, yc_separation=0.30,
+        "VHS-C camcorder", chroma_blur=0.62, head_switch=0.12, tracking_jitter=0.16,
+        dropout_rate=0.10, hiss=0.30, yc_separation=0.28,
+        luma_res=275, vres=380, ringing=0.55, chroma_shift=1.0, chroma_noise=0.30,
+        saturation=1.10, contrast=1.07, black_lift=0.0, hue_shift=3.0, flagging=0.0,
     ),
     "Hi8": VHSParams(
-        "Hi8", chroma_blur=0.30, head_switch=0.10, tracking_jitter=0.08,
-        dropout_rate=0.05, hiss=0.12, yc_separation=0.15,
+        "Hi8", chroma_blur=0.40, head_switch=0.08, tracking_jitter=0.08,
+        dropout_rate=0.05, hiss=0.16, yc_separation=0.10,
+        luma_res=420, vres=440, ringing=0.30, chroma_shift=0.5, chroma_noise=0.20,
+        saturation=1.03, contrast=1.0, black_lift=0.01, hue_shift=0.0, flagging=0.0,
+    ),
+    "Rental tape": VHSParams(
+        "Rental tape", chroma_blur=0.66, head_switch=0.30, tracking_jitter=0.42,
+        dropout_rate=0.50, hiss=0.36, yc_separation=0.34,
+        luma_res=270, vres=370, ringing=0.42, chroma_shift=1.2, chroma_noise=0.30,
+        saturation=0.90, contrast=0.95, black_lift=0.03, hue_shift=-2.0, flagging=0.28,
+    ),
+    "Off-air LP": VHSParams(
+        "Off-air LP", chroma_blur=0.74, head_switch=0.22, tracking_jitter=0.22,
+        dropout_rate=0.14, hiss=0.34, yc_separation=0.62,
+        luma_res=265, vres=370, ringing=0.50, chroma_shift=1.5, chroma_noise=0.40,
+        saturation=0.92, contrast=1.0, black_lift=0.025, hue_shift=4.0, flagging=0.08,
+    ),
+    "Chewed tape": VHSParams(
+        "Chewed tape", chroma_blur=0.82, head_switch=0.78, tracking_jitter=0.85,
+        dropout_rate=0.85, hiss=0.70, yc_separation=0.50,
+        luma_res=225, vres=330, ringing=0.50, chroma_shift=2.2, chroma_noise=0.60,
+        saturation=0.80, contrast=0.90, black_lift=0.045, hue_shift=-5.0, flagging=0.70,
     ),
     "Custom": VHSParams(
         "Custom", chroma_blur=0.5, head_switch=0.3, tracking_jitter=0.2,
         dropout_rate=0.1, hiss=0.15, yc_separation=0.3,
+        luma_res=300, vres=400, ringing=0.30, chroma_shift=1.0, chroma_noise=0.20,
+        saturation=0.95, contrast=0.98, black_lift=0.02, hue_shift=0.0, flagging=0.0,
     ),
 }
 PRESET_NAMES = list(PRESETS.keys())
@@ -83,157 +135,233 @@ OSD_CORNERS = ["TL", "TR", "BL", "BR"]
 
 
 # ---------------------------------------------------------------------------
-# Passes
+# Helpers
 # ---------------------------------------------------------------------------
 
 
-def _gauss_kernel(sigma: float, device, dtype) -> torch.Tensor:
+def _stage_generator(seed: int, stage: int) -> torch.Generator:
+    """A CPU generator private to one effect, so toggling a control never reshuffles another's noise."""
+    gen = torch.Generator(device="cpu")
+    gen.manual_seed((int(seed) * 1000003 + stage * 7919) % (2**63 - 1))
+    return gen
+
+
+def _rand(gen: torch.Generator) -> float:
+    return float(torch.rand(1, generator=gen).item())
+
+
+def _kernel(sigma: float, device, dtype) -> torch.Tensor:
     radius = max(1, int(math.ceil(sigma * 3.0)))
     x = torch.arange(-radius, radius + 1, dtype=dtype, device=device)
     k = torch.exp(-(x * x) / (2.0 * sigma * sigma))
     return k / k.sum()
 
 
-def _blur_h(x: torch.Tensor, sigma: float) -> torch.Tensor:
-    """Horizontal-only gaussian blur on a BCHW tensor."""
-    if sigma <= 0.0:
-        return x
-    k = _gauss_kernel(sigma, x.device, x.dtype)
-    radius = k.numel() // 2
+def _blur(x: torch.Tensor, sx: float = 0.0, sy: float = 0.0) -> torch.Tensor:
+    """Separable gaussian blur on a BCHW tensor; sigmas are in pixels."""
     C = x.shape[1]
-    kh = k.view(1, 1, 1, -1).expand(C, 1, 1, -1)
-    x = F.pad(x, (radius, radius, 0, 0), mode="reflect")
-    return F.conv2d(x, kh, groups=C)
+    if sx > 0.05:
+        k = _kernel(sx, x.device, x.dtype)
+        r = k.numel() // 2
+        x = F.conv2d(F.pad(x, (r, r, 0, 0), mode="replicate"), k.view(1, 1, 1, -1).expand(C, 1, 1, -1), groups=C)
+    if sy > 0.05:
+        k = _kernel(sy, x.device, x.dtype)
+        r = k.numel() // 2
+        x = F.conv2d(F.pad(x, (0, 0, r, r), mode="replicate"), k.view(1, 1, -1, 1).expand(C, 1, -1, 1), groups=C)
+    return x
 
 
-def _chroma_blur_subsample(yuv_bhwc: torch.Tensor, severity: float) -> torch.Tensor:
-    """Simulate VHS 4:1:1 chroma subsample + bandwidth-limit horizontal blur."""
-    if severity <= 0.0:
-        return yuv_bhwc
-    # BHWC → BCHW for conv2d
-    bchw = yuv_bhwc.permute(0, 3, 1, 2).contiguous()
-    y = bchw[:, 0:1]
-    uv = bchw[:, 1:3]
-    # Decimate UV horizontally (factor proportional to severity), then upsample.
-    decim_factor = 1 + int(round(severity * 6))   # 1..7
-    if decim_factor > 1:
-        uv_small = F.avg_pool2d(uv, kernel_size=(1, decim_factor),
-                                stride=(1, decim_factor))
-        uv = F.interpolate(uv_small, size=(uv.shape[2], uv.shape[3]),
-                           mode="bilinear", align_corners=False)
-    # Additional horizontal gaussian smear on chroma
-    uv = _blur_h(uv, sigma=1.0 + severity * 4.0)
-    out = torch.cat([y, uv], dim=1)
-    return out.permute(0, 2, 3, 1).contiguous()
+def _trail(x: torch.Tensor, tau: float) -> torch.Tensor:
+    """One-sided exponential smear to the right: colour that lags behind the picture it belongs to."""
+    if tau <= 0.05:
+        return x
+    C = x.shape[1]
+    r = max(2, int(math.ceil(tau * 5.0)))
+    k = torch.exp(-torch.arange(0, r + 1, dtype=x.dtype, device=x.device) / tau)
+    k = (k / k.sum()).flip(0)
+    return F.conv2d(F.pad(x, (r, 0, 0, 0), mode="replicate"), k.view(1, 1, 1, -1).expand(C, 1, 1, -1), groups=C)
 
 
-def _yc_artifacts(yuv_bhwc: torch.Tensor, strength: float) -> torch.Tensor:
-    """Approximate cross-color/dot-crawl: high-frequency luma bleeds into chroma."""
-    if strength <= 0.0:
-        return yuv_bhwc
-    bchw = yuv_bhwc.permute(0, 3, 1, 2).contiguous()
-    y = bchw[:, 0:1]
-    # High-pass on Y: y - blurred_y
-    hp = y - _blur_h(y, sigma=1.5)
-    # Modulate by a horizontal carrier (cosine of pixel index) to fake the
-    # color subcarrier — bleed into U + V at opposite phases.
-    H, W = y.shape[2], y.shape[3]
+def _shift_h(x: torch.Tensor, dx: float) -> torch.Tensor:
+    """Shift right by a fractional number of pixels (replicating the edge)."""
+    if abs(dx) < 0.02:
+        return x
+    W = x.shape[-1]
+
+    def step(s: int) -> torch.Tensor:
+        if s == 0:
+            return x
+        if s > 0:
+            return F.pad(x, (s, 0, 0, 0), mode="replicate")[..., :W]
+        return F.pad(x, (0, -s, 0, 0), mode="replicate")[..., -s:]
+
+    n = math.floor(dx)
+    f = dx - n
+    return step(n) * (1.0 - f) + step(n + 1) * f
+
+
+def _displace_rows(x: torch.Tensor, offsets: torch.Tensor) -> torch.Tensor:
+    """Move each row of a BCHW tensor sideways by `offsets` (B, H) pixels, positive = right, sub-pixel."""
+    B, _, H, W = x.shape
+    xs = torch.linspace(-1.0, 1.0, W, device=x.device, dtype=x.dtype).view(1, 1, W)
+    ys = torch.linspace(-1.0, 1.0, H, device=x.device, dtype=x.dtype).view(1, H, 1).expand(B, H, W)
+    gx = xs - 2.0 * offsets.to(x.device, x.dtype).view(B, H, 1) / max(W - 1, 1)
+    grid = torch.stack([gx.expand(B, H, W), ys], dim=-1)
+    return F.grid_sample(x, grid, mode="bilinear", padding_mode="border", align_corners=True)
+
+
+def _smooth1d(n: int, sigma: float, gen: torch.Generator) -> torch.Tensor:
+    """Unit-variance noise along a line of `n` samples, correlated over about `sigma` samples."""
+    noise = torch.randn(n, generator=gen)
+    if sigma > 0.05 and n > 1:
+        k = _kernel(sigma, noise.device, noise.dtype)
+        r = k.numel() // 2
+        noise = F.conv1d(F.pad(noise.view(1, 1, -1), (r, r), mode="replicate"), k.view(1, 1, -1)).view(-1)
+        noise = noise / float(noise.std(unbiased=False).clamp_min(1e-6))
+    return noise
+
+
+def _streaky_noise(shape, sigma_x: float, sigma_y: float, gen: torch.Generator) -> torch.Tensor:
+    """Noise that is soft along the scanline and varies in strength from line to line: tape noise."""
+    B, C, H, W = shape
+    noise = _blur(torch.randn(shape, generator=gen), sigma_x, sigma_y)
+    noise = noise / noise.std(unbiased=False).clamp_min(1e-6)
+    gain = torch.stack([(1.0 + 0.35 * _smooth1d(H, 0.8, gen)).clamp(0.35, 1.8) for _ in range(B)])
+    return noise * gain.view(B, 1, H, 1)
+
+
+# ---------------------------------------------------------------------------
+# Signal-chain stages
+# ---------------------------------------------------------------------------
+
+
+def _levels(y: torch.Tensor, uv: torch.Tensor, p: VHSParams):
+    """Contrast, lifted blacks and soft-clipped highlights on luma; hue error and saturation on colour."""
+    if p.contrast != 1.0 or p.black_lift != 0.0:
+        y = (y - 0.5) * p.contrast + 0.5
+        y = p.black_lift + y * (1.0 - p.black_lift)
+        knee = 0.82
+        y = torch.where(y > knee, knee + (1.0 - knee) * torch.tanh((y - knee) / (1.0 - knee)), y)
+    if p.hue_shift:
+        a = math.radians(p.hue_shift)
+        c, s = math.cos(a), math.sin(a)
+        uv = torch.cat([uv[:, 0:1] * c - uv[:, 1:2] * s, uv[:, 0:1] * s + uv[:, 1:2] * c], dim=1)
+    return y, uv * p.saturation
+
+
+def _luma_bandwidth(y: torch.Tensor, p: VHSParams) -> torch.Tensor:
+    """Soften luma to the tape's resolution, then add the deck's peaking halos."""
+    H, W = y.shape[-2:]
+    sx = max(0.0, 0.5 * (W / p.luma_res - 1.0)) if p.luma_res > 0 else 0.0
+    sy = max(0.0, 0.5 * (H / p.vres - 1.0)) if p.vres > 0 else 0.0
+    y = _blur(y, sx, sy)
+    if p.ringing > 0:
+        radius = max(0.8, 1.2 * W / 320.0)
+        y = y + p.ringing * 1.1 * (y - _blur(y, radius, 0.0))
+    return y
+
+
+def _chroma_bandwidth(uv: torch.Tensor, severity: float, shift: float) -> torch.Tensor:
+    """Colour-under chroma: only a few dozen samples across, smeared and lagging to the right."""
+    H, W = uv.shape[-2:]
+    u, v = W / 320.0, H / 480.0
+    if severity > 0:
+        samples = 160.0 * (22.0 / 160.0) ** severity
+        sx = max(0.0, 0.65 * (W / samples - 1.0))
+        sy = (0.35 + 1.1 * severity) * v * 0.9
+        smooth = _blur(uv, sx, sy)
+        uv = smooth * (1.0 - 0.35 * severity) + _trail(smooth, max(0.0, 0.6 * sx)) * (0.35 * severity)
+    return _shift_h(uv, shift * u)
+
+
+def _cross_colour(y: torch.Tensor, uv: torch.Tensor, strength: float) -> torch.Tensor:
+    """Luma detail near the colour subcarrier bleeding into chroma, with NTSC's line-to-line phase flip."""
+    if strength <= 0:
+        return uv
+    H, W = y.shape[-2:]
+    period = max(2.0, W / 227.5)
+    detail = y - _blur(y, period * 0.42, 0.0)
     xs = torch.arange(W, device=y.device, dtype=y.dtype).view(1, 1, 1, W)
-    carrier = torch.cos(xs * (math.pi / 2.0))   # alternates each pixel
-    u_bleed = hp * carrier * (0.6 * strength)
-    v_bleed = hp * torch.sin(xs * (math.pi / 2.0)) * (0.6 * strength)
-    out = bchw.clone()
-    out[:, 1:2] = out[:, 1:2] + u_bleed
-    out[:, 2:3] = out[:, 2:3] + v_bleed
-    return out.permute(0, 2, 3, 1).contiguous()
+    ys = torch.arange(H, device=y.device, dtype=y.dtype).view(1, 1, H, 1)
+    phase = 2.0 * math.pi * xs / period + math.pi * ys
+    bleed = detail * 0.55 * strength
+    return uv + torch.cat([bleed * torch.cos(phase), bleed * torch.sin(phase)], dim=1)
 
 
-def _head_switch_noise(
-    yuv_bhwc: torch.Tensor,
-    severity: float,
-    rng: random.Random,
-) -> torch.Tensor:
-    """Bottom 2-5% of frame gets horizontal offset + noise."""
-    if severity <= 0.0:
-        return yuv_bhwc
-    B, H, W, C = yuv_bhwc.shape
-    band_h = max(2, int(H * (0.02 + 0.03 * severity)))
-    out = yuv_bhwc.clone()
-    for b in range(B):
-        for i in range(band_h):
-            row_idx = H - band_h + i
-            shift = int((1.0 - i / max(1, band_h - 1)) * severity * (W * 0.08))
-            shift = rng.randint(-shift, shift) if shift > 0 else 0
-            if shift != 0:
-                out[b, row_idx] = torch.roll(out[b, row_idx], shifts=shift, dims=0)
-            # luma noise on Y channel
-            noise = (torch.rand(W, device=out.device, dtype=out.dtype) - 0.5) * severity * 0.6
-            out[b, row_idx, :, 0] = (out[b, row_idx, :, 0] + noise).clamp(0.0, 1.5)
-    return out
+def _time_base(H: int, W: int, jitter: float, flagging: float, gen: torch.Generator):
+    """Per-line sideways offsets in pixels (H,), plus a 0..1 mask of tracking bands (H,).
+
+    Real time-base error is smooth: neighbouring lines move together, whole stretches of picture sway, and
+    the top of the frame bends when the tape tension is off. It is not a handful of random torn lines."""
+    u = W / 320.0
+    offsets = torch.zeros(H)
+    bands = torch.zeros(H)
+    ys = torch.arange(H, dtype=torch.float32)
+    if jitter > 0:
+        offsets += _smooth1d(H, 0.7 + 0.5 * (H / 480.0) ** 0.5, gen) * (0.04 + 1.5 * jitter) * u
+        period = (30.0 + 140.0 * _rand(gen)) * (H / 480.0)
+        offsets += torch.sin(2 * math.pi * ys / period + 6.28 * _rand(gen)) * (0.06 + 2.6 * jitter) * u * 0.55
+        expected = 1.8 * jitter ** 1.2
+        count = min(3, int(expected) + (1 if _rand(gen) < expected - int(expected) else 0))
+        for _ in range(count):
+            centre = (0.1 + 0.82 * _rand(gen)) * H
+            half = H * (0.02 + 0.07 * _rand(gen)) * (0.7 + 0.6 * jitter)
+            window = (0.5 * (1.0 + torch.cos(math.pi * ((ys - centre) / half).clamp(-1, 1)))).clamp(0, 1)
+            wavelength = half * (0.8 + 0.8 * _rand(gen))
+            swing = (0.5 + 0.7 * torch.sin(2 * math.pi * (ys - centre) / wavelength + 6.28 * _rand(gen)))
+            sign = 1.0 if _rand(gen) < 0.5 else -1.0
+            offsets += sign * (3.0 + 9.0 * jitter) * u * window * swing
+            bands = torch.maximum(bands, window)
+    if flagging > 0:
+        sign = 1.0 if _rand(gen) < 0.5 else -1.0
+        offsets += sign * flagging * 7.0 * u * torch.exp(-ys / (0.05 * H)) * (0.7 + 0.3 * math.cos(6.28 * _rand(gen)))
+    return offsets, bands
 
 
-def _tracking_jitter(
-    yuv_bhwc: torch.Tensor,
-    severity: float,
-    rng: random.Random,
-) -> torch.Tensor:
-    """Per-row horizontal pixel offset, sparse — tape tracking error."""
-    if severity <= 0.0:
-        return yuv_bhwc
-    B, H, W, _ = yuv_bhwc.shape
-    out = yuv_bhwc.clone()
-    max_shift = int(severity * W * 0.04)
-    if max_shift <= 0:
-        return yuv_bhwc
-    # Pick which rows jitter (about severity * 0.1 of them)
-    jitter_count = int(H * severity * 0.15)
-    for _ in range(jitter_count):
-        b = rng.randrange(B)
-        r = rng.randrange(H)
-        shift = rng.randint(-max_shift, max_shift)
-        if shift != 0:
-            out[b, r] = torch.roll(out[b, r], shifts=shift, dims=0)
-    return out
+def _head_switch(H: int, W: int, severity: float, gen: torch.Generator):
+    """Offsets (H,) and a 0..1 noise mask (H,) for the torn lines at the bottom of the frame.
+
+    The video heads swap near the bottom of the picture, and those lines are skewed progressively sideways
+    and garbled with noise, always the same way within a frame."""
+    offsets = torch.zeros(H)
+    noise = torch.zeros(H)
+    if severity <= 0:
+        return offsets, noise
+    u = W / 320.0
+    band = max(3, int(round(H * (0.016 + 0.040 * severity))))
+    t = ((torch.arange(H, dtype=torch.float32) - (H - band)) / band).clamp(0.0, 1.0)
+    sign = 1.0 if _rand(gen) < 0.5 else -1.0
+    offsets = sign * severity * 30.0 * u * t ** 1.7 * (1.0 + 0.10 * _smooth1d(H, 1.0, gen))
+    ramp = ((t - 0.35) / 0.65).clamp(0.0, 1.0)
+    noise = ramp * ramp * (3.0 - 2.0 * ramp) * min(1.0, 0.4 + severity)
+    return offsets, noise
 
 
-def _dropouts(
-    yuv_bhwc: torch.Tensor,
-    rate: float,
-    rng: random.Random,
-) -> torch.Tensor:
-    """White horizontal streaks (Y boosted) at sparse random rows."""
-    if rate <= 0.0:
-        return yuv_bhwc
-    B, H, W, _ = yuv_bhwc.shape
-    out = yuv_bhwc.clone()
-    count = int(B * H * rate * 0.02)
+def _dropout_layer(H: int, W: int, rate: float, last_row: int, gen: torch.Generator):
+    """(mask, level): where dropout streaks land (0..1) and the luma they drive the line to."""
+    mask = torch.zeros(H, W)
+    level = torch.ones(H, W)
+    if rate <= 0 or last_row < 2:
+        return mask, level
+    u, v = W / 320.0, H / 480.0
+    expected = rate * 26.0 * v
+    count = int(expected) + (1 if _rand(gen) < expected - int(expected) else 0)
+    xs = torch.arange(W, dtype=torch.float32)
     for _ in range(count):
-        b = rng.randrange(B)
-        r = rng.randrange(H)
-        x0 = rng.randrange(W)
-        length = rng.randint(2, max(3, int(W * 0.05)))
-        x1 = min(W, x0 + length)
-        out[b, r, x0:x1, 0] = 1.2  # bright Y
-        out[b, r, x0:x1, 1] = 0.0
-        out[b, r, x0:x1, 2] = 0.0
-    return out
-
-
-def _hiss(
-    yuv_bhwc: torch.Tensor,
-    amount: float,
-    generator: Optional[torch.Generator],
-) -> torch.Tensor:
-    if amount <= 0.0:
-        return yuv_bhwc
-    noise = torch.randn(
-        yuv_bhwc.shape[:3] + (1,),
-        device=yuv_bhwc.device, dtype=yuv_bhwc.dtype,
-        generator=generator,
-    )
-    out = yuv_bhwc.clone()
-    out[..., 0:1] = out[..., 0:1] + noise * amount * 0.05
-    return out
+        row = int(_rand(gen) * (last_row - 1))
+        lines = max(1, int(round(v * (1.0 + _rand(gen)))))
+        length = float(np.clip(math.exp(math.log(16.0) + 0.6 * float(torch.randn(1, generator=gen))), 4.0, 90.0)) * u
+        start = _rand(gen) * W
+        into = xs - start
+        profile = torch.where(into < length * 0.6, torch.ones(W), torch.exp(-(into - length * 0.6) / (length * 0.2 + 1e-6)))
+        profile = torch.where(into < 0, torch.zeros(W), profile).clamp(0, 1)
+        kind = _rand(gen)
+        target = 1.12 if kind < 0.8 else 0.02
+        for r in range(row, min(H, row + lines)):
+            stronger = profile > mask[r]
+            mask[r] = torch.where(stronger, profile, mask[r])
+            level[r] = torch.where(stronger, torch.full((W,), target), level[r])
+    return mask, level
 
 
 # ---------------------------------------------------------------------------
@@ -418,23 +546,60 @@ def apply_vhs(
     device, dtype = image.device, image.dtype
 
     p = overrides or preset
-    rng = random.Random(seed) if seed is not None and seed >= 0 else random.Random()
-    generator = None
-    if seed is not None and seed >= 0:
-        try:
-            generator = torch.Generator(device=device).manual_seed(int(seed))
-        except (RuntimeError, TypeError):
-            generator = None
+    base = int(seed) if seed is not None and seed >= 0 else secrets.randbelow(2**31)
 
-    yuv = rgb_to_yuv(image)
+    x = rgb_to_yuv(image).permute(0, 3, 1, 2).contiguous().float()
+    B, _, H, W = x.shape
+    u, v = W / 320.0, H / 480.0
+    y, uv = _levels(x[:, :1], x[:, 1:], p)
+    y = _luma_bandwidth(y, p)
+    uv = _chroma_bandwidth(uv, p.chroma_blur, p.chroma_shift)
+    uv = _cross_colour(y, uv, p.yc_separation)
+    x = torch.cat([y, uv], dim=1)
 
-    yuv = _chroma_blur_subsample(yuv, p.chroma_blur)
-    yuv = _yc_artifacts(yuv, p.yc_separation)
-    yuv = _head_switch_noise(yuv, p.head_switch, rng)
-    yuv = _tracking_jitter(yuv, p.tracking_jitter, rng)
-    yuv = _dropouts(yuv, p.dropout_rate, rng)
-    yuv = _hiss(yuv, p.hiss, generator)
+    # Time base: line wobble, flagging, tracking bands and the head-switch tear move as one displacement,
+    # so every line is resampled exactly once.
+    offsets = torch.zeros(B, H)
+    bands = torch.zeros(B, H)
+    head_noise = torch.zeros(B, H)
+    for b in range(B):
+        wobble, band = _time_base(H, W, p.tracking_jitter, p.flagging, _stage_generator(base + b, 1))
+        tear, garble = _head_switch(H, W, p.head_switch, _stage_generator(base + b, 2))
+        offsets[b], bands[b], head_noise[b] = wobble + tear, band, garble
+    if float(offsets.abs().max()) > 0.01:
+        x = _displace_rows(x, offsets)
+    y, uv = x[:, :1], x[:, 1:]
+    rows = lambda t: t.to(device).view(B, 1, H, 1)
 
+    # Tape noise: soft along the line and uneven from line to line, not clean digital grain.
+    if p.hiss > 0:
+        y = y + _streaky_noise(y.shape, 0.5 * u + 0.3, 0.0, _stage_generator(base, 3)).to(device) * (p.hiss * 0.075)
+        if p.chroma_noise > 0:
+            colour = _streaky_noise(uv.shape, 2.2 * u + 0.5, 0.6 * v, _stage_generator(base, 4)).to(device)
+            uv = uv + colour * (p.chroma_noise * p.hiss * 0.07)
+    # Snow and colour loss inside tracking bands, and garbling in the head-switch lines.
+    if float(bands.max()) > 0:
+        snow = _streaky_noise(y.shape, 1.4 * u + 0.5, 0.0, _stage_generator(base, 5)).to(device)
+        y = y + rows(bands) * (snow * (0.22 + 0.35 * p.tracking_jitter) + 0.04)
+        uv = uv * (1.0 - 0.75 * rows(bands))
+    if float(head_noise.max()) > 0:
+        garble = _streaky_noise(y.shape, 1.1 * u + 0.4, 0.0, _stage_generator(base, 6)).to(device)
+        y = y + rows(head_noise) * garble * (0.18 + 0.30 * p.head_switch)
+        uv = uv * (1.0 - 0.6 * rows(head_noise))
+
+    # Dropouts: short streaks that drive the line to white (mostly) or black, with a soft tail.
+    if p.dropout_rate > 0:
+        last_row = H - max(3, int(round(H * (0.016 + 0.040 * p.head_switch)))) if p.head_switch > 0 else H
+        for b in range(B):
+            mask, level = _dropout_layer(H, W, p.dropout_rate, last_row, _stage_generator(base + b, 7))
+            if float(mask.max()) <= 0:
+                continue
+            mask = _blur(mask.view(1, 1, H, W), 0.35 * u + 0.2, 0.4 * v).view(H, W).clamp(0, 1).to(device)
+            level = level.to(device)
+            y[b, 0] = y[b, 0] * (1.0 - mask) + level * mask
+            uv[b] = uv[b] * (1.0 - 0.9 * mask)
+
+    yuv = torch.cat([y.clamp(-0.1, 1.25), uv.clamp(-0.6, 0.6)], dim=1).permute(0, 2, 3, 1).contiguous()
     rgb = yuv_to_rgb(yuv)
 
     if osd_mode and osd_mode != "Off":
@@ -453,13 +618,14 @@ class RayVHS:
     """VHS / tape degradation in YUV space with OSD overlays."""
 
     DESCRIPTION = (
-        "Videotape degradation modeled in YUV space: chroma blur, head-"
-        "switching band, tracking wobble, dropouts, hiss, and Y/C "
-        "separation. Each slider defaults to -1 (use the preset value) "
-        "and 0..1 overrides that channel.\n\n"
-        "OSD overlay simulates the classic VCR readout: ▶ PLAY / ● REC / "
-        "Date / Date+Time in any corner. Leave osd_date blank to stamp "
-        "today's date."
+        "Videotape degradation modeled as a signal chain in YUV space: soft luma with deck "
+        "sharpening halos, low-bandwidth chroma that smears and lags, cross-colour rainbows, "
+        "line-level time-base wobble, tracking bands, a head-switching tear, streaky tape noise "
+        "and dropouts. Effects scale with the picture, so presets look the same at any size.\n\n"
+        "The preset sets the tape and deck character (softness, halos, colour, levels). Each "
+        "slider defaults to -1 (use the preset value) and 0..1 overrides that one effect.\n\n"
+        "OSD overlay simulates the classic VCR readout in a built-in pixel font: PLAY / REC / "
+        "Date / Date+Time in any corner. Leave osd_date blank to stamp today's date."
     )
 
     @classmethod
@@ -470,31 +636,31 @@ class RayVHS:
                 "image": ("IMAGE", {"tooltip": "Source image."}),
                 "preset": (PRESET_NAMES, {
                     "default": "Worn EP",
-                    "tooltip": "Tape / speed preset (baseline for the sliders below).",
+                    "tooltip": "Tape and deck: sets softness, halos, colour, levels and the starting value of every slider below.",
                 }),
                 "chroma_blur": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": f"Chroma blur strength. {_override}",
+                    "tooltip": f"Colour bandwidth loss: how far chroma smears and lags. {_override}",
                 }),
                 "head_switch": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": f"Head-switching band at frame bottom. {_override}",
+                    "tooltip": f"The torn, noisy band at the bottom of the frame. {_override}",
                 }),
                 "tracking_jitter": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": f"Horizontal tracking wobble. {_override}",
+                    "tooltip": f"Line wobble and tracking bands. {_override}",
                 }),
                 "dropout_rate": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": f"Random dropouts (bright streaks). {_override}",
+                    "tooltip": f"Dropout streaks (short bright or dark lines). {_override}",
                 }),
                 "hiss": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": f"Luma noise / analog hiss. {_override}",
+                    "tooltip": f"Tape noise in luma and colour. {_override}",
                 }),
                 "yc_separation": ("FLOAT", {
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
-                    "tooltip": f"Y/C separation artifact strength. {_override}",
+                    "tooltip": f"Cross-colour rainbows and dot crawl around fine detail. {_override}",
                 }),
                 "osd_mode": (OSD_MODES, {
                     "default": "Off",
@@ -545,8 +711,8 @@ class RayVHS:
         def _mix(slider, preset_val):
             return float(slider) if slider >= 0.0 else preset_val
 
-        overrides = VHSParams(
-            label=base.label,
+        overrides = replace(
+            base,
             chroma_blur=_mix(chroma_blur, base.chroma_blur),
             head_switch=_mix(head_switch, base.head_switch),
             tracking_jitter=_mix(tracking_jitter, base.tracking_jitter),
