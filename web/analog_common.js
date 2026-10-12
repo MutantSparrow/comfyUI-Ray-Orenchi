@@ -152,10 +152,10 @@ export function repairAnalogWorkflow(data, name, title, outputs) {
     }
 }
 
-export function registerAnalog(app, { kind, name, title, styles, defaultStyle, valueName, configNames = [], outputs, build }) {
+export function registerAnalog(app, { kind, name, title, styles, defaultStyle, valueName, configNames = [], outputs, build, migrate }) {
     app.registerExtension({
         name: `Ray.${kind === "knob" ? "Knob" : "Switch"}`,
-        beforeConfigureGraph(data) { repairAnalogWorkflow(data, name, title, outputs); },
+        beforeConfigureGraph(data) { repairAnalogWorkflow(data, name, title, outputs); migrate?.(data); },
         beforeRegisterNodeDef(nodeType, nodeData) {
             if (nodeData.name !== name) return;
             const proto = nodeType.prototype;

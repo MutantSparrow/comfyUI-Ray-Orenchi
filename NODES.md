@@ -95,7 +95,6 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 |-----|------|-------|
 | **Control** `min_value` | float | Range minimum. |
 | **Control** `max_value` | float | Range maximum. |
-| **Control** `spin_value` | float 10–100 | Drag sensitivity (px per full sweep). |
 | **Control** `clamp` | float ≥0 | Quantization step for the INT output (`0` → truncate). |
 | **Control** `allow_negative` | bool | Whether `min_value` may go below 0. |
 | **Control** `knob_value` | float | Current value (driven by the widget). |
@@ -103,6 +102,8 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | **Output** `float` | FLOAT | Raw clamped float in `[min, max]`. |
 
 **Faces.** Nine knobs (console rotary, broadcast ivory, mastering aluminium and the six original legacy faces) and five sliders: console linear fader, console channel fader with a dB scale, rack LED ladder, broadcast pan slider and rack amber slide. The pan slider and amber slide are horizontal; the others are vertical.
+
+**Dragging.** Every knob sweeps 270° from `min_value` to `max_value`, and the dial follows the pointer around its centre, so a 0–1 range is as controllable as 0–1000. Hold **Shift** for 20× finer movement. Arrow keys step 1/200 of the range (Shift: 1/2000), PageUp/PageDown step ten times that, and Home/End jump to the limits. Older workflows that saved a `spin_value` setting are migrated on load; that setting no longer exists.
 
 **Sliders.** Drag the cap, or click the track to jump the cap there. The LED ladder lights segments as the value rises and the amber slide fills behind its cap.
 
