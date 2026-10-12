@@ -55,7 +55,7 @@ header color rather than pick a bespoke one.
 
 ## ✨ Ray's VFX: Pixel Art (`RayPixelArtDetector`)
 
-**Purpose.** Repair an existing pixel grid or abstract illustrations/photos into readable regions. Preserve exact aspect ratio, fit perceptual palettes and optionally add restrained dithering or colored outlines. See [PIXEL_ART.md](PIXEL_ART.md).
+**Purpose.** Repair an existing pixel grid or abstract illustrations/photos into readable regions. Preserve exact aspect ratio, fit perceptual palettes and optionally add restrained dithering or colored outlines. Benchmark methodology and results are in [benchmarks/pixel_art](benchmarks/pixel_art/README.md).
 
 **Category:** `👑 Ray/✨ VFX`
 
