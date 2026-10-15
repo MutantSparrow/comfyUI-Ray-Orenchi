@@ -103,13 +103,6 @@ class SaveTests(unittest.TestCase):
             with self.assertRaises(ValueError): self.run_save(filename_prefix=prefix)
         with self.assertRaises(ValueError): self.run_save(save_image="invalid")
 
-    def test_folder_listing_only_directories(self):
-        self.run_save()
-        (self.root / "output" / "Child").mkdir()
-        result = module.list_directories("")
-        self.assertEqual([f["name"] for f in result["folders"]], ["Child"])
-        self.assertEqual(result["path"], str((self.root / "output").resolve()))
-
     def test_explorer_opens_only_existing_folder(self):
         self.run_save()
         launch = Mock()

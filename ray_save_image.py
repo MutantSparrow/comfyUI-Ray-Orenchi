@@ -89,21 +89,6 @@ class RaySaveImage:
                        "ray_saved": saved, "ray_directory": [str(output)] if saved else []}, "result": ()}
 
 
-def list_directories(value):
-    """Folder-only navigation on the machine running ComfyUI."""
-    path = destination_path(value)
-    children = []
-    with os.scandir(path) as entries:
-        for entry in entries:
-            try:
-                if entry.is_dir():
-                    children.append({"name": entry.name, "path": str(Path(entry.path).resolve())})
-            except OSError:
-                continue
-    roots = [str(Path(f"{letter}:/")) for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if Path(f"{letter}:/").exists()] if os.name == "nt" else ["/"]
-    return {"path": str(path), "parent": str(path.parent), "folders": sorted(children, key=lambda item: item["name"].casefold()), "roots": roots}
-
-
 def open_image_location(value):
     if not isinstance(value, str) or not value.strip():
         raise ValueError("Save an image before opening its location.")
@@ -120,13 +105,6 @@ def register_routes():
     import asyncio
     from aiohttp import web
     from server import PromptServer
-
-    @PromptServer.instance.routes.get("/ray/save-image/folders")
-    async def folders(request):
-        try:
-            return web.json_response(await asyncio.to_thread(list_directories, request.query.get("path", "")))
-        except (OSError, ValueError) as error:
-            return web.json_response({"error": str(error)}, status=400)
 
     @PromptServer.instance.routes.post("/ray/save-image/open-location")
     async def open_location(request):
