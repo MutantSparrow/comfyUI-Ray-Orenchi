@@ -123,6 +123,7 @@ export function presetName(points) {
 
 const SIZE = 244, PAD = 18;
 let lastPointer = [0, 0];
+let savedPosition = null;      // where the editor was last left, so it reopens there
 if (typeof window !== "undefined") {
     lastPointer = [window.innerWidth / 2, window.innerHeight / 3];
     window.addEventListener("pointerdown", event => { lastPointer = [event.clientX, event.clientY]; }, true);
@@ -138,15 +139,24 @@ function injectStyles() {
     background:#1b1c1f; color:#e6e6e6; border:1px solid #4a4c52; border-radius:8px;
     box-shadow:0 10px 30px #000a; font:12px/1.35 system-ui,sans-serif;
 }
-.ray-curve-title { margin:0 0 8px; font:600 10px system-ui; letter-spacing:.08em; text-transform:uppercase; color:#8d9096; }
+.ray-curve-title {
+    margin:-10px -12px 10px; padding:8px 12px; border-bottom:1px solid #2c2f35; border-radius:8px 8px 0 0; background:#202226;
+    font:600 10px system-ui; letter-spacing:.08em; text-transform:uppercase; color:#8d9096;
+    cursor:move; user-select:none; touch-action:none;
+}
+.ray-curve-title::before { content:"⠿"; margin-right:7px; letter-spacing:0; opacity:.7; }
 .ray-curve-row { display:flex; gap:6px; align-items:center; margin-bottom:8px; }
 .ray-curve-row > * { flex:1 1 0; min-width:0; }
 .ray-curve-mode { display:flex; border:1px solid #4a4c52; border-radius:5px; overflow:hidden; }
 .ray-curve-mode button { flex:1; padding:5px 0; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
 .ray-curve-mode button[aria-pressed="true"] { background:#33363c; color:#fff; font-weight:600; }
-.ray-curve-editor select {
-    width:100%; padding:5px 6px; border:1px solid #4a4c52; border-radius:5px; background:#24262a; color:inherit; font:inherit;
+.ray-curve-presets { display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:8px; }
+.ray-curve-presets button {
+    padding:5px 4px; border:1px solid #4a4c52; border-radius:5px; background:#24262a; color:inherit; font:inherit; cursor:pointer;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
+.ray-curve-presets button:hover, .ray-curve-presets button:focus-visible { background:#2f3237; outline:none; }
+.ray-curve-presets button[aria-pressed="true"] { background:#5a4a2a; border-color:#e5b567; color:#fff; font-weight:600; }
 .ray-curve-editor canvas { display:block; width:${SIZE}px; height:${SIZE}px; border-radius:4px; background:#101214; touch-action:none; outline:none; cursor:crosshair; }
 .ray-curve-editor canvas:focus-visible { outline:2px solid #185d89; outline-offset:2px; }
 .ray-curve-info { min-height:2.7em; margin:7px 0 8px; font:11px/1.35 ui-monospace,monospace; color:#b9bdc4; }
@@ -165,7 +175,7 @@ export function openCurveEditor(node, { title = "Response curve", range = () => 
     panel.className = "ray-curve-editor";
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Response curve");
-    const heading = Object.assign(document.createElement("p"), { className: "ray-curve-title", textContent: title });
+    const heading = Object.assign(document.createElement("p"), { className: "ray-curve-title", textContent: title, title: "Drag to move" });
 
     const modeRow = document.createElement("div");
     modeRow.className = "ray-curve-row";
@@ -176,10 +186,15 @@ export function openCurveEditor(node, { title = "Response curve", range = () => 
     const linearButton = Object.assign(document.createElement("button"), { type: "button", textContent: "Linear" });
     const curveButton = Object.assign(document.createElement("button"), { type: "button", textContent: "Curve" });
     mode.append(linearButton, curveButton);
-    const preset = document.createElement("select");
-    preset.setAttribute("aria-label", "Preset");
-    for (const name of [...PRESETS.slice(1).map(p => p.name), "Custom"]) preset.append(Object.assign(document.createElement("option"), { value: name, textContent: name }));
-    modeRow.append(mode, preset);
+    modeRow.append(mode);
+    // Plain buttons, not a drop-down: a native list is drawn by the browser outside the page, and opening it
+    // takes focus from the window.
+    const presets = document.createElement("div");
+    presets.className = "ray-curve-presets";
+    presets.setAttribute("role", "group");
+    presets.setAttribute("aria-label", "Presets");
+    const presetButtons = PRESETS.slice(1).map(p => Object.assign(document.createElement("button"), { type: "button", textContent: p.name }));
+    presets.append(...presetButtons);
 
     const canvas = document.createElement("canvas");
     const ratio = Math.max(1, window.devicePixelRatio || 1);
@@ -192,7 +207,7 @@ export function openCurveEditor(node, { title = "Response curve", range = () => 
     const hint = Object.assign(document.createElement("p"), { className: "ray-curve-hint",
         textContent: "Click to add a point · drag to shape · double-click or Delete removes · [ ] pick a point" });
     const done = Object.assign(document.createElement("button"), { type: "button", className: "ray-curve-done", textContent: "Done" });
-    panel.append(heading, modeRow, canvas, info, hint, done);
+    panel.append(heading, modeRow, presets, canvas, info, hint, done);
     document.body.append(panel);
 
     // ---- state -------------------------------------------------------------------------------------
@@ -208,8 +223,8 @@ export function openCurveEditor(node, { title = "Response curve", range = () => 
     function sync() {
         linearButton.setAttribute("aria-pressed", String(!isCurve()));
         curveButton.setAttribute("aria-pressed", String(isCurve()));
-        preset.value = presetName(points);
-        preset.disabled = !isCurve();
+        const name = isCurve() ? presetName(points) : null;
+        for (const button of presetButtons) button.setAttribute("aria-pressed", String(button.textContent === name));
         canvas.style.opacity = isCurve() ? "1" : ".55";
         describe(hover);
     }
@@ -355,12 +370,12 @@ export function openCurveEditor(node, { title = "Response curve", range = () => 
 
     linearButton.addEventListener("click", () => { edit(() => { node.properties.response = "linear"; }); refresh(); });
     curveButton.addEventListener("click", () => { edit(() => { useCurve(); }); refresh(); });
-    preset.addEventListener("change", () => {
-        const chosen = PRESETS.find(p => p.name === preset.value);
+    presetButtons.forEach(button => button.addEventListener("click", () => {
+        const chosen = PRESETS.find(p => p.name === button.textContent);
         if (!chosen) return;
         edit(() => { points = chosen.points.map(p => [...p]); selected = null; useCurve(); });
         refresh();
-    });
+    }));
 
     // ---- closing and placing -----------------------------------------------------------------------
     const stop = new AbortController();
@@ -368,11 +383,32 @@ export function openCurveEditor(node, { title = "Response curve", range = () => 
     done.addEventListener("click", close);
     panel.addEventListener("keydown", event => { event.stopPropagation(); if (event.key === "Escape") { event.preventDefault(); close(); } });
     window.addEventListener("pointerdown", event => { if (!panel.contains(event.target)) close(); }, { capture: true, signal: stop.signal });
-    window.addEventListener("resize", close, { signal: stop.signal });
-    window.addEventListener("blur", close, { signal: stop.signal });
-    const box = panel.getBoundingClientRect(), margin = 8;
-    panel.style.left = `${Math.max(margin, Math.min(lastPointer[0], window.innerWidth - box.width - margin))}px`;
-    panel.style.top = `${Math.max(margin, Math.min(lastPointer[1], window.innerHeight - box.height - margin))}px`;
+    const margin = 8;
+    const place = (x, y) => {
+        const box = panel.getBoundingClientRect();
+        const left = Math.max(margin, Math.min(x, window.innerWidth - box.width - margin));
+        const top = Math.max(margin, Math.min(y, window.innerHeight - box.height - margin));
+        panel.style.left = `${left}px`; panel.style.top = `${top}px`;
+        return [left, top];
+    };
+    const [startX, startY] = savedPosition || lastPointer;
+    place(startX, startY);
+    window.addEventListener("resize", () => place(panel.getBoundingClientRect().left, panel.getBoundingClientRect().top), { signal: stop.signal });
+
+    // Drag the title bar to move the panel; it reopens wherever it was left.
+    let moving = null;
+    heading.addEventListener("pointerdown", event => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        const box = panel.getBoundingClientRect();
+        moving = { id: event.pointerId, dx: event.clientX - box.left, dy: event.clientY - box.top };
+        try { heading.setPointerCapture(event.pointerId); } catch { /* the pointer is already gone */ }
+    });
+    heading.addEventListener("pointermove", event => {
+        if (!moving || event.pointerId !== moving.id) return;
+        savedPosition = place(event.clientX - moving.dx, event.clientY - moving.dy);
+    });
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) heading.addEventListener(type, () => { moving = null; });
     node._rayCurveEditor = { close };
     draw(); sync();
     (isCurve() ? canvas : curveButton).focus({ preventScroll: true });
