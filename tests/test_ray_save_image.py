@@ -94,10 +94,11 @@ class SaveTests(unittest.TestCase):
 
     def test_folder_paths_and_prefix_boundary(self):
         result = self.run_save(directory="nested/folder")
-        self.assertEqual(Path(result["ray_saved"][0]).parent, self.root / "output/nested/folder")
+        # Compare canonical paths: Windows can hand out the 8.3 short form of the temp folder.
+        self.assertEqual(Path(result["ray_saved"][0]).parent.resolve(), (self.root / "output/nested/folder").resolve())
         absolute = self.root / "chosen elsewhere"
         result = self.run_save(directory=str(absolute))
-        self.assertEqual(Path(result["ray_saved"][0]).parent, absolute)
+        self.assertEqual(Path(result["ray_saved"][0]).parent.resolve(), absolute.resolve())
         for prefix in ("../escape", "C:\\escape", "name:stream", "bad\x00name"):
             with self.assertRaises(ValueError): self.run_save(filename_prefix=prefix)
         with self.assertRaises(ValueError): self.run_save(save_image="invalid")

@@ -278,7 +278,9 @@ def _select_url(urls: list, recent: deque, rng, deterministic: bool) -> str:
         pick = rng.choice(urls)
         if pick not in recent:
             return pick
-    return rng.choice(urls)
+    # Every page was seen recently (a pool smaller than the window): at least skip the one just shown.
+    last = recent[-1] if recent else None
+    return rng.choice([u for u in urls if u != last] or urls)
 
 
 def _build_outputs(prompt_multiline: str, image_url: Optional[str], timeout: int):
