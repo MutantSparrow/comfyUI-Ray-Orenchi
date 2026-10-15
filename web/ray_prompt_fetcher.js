@@ -31,6 +31,7 @@ function applyMode(node, mode) {
         commonSetHidden(node, w, owned && !w.name.startsWith(keep));
     }
     applyModeStyling(node, mode);
+    updateRefreshControls(node, mode);
     if (typeof node.computeSize === "function") {
         const sz = node.computeSize();
         if (Array.isArray(node.size)) node.size[1] = sz[1];
@@ -76,9 +77,103 @@ function updateDexterCategoryWidget(node, list, anyLabel) {
     node.setDirtyCanvas?.(true, true);
 }
 
+// ---------------------------------------------------------------------------
+// Refresh button + status line (PromptDexter sitemap, CivitAI cache)
+// ---------------------------------------------------------------------------
+
+const REFRESH_LABEL = {
+    [MODE_DEXTER]: "🔄 refresh sitemap",
+    [MODE_CIVITAI]: "🔄 clear cache",
+};
+
+async function postRefresh(url) {
+    try {
+        const r = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+        });
+        return await r.json();
+    } catch (e) {
+        return { ok: false, error: String(e) };
+    }
+}
+
+function setStatus(node, text, clearAfterMs = 0) {
+    const el = node._rayScraperStatus;
+    if (!el) return;
+    el.textContent = text;
+    if (clearAfterMs) {
+        setTimeout(() => { if (el.textContent === text) el.textContent = node._rayStatusDefault || ""; }, clearAfterMs);
+    }
+}
+
+async function refreshSource(node) {
+    const mode = getWidget(node, "scraper_mode")?.value;
+    if (mode === MODE_DEXTER) {
+        const category = getWidget(node, "dexter__category");
+        const previous = category?.value;
+        setStatus(node, "refreshing…");
+        const res = await postRefresh("/ray_promptdexter/refresh");
+        if (res.ok) {
+            updateDexterCategoryWidget(node, res.categories || [], res.any || "(any)");
+            if (previous && (res.categories || []).includes(previous) && category) category.value = previous;
+            setStatus(node, `ok — ${res.prompt_url_count || 0} prompts, ${(res.categories || []).length} categories`, 3000);
+        } else {
+            setStatus(node, `refresh failed: ${res.error || "unknown"}`);
+        }
+    } else if (mode === MODE_CIVITAI) {
+        setStatus(node, "clearing…");
+        const res = await postRefresh("/ray_civitai/refresh");
+        setStatus(node, res.ok ? "cache cleared — next run repages" : `refresh failed: ${res.error || "unknown"}`, 3000);
+    }
+    node.setDirtyCanvas?.(true, true);
+}
+
+function injectRefreshControls(node) {
+    if (node._rayRefreshButton) return;
+    const status = document.createElement("div");
+    status.style.cssText = "padding:2px 6px;font-size:10px;color:#aaa;min-height:14px;";
+    if (typeof node.addDOMWidget === "function") {
+        node._rayStatusWidget = node.addDOMWidget("ray_scraper_status", "RAY_SCRAPER_STATUS", status, {
+            serialize: false, hideOnZoom: false, getMinHeight: () => 18, getHeight: () => 18,
+        });
+    }
+    node._rayScraperStatus = status;
+    const button = node.addWidget("button", REFRESH_LABEL[MODE_DEXTER], null, () => refreshSource(node), { serialize: false });
+    if (button) button.serialize = false;
+    node._rayRefreshButton = button;
+}
+
+function updateRefreshControls(node, mode) {
+    const wanted = mode === MODE_DEXTER || mode === MODE_CIVITAI;
+    if (node._rayRefreshButton) {
+        if (wanted) node._rayRefreshButton.name = REFRESH_LABEL[mode];
+        commonSetHidden(node, node._rayRefreshButton, !wanted);
+    }
+    if (node._rayStatusWidget) commonSetHidden(node, node._rayStatusWidget, !wanted);
+    if (node._rayScraperStatus) node._rayScraperStatus.style.display = wanted ? "" : "none";
+    // The CivitAI token note only applies to CivitAI mode.
+    node._rayStatusDefault = mode === MODE_CIVITAI ? (node._rayCivitNote || "") : "";
+    setStatus(node, node._rayStatusDefault);
+}
+
+async function checkCivitToken(node) {
+    try {
+        const r = await fetch("/ray_civitai/base_models");
+        const opts = await r.json();
+        if (opts && opts.has_token === false) {
+            node._rayCivitNote = `no ${opts.token_file || "civitai.secret"} — public access only`;
+            updateRefreshControls(node, getWidget(node, "scraper_mode")?.value);
+        }
+    } catch { /* offline or route missing: no note */ }
+}
+
 async function bootstrap(node) {
     const modeW = getWidget(node, "scraper_mode");
     if (!modeW) return;
+    injectRefreshControls(node);
+    checkCivitToken(node);
 
     // Populate Dexter categories asynchronously — same source the dedicated
     // node uses. INPUT_TYPES already seeded the dropdown, but the live list

@@ -203,6 +203,7 @@ export const RAY_HELP_DEFS = {
             bullets: [
                 "Widgets are prefixed by source: `local__`, `dexter__` and `civitai__`. Hidden widgets keep their values.",
                 "Every mode produces the same four outputs; `image_path` is empty for the web sources.",
+                "PromptDexter mode has a **refresh sitemap** button and CivitAI mode a **clear cache** button; the status line under them also notes when no `civitai.secret` is present.",
                 "Local Folder mode returns positive prompts only; text encoders that feed only a sampler's negative input are skipped.",
             ],
         }],
