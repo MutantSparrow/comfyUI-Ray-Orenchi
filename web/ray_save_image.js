@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { findWidget, setWidgetHidden } from "./_common.js";
+import { browsePath, notify } from "./browse_common.js";
 
 const modes = ["none", "1", "2", "both"];
 const historyKey = "ray.saveImage.paths.v1";
@@ -41,11 +42,11 @@ function styles() {
 .dom-widget:has(> .ray-save) {pointer-events:none !important}
 .ray-save {box-sizing:border-box;width:100%;height:100%;padding:2px;display:flex;flex-direction:column;gap:2px;background:#000;color:#eee;font:12px system-ui;border-radius:8px;overflow:hidden;pointer-events:none}
 .ray-save button,.ray-save select,.ray-save-handle {pointer-events:auto}
-.ray-save *, .ray-save-dialog * {box-sizing:border-box}
-.ray-save button,.ray-save select,.ray-save-dialog button,.ray-save-dialog input,.ray-save-dialog select {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:4px;padding:3px 6px;min-width:0}
+.ray-save * {box-sizing:border-box}
+.ray-save button,.ray-save select {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:4px;padding:3px 6px;min-width:0}
 .ray-save button:disabled {opacity:.4}
-.ray-save button:hover:not(:disabled),.ray-save-dialog button:hover {background:#454753}
-.ray-save :focus-visible,.ray-save-dialog :focus-visible {outline:2px solid #b9a4fa;outline-offset:2px}
+.ray-save button:hover:not(:disabled) {background:#454753}
+.ray-save :focus-visible {outline:2px solid #b9a4fa;outline-offset:2px}
 .ray-save-toolbar {display:flex;gap:5px;align-items:center;flex-shrink:0}
 .ray-save-toolbar label {white-space:nowrap;font-size:11px}
 .ray-save > .ray-save-toolbar {gap:4px}
@@ -64,56 +65,16 @@ function styles() {
 .ray-save-info > span:empty {display:none}
 .ray-save-nav {position:absolute;right:6px;bottom:6px;display:flex;align-items:center;gap:3px;padding:2px;border-radius:5px;background:#000b;font-size:10px;color:#ddd}
 .ray-save-nav button {padding:1px 6px}
-.ray-save-dialog {width:min(620px,90vw);max-height:80vh;background:#24252b;color:#eee;border:1px solid #62616d;border-radius:10px;padding:16px;font:13px system-ui}
-.ray-save-dialog::backdrop {background:#0008}
-.ray-save-dialog h3 {margin:0 0 12px;font-size:16px}
-.ray-save-dialog .ray-save-toolbar {margin-bottom:10px}
-.ray-save-dialog input {flex:1;width:100%}
-.ray-save-folders {display:flex;flex-direction:column;gap:4px;overflow:auto;height:260px;margin:10px 0}
-.ray-save-folders button {text-align:left}
-.ray-save-dialog .ray-save-error {min-height:18px;color:#ffb1aa;overflow-wrap:anywhere}
 `;
     document.head.append(css);
 }
 
-function folderPicker(node) {
-    const dialog = element("dialog", "ray-save-dialog");
-    dialog.append(element("h3", "", "Choose save folder"));
-    const row = element("div", "ray-save-toolbar"), path = element("input");
-    path.setAttribute("aria-label", "Folder path");
-    const list = element("div", "ray-save-folders"), error = element("div", "ray-save-error");
-    const roots = element("select"); roots.setAttribute("aria-label", "Drive");
-    const choose = button("Use this folder", () => {
-        if (!current) return;
-        update(node, "directory", current); dialog.close();
-    });
-    let current = "", parent = "", requestNumber = 0;
-    const controller = new AbortController();
-    async function load(value) {
-        const request = ++requestNumber; error.textContent = "Loading…"; choose.disabled = true;
-        try {
-            const response = await api.fetchApi(`/ray/save-image/folders?${new URLSearchParams({path: value})}`, {signal: controller.signal});
-            const data = await response.json();
-            if (request !== requestNumber || !dialog.isConnected) return;
-            if (!response.ok) throw new Error(data.error || "Cannot open folder.");
-            current = data.path; parent = data.parent; path.value = current;
-            roots.replaceChildren(...data.roots.map(root => { const o = element("option", "", root); o.value = root; return o; }));
-            roots.value = data.roots.find(root => current.toLowerCase().startsWith(root.toLowerCase())) || data.roots[0];
-            list.replaceChildren(...data.folders.map(folder => button(`▸ ${folder.name}`, () => load(folder.path))));
-            error.textContent = data.folders.length ? "" : "No subfolders. You can choose this folder.";
-            choose.disabled = false;
-        } catch (e) { if (e.name !== "AbortError" && request === requestNumber) error.textContent = e.message; }
-    }
-    roots.onchange = () => load(roots.value);
-    path.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); load(path.value); } });
-    row.append(roots, button("↑", () => load(parent)), path, button("Open", () => load(path.value)));
-    const footer = element("div", "ray-save-toolbar");
-    footer.append(button("Cancel", () => dialog.close()), choose);
-    dialog.append(row, list, error, footer);
-    dialog.addEventListener("close", () => { controller.abort(); dialog.remove(); node._raySaveDialog = null; });
-    dialog.addEventListener("keydown", e => e.stopPropagation());
-    node._raySaveDialog?.close(); node._raySaveDialog = dialog;
-    document.body.append(dialog); dialog.showModal(); load(findWidget(node, "directory")?.value || "");
+// The Browse button opens the system's own folder dialog (see browse_routes.py).
+async function browseFolder(node) {
+    try {
+        const picked = await browsePath("folder", findWidget(node, "directory")?.value || "", { title: "Choose the save folder" });
+        if (picked) update(node, "directory", picked);
+    } catch (error) { notify(error.message); }
 }
 
 function build(node) {
@@ -124,7 +85,7 @@ function build(node) {
     window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") spaceHeld = false; }, {capture: true, signal: navigation.signal});
     window.addEventListener("blur", () => { spaceHeld = false; }, {signal: navigation.signal});
     const root = element("div", "ray-save"), toolbar = element("div", "ray-save-toolbar");
-    const browse = button("Browse…", () => folderPicker(node));
+    const browse = button("Browse…", () => browseFolder(node));
     const recent = element("select"); recent.title = "Last three save folders"; recent.setAttribute("aria-label", "Recent save folders");
     function recentOptions() {
         recent.replaceChildren(element("option", "", ""), ...history().map(p => { const o = element("option", "", p); o.value = p; return o; }));
@@ -231,7 +192,7 @@ function build(node) {
             if (message.ray_directory?.[0]) { remember(message.ray_directory[0]); recentOptions(); }
             show();
         },
-        destroy() { navigation.abort(); node._raySaveDialog?.close(); first.removeAttribute("src"); second.removeAttribute("src"); },
+        destroy() { navigation.abort(); first.removeAttribute("src"); second.removeAttribute("src"); },
     };
     show(); ui.sync(); return ui;
 }

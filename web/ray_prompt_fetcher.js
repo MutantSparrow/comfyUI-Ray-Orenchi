@@ -1,3 +1,4 @@
+import { addBrowseButton } from "./browse_common.js";
 import { app } from "../../scripts/app.js";
 import {
     applyBucketTint,
@@ -26,9 +27,10 @@ function applyMode(node, mode) {
     for (const w of node.widgets || []) {
         // Only hide widgets owned by another mode. Shared widgets
         // (scraper_mode, seed, and the frontend's control_after_generate)
-        // stay visible.
-        const owned = prefixes.some((p) => w.name?.startsWith(p));
-        commonSetHidden(node, w, owned && !w.name.startsWith(keep));
+        // stay visible. A Browse button follows the widget it belongs to.
+        const owner = w.ownerName || w.name;
+        const owned = prefixes.some((p) => owner?.startsWith(p));
+        commonSetHidden(node, w, owned && !owner.startsWith(keep));
     }
     applyModeStyling(node, mode);
     updateRefreshControls(node, mode);
@@ -173,6 +175,7 @@ async function bootstrap(node) {
     const modeW = getWidget(node, "scraper_mode");
     if (!modeW) return;
     injectRefreshControls(node);
+    addBrowseButton(node, "local__folder", { kind: "folder", title: "Choose a folder of images" });
     checkCivitToken(node);
 
     // Populate Dexter categories asynchronously — same source the dedicated

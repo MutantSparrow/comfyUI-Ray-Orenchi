@@ -5,6 +5,6 @@ export const api = {
     },
     async fetchApi(url, options) {
         this.lastRequest = {url, options};
-        return {ok:true, async json() {return {path:'C:/Images',parent:'C:/',roots:['C:/'],folders:[{name:'Exports',path:'C:/Images/Exports'}]};}};
+        return {ok:true, async json() {return {ok:true};}};
     },
 };
