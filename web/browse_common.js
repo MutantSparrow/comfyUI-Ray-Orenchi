@@ -1,9 +1,8 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
-// Browse buttons for the nodes that take a folder or file path. A web page cannot read the absolute path of
-// a folder from the browser's own picker, so the button asks the ComfyUI server to open the operating
-// system's dialog (the server runs on this computer) and writes the path it sends back into the widget.
+// Browse: the folder and file icons in the Ray panels. A web page is never told where a picked file lives, so
+// the ComfyUI server shows the dialog (browse_routes.py) and the path it sends back goes into the widget.
 
 export const IMAGE_FILTERS = [["Images", ["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff", "gif"]]];
 
@@ -54,31 +53,4 @@ export async function browseInto(node, targetName, { kind = "folder", title, fil
         notify(error.message);
         return false;
     }
-}
-
-// Adds "📂 Browse…" directly under the widget called `targetName`. The button keeps `ownerName` so a node that
-// hides widgets by mode (the Prompt Scraper) can hide it together with its path widget.
-export function addBrowseButton(node, targetName, { kind = "folder", title, filters, label } = {}) {
-    const widgets = node.widgets;
-    const target = widgets?.find(w => w.name === targetName);
-    if (!target || typeof node.addWidget !== "function") return null;
-    if (widgets.some(w => w.ownerName === targetName && w.isRayBrowse)) return null;
-    const idle = label || (kind === "file" ? "📂 Browse for a file…" : "📂 Browse for a folder…");
-    let busy = false;
-    const button = node.addWidget("button", idle, null, async () => {
-        if (busy) return;
-        busy = true;
-        button.name = "⏳ Waiting for the dialog…";
-        node.setDirtyCanvas?.(true, true);
-        try { await browseInto(node, targetName, { kind, title, filters }); }
-        finally { busy = false; button.name = idle; node.setDirtyCanvas?.(true, true); }
-    }, { serialize: false });
-    if (!button) return null;
-    button.serialize = false;
-    button.isRayBrowse = true;
-    button.ownerName = targetName;
-    // Straight under the path widget, not at the end of the node.
-    widgets.splice(widgets.indexOf(button), 1);
-    widgets.splice(widgets.indexOf(target) + 1, 0, button);
-    return button;
 }

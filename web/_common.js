@@ -164,6 +164,13 @@ const _ORIG_COMPUTE = "_rayOrigCompute";
 export function setWidgetHidden(node, widget, hidden) {
     if (!widget) return;
     hidden = !!hidden;
+    // A widget drawn by a Ray panel (ray_panel.js) stays hidden natively; hiding it here (by mode, compact
+    // view...) only decides whether its panel row shows.
+    if (widget.rayPanel) {
+        widget.rayLogicHidden = hidden;
+        widget.rayPanel.schedule();
+        hidden = true;
+    }
     widget.options ||= {};
     widget.options.hidden = hidden;
     widget.hidden = hidden;
