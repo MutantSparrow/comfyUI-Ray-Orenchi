@@ -2,6 +2,7 @@ import { applyBucketTint, findWidget, mountDymoLabel, setWidgetHidden } from "./
 import { getBrushedAluminumURL } from "./knob_styles.js";
 import { isMuted, setMuted } from "./analog_audio.js";
 import { FAMILIES, familyOf } from "./analog_themes.js";
+import { openCurveEditor } from "./analog_curve.js";
 
 let nextSvgId = 0;
 
@@ -349,7 +350,7 @@ export function repairAnalogWorkflow(data, name, title, outputs) {
 // adds menu entries after the common ones; `ui.compactWidgets()` lists extra widgets compact mode hides.
 export function registerAnalog(app, { kind, name, title, styles, defaultStyle, valueName, configNames = [], outputs, build, migrate,
     extensionName = `Ray.${kind === "knob" ? "Knob" : "Switch"}`, menuName = kind === "knob" ? "Control" : "Switch",
-    heights = () => ({ min: 232, max: 232 }), menuItems = () => [] }) {
+    heights = () => ({ min: 232, max: 232 }), menuItems = () => [], curve = false }) {
     wheelApp = app;
     app.registerExtension({
         name: extensionName,
@@ -368,6 +369,10 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                 this.addProperty?.("style", this.properties.style, "enum", { values: Object.keys(styles) });
                 this.addProperty?.("compact", this.properties.compact, "boolean");
                 this.addProperty?.("ray_label", this.properties.ray_label, "string");
+                if (curve) {
+                    if (!["linear", "curve"].includes(this.properties.response)) this.properties.response = "linear";
+                    this.addProperty?.("response", this.properties.response, "enum", { values: ["linear", "curve"] });
+                }
                 const widget = findWidget(this, valueName);
                 // Very old frontends retain the usable native numeric/boolean widget.
                 if (!widget || typeof this.addDOMWidget !== "function") return result;
@@ -433,6 +438,7 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
             const removed = proto.onRemoved;
             proto.onRemoved = function () {
                 this._rayAnalog?.cancelDrag?.();
+                this._rayCurveEditor?.close();
                 return removed?.apply(this, arguments);
             };
             const propertyChanged = proto.onPropertyChanged;
@@ -464,6 +470,12 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                             this._rayAnalog?.applyCompact();
                         }) },
                     { content: "Edit label…", callback: () => this._rayDymo?.beginEdit() },
+                    ...(curve ? [
+                        { content: `${this.properties.response === "curve" ? "" : "● "}Linear response`,
+                            callback: () => editNode(this, () => { this.properties.response = "linear"; this._rayAnalog?.render(); }) },
+                        { content: `${this.properties.response === "curve" ? "● " : ""}Curve response…`,
+                            callback: () => setTimeout(() => { if (this._rayAnalog) openCurveEditor(this, this._rayAnalog.curveInfo()); }, 0) },
+                    ] : []),
                     ...menuItems(this),
                     { content: `${isWheelOn() ? "● " : ""}Mouse wheel control`, callback: () => setWheelOn(!isWheelOn()) },
                     { content: isMuted() ? "🔈 Unmute sound" : "🔇 Mute sound", callback: () => setMuted(!isMuted()) },
