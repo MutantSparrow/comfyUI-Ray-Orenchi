@@ -1,6 +1,7 @@
 import { applyBucketTint, findWidget, mountDymoLabel, setWidgetHidden } from "./_common.js";
 import { getBrushedAluminumURL } from "./knob_styles.js";
 import { isMuted, setMuted } from "./analog_audio.js";
+import { FAMILIES, familyOf } from "./analog_themes.js";
 
 let nextSvgId = 0;
 
@@ -176,6 +177,7 @@ function injectStyles() {
 .ray-style-swatch { flex:none; width:10px; height:10px; border-radius:3px; border:1px solid #0009; background:#b6b8bb; }
 .ray-style-swatch[data-panel="charcoal"] { background:#34464a; }
 .ray-style-swatch[data-panel="olive"] { background:#c6c8ad; }
+.ray-style-kind { padding-left:8px; font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#8d9096; }
 .ray-style-mark { margin-left:auto; padding-left:12px; }
 .ray-analog-panel .ray-analog-face {
     display:block; flex:0 0 140px; width:140px; height:140px; max-width:100%;
@@ -228,13 +230,14 @@ export function openStylePicker(node, kind, styles) {
     picker.className = "ray-style-picker";
     picker.setAttribute("role", "menu");
     picker.setAttribute("aria-label", `${{ knob: "Control", deck: "Button deck", fader: "Fader" }[kind] || "Switch"} style`);
-    // Knob faces first, then sliders, each under a heading.
-    const entries = Object.entries(styles).sort(([, a], [, b]) => (a.kind === "slider") - (b.kind === "slider"));
+    // Every analog control offers the same styles, grouped by family.
+    const rank = style => { const at = FAMILIES.indexOf(familyOf(style.label)); return at < 0 ? FAMILIES.length : at; };
+    const entries = Object.entries(styles).sort(([, a], [, b]) => rank(a) - rank(b) || a.label.localeCompare(b.label));
     const items = [];
     let group = null;
     for (const [key, style] of entries) {
-        const heading = kind === "knob" ? (style.kind === "slider" ? "Sliders" : "Knobs") : null;
-        if (heading && heading !== group) {
+        const heading = familyOf(style.label);
+        if (heading !== group) {
             const title = document.createElement("div");
             title.className = "ray-style-heading"; title.setAttribute("role", "presentation"); title.textContent = heading;
             picker.append(title);
@@ -247,8 +250,13 @@ export function openStylePicker(node, kind, styles) {
         const swatch = document.createElement("span");
         swatch.className = "ray-style-swatch"; swatch.dataset.panel = style.panel || "silver";
         const label = document.createElement("span");
-        label.textContent = style.label;
+        label.textContent = style.label.includes(" · ") ? style.label.split(" · ").slice(1).join(" · ") : style.label;
         item.append(swatch, label);
+        if (style.kind === "slider") {
+            const tag = document.createElement("span");
+            tag.className = "ray-style-kind"; tag.textContent = "slider";
+            item.append(tag);
+        }
         if (current) {
             const mark = document.createElement("span");
             mark.className = "ray-style-mark"; mark.textContent = "●";

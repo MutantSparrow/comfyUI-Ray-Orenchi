@@ -1,18 +1,27 @@
-// Fader bank looks: the cap colours, the stripe across it, the slot and the scale marks.
-export const FADER_STYLES = {
+import { THEMES, MARK, SLOT, materialColors } from "./analog_themes.js";
+
+// Fader bank looks: the cap colours, the stripe across it, the slot and the scale marks. The first three are
+// drawn for the bank; every other style is built from its description in analog_themes.js.
+const NATIVE_FADERS = {
     console_black: {
-        label: "Console black", panel: "charcoal",
+        label: "Console · Black Faders", panel: "charcoal",
         capTop: "#a2a7ab", capBottom: "#464a4e", stripe: "#f4f4f0", slot: "#06090a", tick: "#a7b1a6",
     },
     studio_silver: {
-        label: "Studio silver", panel: "silver",
+        label: "Mastering · Silver Faders", panel: "silver",
         capTop: "#383c40", capBottom: "#101213", stripe: "#ffffff", slot: "#2b2f32", tick: "#3a3f43",
     },
     vintage_cream: {
-        label: "Vintage cream", panel: "olive",
+        label: "Broadcast · Cream Faders", panel: "olive",
         capTop: "#f4eed8", capBottom: "#c4ba94", stripe: "#b3261e", slot: "#2a2f24", tick: "#46503c",
     },
 };
+
+const generated = Object.fromEntries(Object.entries(THEMES).filter(([id]) => !(id in NATIVE_FADERS)).map(([id, t]) => {
+    const { hi, lo } = materialColors(t.body);
+    return [id, { label: t.label, panel: t.panel, capTop: hi, capBottom: lo, stripe: t.accent, slot: SLOT[t.panel], tick: MARK[t.panel] }];
+}));
+export const FADER_STYLES = { ...NATIVE_FADERS, ...generated };
 export const DEFAULT_FADER_STYLE = "console_black";
 
 export function getFaderStyleCSS() {

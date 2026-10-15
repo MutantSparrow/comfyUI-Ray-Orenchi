@@ -4,6 +4,8 @@
 // the entry text. `legend: "cutout"` prints the text inside the button; `legend: "tape"` puts it on a
 // Dymo sticker under the button. Style IDs stay stable for saved workflows.
 
+import { THEMES, MATERIALS, isLight, voiceFor, darken, lighten, mix } from "./analog_themes.js";
+
 const lin = (id, stops, [x1, y1, x2, y2] = [0, 0, 0, 1]) =>
     `<linearGradient id="${id}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">${stops.map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`).join("")}</linearGradient>`;
 const rad = (id, stops, [cx, cy, r] = [.5, .5, .5]) =>
@@ -116,6 +118,57 @@ export const DECK_STYLES = {
           <rect x="-29" y="40" width="58" height="6" fill="#050808"/>`),
     },
 };
+
+// A button for every style that was not drawn as one, from the style's description in analog_themes.js.
+// Styles with a lit window print their text inside it; the rest light a small LED and use a Dymo sticker.
+function generatedButton(id, t) {
+    const cutout = (t.legend || (t.panel === "charcoal" ? "cutout" : "tape")) === "cutout";
+    const light = isLight(t.body);
+    const lit = t.lamp, litHi = lighten(lit, .55), litLo = darken(lit, .45);
+    const defs = [
+        lin("bez", MATERIALS[t.trim] || STEEL, [0, 0, .8, 1]), lin("cap", MATERIALS[t.body], [0, 0, .5, 1]),
+        lin("lit", [[0, litHi], [.4, lit], [1, litLo]]), lin("dim", [[0, mix(lit, "#000000", .72)], [1, darken(lit, .88)]]),
+    ].join("");
+    const edge = light ? "#9c9b85" : "#000";
+    if (cutout) {
+        return {
+            legend: "cutout", box: [54, 40, 15],
+            svg: box(`rd--${id}`, defs, `
+              <rect x="-43" y="-40" width="88" height="88" rx="6" fill="#000" opacity=".3"/>
+              <rect x="-44" y="-44" width="88" height="88" rx="5" fill="url(#bez)"/>
+              <rect x="-40" y="-40" width="80" height="80" rx="3" fill="#080c0d"/>
+              <g data-toggle data-on-transform="translate(0,2.4)" data-off-transform="translate(0,-.6)">
+                <rect x="-36" y="-36" width="72" height="72" rx="3" fill="url(#cap)" stroke="${edge}" stroke-opacity=".6"/>
+                <rect data-on-only x="-31" y="-31" width="62" height="62" rx="2" fill="url(#lit)"/>
+                <rect data-on-only x="-31" y="-31" width="62" height="62" rx="2" fill="#fff" opacity=".16"/>
+                <rect data-off-only x="-31" y="-31" width="62" height="62" rx="2" fill="url(#dim)"/>
+                <path d="M-29 -29.5H29" stroke="${light ? "#ffffff" : "#c4cacb"}" stroke-opacity=".4"/>
+                ${text("on", darken(lit, .86))}${text("off", mix(lit, "#000000", .38))}
+              </g>`),
+        };
+    }
+    return {
+        legend: "tape",
+        svg: box(`rd--${id}`, defs, `
+          <rect x="-43" y="-40" width="88" height="88" rx="8" fill="#000" opacity=".26"/>
+          <rect x="-44" y="-44" width="88" height="88" rx="7" fill="url(#bez)"/>
+          <rect x="-40" y="-40" width="80" height="80" rx="5" fill="#101a1b"/>
+          <g data-toggle data-on-transform="translate(0,2.2)" data-off-transform="translate(0,-.8)">
+            <rect x="-35" y="-35" width="70" height="70" rx="4" fill="url(#cap)" stroke="${edge}" stroke-opacity=".6" stroke-width=".7"/>
+            <rect data-on-only x="-35" y="-35" width="70" height="70" rx="4" fill="#000" opacity=".12"/>
+            ${[4, 9, 14, 19, 24, 29].map(y => `<path d="M-29 ${y}H29" stroke="${t.accent}" stroke-opacity=".28" stroke-width=".6"/>`).join("")}
+            <rect x="-15" y="-29" width="30" height="10" rx="2" fill="#161810" stroke="#060e10"/>
+            <rect data-on-only x="-19" y="-32" width="38" height="16" rx="5" fill="${lit}" opacity=".24"/>
+            <rect data-on-only x="-13" y="-27.5" width="26" height="7" rx="1.4" fill="url(#lit)"/>
+            <rect data-off-only x="-13" y="-27.5" width="26" height="7" rx="1.4" fill="${mix(lit, "#000000", .78)}"/>
+          </g>`),
+    };
+}
+
+for (const [id, t] of Object.entries(THEMES)) {
+    if (id in DECK_STYLES) continue;
+    DECK_STYLES[id] = { label: t.label, panel: t.panel, sound: voiceFor(id, "deck"), ...generatedButton(id, t) };
+}
 
 export const DEFAULT_DECK_STYLE = "amber_keys";
 
