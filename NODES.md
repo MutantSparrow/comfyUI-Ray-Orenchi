@@ -5,12 +5,12 @@ four bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
 - `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck).
-- `👑 Ray/🔧 Tools` — scrapers, prompt scraper, metadata inspector, TXT folder, Save Image.
+- `👑 Ray/🔧 Tools` — prompt scraper, metadata inspector, TXT folder, Save Image.
 - `👑 Ray/💬 LLM` — local vision-language inference and folder captioning.
 
-Every node has a black body and a header colored by its bucket. Mode-tinted
-nodes (`RayCivitAI`, `RayPromptFetcher`) hue-shift their
-header color rather than pick a bespoke one.
+Every node has a black body and a header colored by its bucket. The mode-tinted
+Prompt Scraper (`RayPromptFetcher`) hue-shifts its
+header color per mode rather than pick a bespoke one.
 
 ---
 
@@ -159,88 +159,6 @@ Pressing a button plays its latch sound, followed by a softer release as the pre
 
 ---
 
-## 🔧 Ray's Tools: PromptDexter Scraper (`RayPromptDexter`)
-
-**Purpose.** Fetches a random prompt + matching image from [promptdexter.com](https://promptdexter.com/). Discovery is **sitemap-driven**, so picks reach deep content (not just homepage top row). Seed-deterministic — freeze the seed for reproducible output. Maintains a per-node 20-entry LRU cache so consecutive runs avoid recent repeats; with a frozen seed, the cache forces a deterministic skip to the next seed-shuffled candidate. When a prompt page has no associated image, the IMAGE output falls back to a 1×1 black tensor so downstream nodes never break.
-
-**Category:** `👑 Ray/🔧 Tools`
-
-| Pin | Type | Notes |
-|-----|------|-------|
-| **Control** `seed` | int | `-1` for random (true OS randomness, ignores cache deterministically). Any `≥0` value is reproducible. |
-| **Control** `category` | dropdown | `(any)` or any category slug discovered from the sitemap (e.g. `anime`, `people`, `cyberpunk`). Selecting a slug restricts picks to that category page's listed prompts. |
-| **Control** `clear_cache` | bool | Drop this node's 20-entry deque before selection. |
-| **Button** `🔄 refresh sitemap` | — | Click to re-fetch `/sitemap.xml` and reload the category list now. Triggered on click, not on workflow run. Sitemap is otherwise cached for the Python process lifetime. |
-| **Control** `timeout` (optional) | int 2–60 | HTTP timeout per request, in seconds. |
-| **Output** `prompt_single` | STRING | Whitespace-collapsed single-line prompt. |
-| **Output** `prompt_multiline` | STRING | Original prompt with newlines preserved. |
-| **Output** `image` | IMAGE | Matching image as BHWC float32 [0,1]. 1×1 black tensor if the page has no image or fetch fails. |
-
----
-
-## 🔧 Ray's Tools: CivitAI Gallery Scraper (`RayCivitAI`)
-
-**Purpose.** Fetches a random gallery image + its prompt from [civitai.com](https://civitai.com/) via the public REST API (`GET /api/v1/images`). Items with a usable prompt are kept — either the direct `meta.prompt` field, or, when missing, the text salvaged from a ComfyUI workflow blob embedded in `meta.comfy` (CLIPTextEncode / Text Multiline nodes etc.). Items with no extractable prompt are skipped. Seed-deterministic, per-node 20-entry LRU to avoid consecutive repeats, page cache keyed by (mode, period, sort, base_model, username). 1×1 black tensor fallback if an image fails to download.
-
-**Access strategy.** REST API (not scraping, not MCP). Public endpoint, no key required for read access. Higher-tier content unlocks if a token file is present at `civitai.secret` inside the node-pack directory — never hard-coded. The legacy `nsfw` filter is bypassed in favour of `browsingLevel` (bitmask: PG=1, PG13=2, R=4, X=8, XXX=16), which the API documents as taking precedence. Blue = `PG | PG13` = `3`; Red = all levels OR'd = `31`.
-
-**Category:** `👑 Ray/🔧 Tools`
-
-| Pin | Type | Notes |
-|-----|------|-------|
-| **Control** `seed` | int | `-1` for random (true OS randomness). Any `≥0` value is reproducible. |
-| **Control** `mode` | dropdown | `Blue (SFW)` → `browsingLevel=3` (PG \| PG13). `Red (NSFW)` → `browsingLevel=31` (all levels). JS extension tints the node header to match. |
-| **Control** `base_model` | dropdown | `Any` or a specific base model (`SDXL 1.0`, `Pony`, `Illustrious`, `Flux.1 D`, `Flux.2 Klein 9B`, `Chroma`, `Qwen`, `Krea 2`, `Z-Image Turbo`, `Wan Video`, etc.). Passed to the API as `baseModels`. List is sampled live from the gallery — CivitAI surfaces new architectures as uploaders tag them, so the list is refreshed periodically. |
-| **Control** `period` | dropdown | `AllTime` / `Year` / `Month` / `Week` / `Day` — window for metric-based sorts. |
-| **Control** `sort` | dropdown | `Random` / `Most Reactions` / `Most Comments` / `Newest`. |
-| **Control** `username` | string | Optional. Restrict the pool to images posted by a specific CivitAI user (e.g. `VISITOR01`). Leave blank for any user. Passed to the API as `username`. When set, `period` is automatically overridden to `AllTime` so small per-user archives don't drop to zero hits inside a `Week`/`Day` window. |
-| **Button** `🔄 clear cache` | — | Click to clear both the process-wide page cache and this node's 20-entry recent-pick deque; next workflow run repages from the API. Triggered on click, not on workflow run. |
-| **Control** `timeout` (optional) | int 2–60 | HTTP timeout per request, in seconds. |
-| **Output** `prompt_single` | STRING | Whitespace-collapsed single-line prompt. |
-| **Output** `prompt_multiline` | STRING | Original prompt with newlines preserved. |
-| **Output** `image` | IMAGE | Gallery image as BHWC float32 [0,1]. 1×1 black tensor on fetch failure. |
-
-**API token.** Optional. Create `civitai.secret` inside the `comfyUI-Ray-Orenchi/` node-pack directory and paste the token as its only contents (trailing whitespace/newlines are trimmed). The token is read fresh on each request — no caching, no persistence beyond the file itself. `civitai.secret` and `*.secret` are listed in `.gitignore`; do not commit them.
-
----
-
-## 🔧 Ray's Tools: Folder Image Scraper (`RayLocalScraper`)
-
-**Purpose.** Picks a random image from a local folder and extracts any generation prompt found in its metadata. Functional sibling to the PromptDexter and CivitAI scrapers, but read off disk instead of HTTP. Seed-deterministic; per-node 20-entry LRU avoids consecutive repeats; folder listing cached until `refresh_listing` is set or the cache is cleared.
-
-**Prompt sources, in priority order:**
-1. PNG `parameters` text chunk (Automatic1111 / Forge; JSON blob variants also parsed).
-2. PNG `prompt` text chunk (ComfyUI serialized prompt graph, JSON; flat-literal fallback for JustRayzist-style writers).
-3. PNG `workflow` text chunk — API format or UI (`nodes[]`/`links[]`) format.
-4. Any other `info[]` key whose name looks prompt-shaped (`prompt_*`, `positive*`, `caption`, `description`, `comment`, `sui_image_params`, `invokeai_metadata`, `novelai_metadata`, `dream`…). JSON values are walked recursively for nested `prompt` / `positive` keys.
-5. EXIF text tags: UserComment (37510), ImageDescription (270), XPComment (40092), XPSubject / XPTitle / XPKeywords.
-6. `<image>.txt` sidecar file in the same directory.
-
-For ComfyUI graphs, the extractor first locates every text-encoder node (`CLIPTextEncode` / `CLIPTextEncodeFlux` / `CLIPTextEncodeSDXL` / `BNK_CLIPTextEncodeAdvanced` / `T5TextEncode` / `ImpactWildcardEncode` etc.). Each encoder contributes one prompt: if its `text` input is a literal string the literal is used; if it's wired to another node, the link is followed back through `ShowText` → `Text Multiline` → `String Literal` → `Text Concatenate` → primitive nodes (up to 8 hops, cycles detected) until a literal is found. Multiple text inputs on a concat-style node are joined with spaces. Encoders that only feed a sampler's `negative` input (`KSampler`, `CFGGuider`, ControlNet apply nodes and the like) are skipped, so only positive prompts come back; an encoder shared by both sides is kept. Graphs with no positive/negative sampler wiring keep every encoder. This applies to both the API `prompt` chunk and the UI `workflow` chunk.
-
-Every candidate is passed through a path-rejection filter that drops strings that look like filesystem paths (drive letters, backslash runs, bare `.safetensors` / `.ckpt` filenames), so random `C:\loras\foo.safetensors`-style fields don't leak through as prompts.
-
-If the image carries multiple positive prompts (e.g. a ComfyUI workflow with several `CLIPTextEncode` nodes), every output is emitted as a ComfyUI **list** — one entry per prompt — so downstream nodes iterate once per prompt. The `image` and `image_path` outputs are broadcast (repeated) across each prompt entry so each iteration sees a matching `(prompt, image, path)` triple. Single-prompt images still return lists of length 1; if no prompt is found and `skip_no_prompt` is off, the output is a single-entry list with an empty string in both prompt slots.
-
-**Category:** `👑 Ray/🔧 Tools`
-
-| Pin | Type | Notes |
-|-----|------|-------|
-| **Control** `folder` | string | Absolute path to a folder of images. Required; raises if blank or missing. |
-| **Control** `recurse_subfolders` | bool | When on, walks every subdirectory under `folder`. Off by default. |
-| **Control** `skip_no_prompt` | bool | When on, skip images whose metadata yields no prompt and pick the next one from the seed-shuffled pool (capped at 50 attempts). |
-| **Control** `prompt_best_try` | bool | Two behaviors. **Collapse** — always applies: reduce each image's prompt set to its single longest prompt. **Skip repeats** — random-mode only (`seed = -1`): if the collapsed prompt is anywhere in this node's recent-best deque (last 20 emits) advance to the next image. Locked seeds serve the collapsed prompt for the seeded pick every run regardless of history. |
-| **Control** `seed` | int | `-1` for OS-random (non-deterministic). Any `≥0` value is reproducible. |
-| **Control** `refresh_listing` (optional) | bool | Force a re-scan of the folder before picking. Off by default so repeated runs are cheap. |
-| **Output** `prompt_single` | STRING (list) | One entry per prompt found, each whitespace-collapsed to a single line. |
-| **Output** `prompt_multiline` | STRING (list) | One entry per prompt found, newlines preserved. |
-| **Output** `image` | IMAGE (list) | Image tensor (BHWC float32 [0,1]), repeated across every prompt entry. |
-| **Output** `image_path` | STRING (list) | Absolute path of the chosen file, repeated across every prompt entry. |
-
-Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.tif`.
-
----
-
 ## 🔧 Ray's Tools: Prompt Scraper (`RayPromptFetcher`)
 
 **Purpose.** One node, three prompt sources. A `scraper_mode` dropdown picks between `Local Folder`, `PromptDexter`, and `CivitAI`; the frontend hides widgets that don't belong to the active mode. Outputs are harmonized to the local-scraper shape `(prompt_single, prompt_multiline, image, image_path)` so any mode is drop-in compatible with downstream wiring.
@@ -273,6 +191,34 @@ Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.
 **Refresh button.** In `PromptDexter` mode the node shows **🔄 refresh sitemap**, which re-reads PromptDexter's sitemap and updates the category list (a status line reports the prompt and category counts). In `CivitAI` mode it shows **🔄 clear cache**, which makes the next run page the gallery again; the status line also notes when no `civitai.secret` file is present and only public access is available. Local Folder mode hides both.
 
 Node tint hue-shifts by active mode.
+
+### Mode details
+
+**Local Folder.** Picks a random image from a folder and extracts any generation prompt found in its metadata. The pick is seed-deterministic; with seed `-1` a per-node 20-entry memory avoids consecutive repeats. The folder listing is cached until `local__refresh_listing` is set.
+
+**Prompt sources, in priority order:**
+1. PNG `parameters` text chunk (Automatic1111 / Forge; JSON blob variants also parsed).
+2. PNG `prompt` text chunk (ComfyUI serialized prompt graph, JSON; flat-literal fallback for JustRayzist-style writers).
+3. PNG `workflow` text chunk — API format or UI (`nodes[]`/`links[]`) format.
+4. Any other `info[]` key whose name looks prompt-shaped (`prompt_*`, `positive*`, `caption`, `description`, `comment`, `sui_image_params`, `invokeai_metadata`, `novelai_metadata`, `dream`…). JSON values are walked recursively for nested `prompt` / `positive` keys.
+5. EXIF text tags: UserComment (37510), ImageDescription (270), XPComment (40092), XPSubject / XPTitle / XPKeywords.
+6. `<image>.txt` sidecar file in the same directory.
+
+For ComfyUI graphs, the extractor first locates every text-encoder node (`CLIPTextEncode` / `CLIPTextEncodeFlux` / `CLIPTextEncodeSDXL` / `BNK_CLIPTextEncodeAdvanced` / `T5TextEncode` / `ImpactWildcardEncode` etc.). Each encoder contributes one prompt: if its `text` input is a literal string the literal is used; if it's wired to another node, the link is followed back through `ShowText` → `Text Multiline` → `String Literal` → `Text Concatenate` → primitive nodes (up to 8 hops, cycles detected) until a literal is found. Multiple text inputs on a concat-style node are joined with spaces. Encoders that only feed a sampler's `negative` input (`KSampler`, `CFGGuider`, ControlNet apply nodes and the like) are skipped, so only positive prompts come back; an encoder shared by both sides is kept. Graphs with no positive/negative sampler wiring keep every encoder. This applies to both the API `prompt` chunk and the UI `workflow` chunk.
+
+Every candidate is passed through a path-rejection filter that drops strings that look like filesystem paths (drive letters, backslash runs, bare `.safetensors` / `.ckpt` filenames), so random `C:\loras\foo.safetensors`-style fields don't leak through as prompts.
+
+If the image carries multiple positive prompts (e.g. a ComfyUI workflow with several `CLIPTextEncode` nodes), every output is emitted as a ComfyUI **list** — one entry per prompt — so downstream nodes iterate once per prompt. The `image` and `image_path` outputs are broadcast (repeated) across each prompt entry so each iteration sees a matching `(prompt, image, path)` triple. Single-prompt images still return lists of length 1; if no prompt is found and `skip_no_prompt` is off, the output is a single-entry list with an empty string in both prompt slots.
+
+Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.tif`.
+
+**PromptDexter.** Fetches a random prompt and its image from [promptdexter.com](https://promptdexter.com/). Discovery is sitemap-driven, so picks reach deep content rather than only the homepage. A frozen seed reproduces the same page on every run; seed `-1` is random and avoids recently shown pages. Choosing a `dexter__category` restricts picks to that category's listed prompts. The image is a 1×1 black tensor if the page has none or the fetch fails.
+
+**CivitAI.** Fetches a random gallery image and its prompt through CivitAI's public REST API. Items with a usable prompt are kept: either the direct `meta.prompt`, or text salvaged from an embedded ComfyUI workflow; items without one are skipped. `Blue (SFW)` requests `browsingLevel=3` and `Red (NSFW)` requests `31`. `civitai__base_model` is sampled live from the gallery, so new architectures appear as uploaders tag them. Setting `civitai__username` forces the period to `AllTime` so small per-user archives don't come up empty.
+
+**Access strategy.** REST API (not scraping, not MCP). Public endpoint, no key required for read access. Higher-tier content unlocks if a token file is present at `civitai.secret` inside the node-pack directory — never hard-coded. The legacy `nsfw` filter is bypassed in favour of `browsingLevel` (bitmask: PG=1, PG13=2, R=4, X=8, XXX=16), which the API documents as taking precedence. Blue = `PG | PG13` = `3`; Red = all levels OR'd = `31`.
+
+**API token.** Optional. Create `civitai.secret` inside the `comfyUI-Ray-Orenchi/` node-pack directory and paste the token as its only contents (trailing whitespace/newlines are trimmed). The token is read fresh on each request — no caching, no persistence beyond the file itself. `civitai.secret` and `*.secret` are listed in `.gitignore`; do not commit them.
 
 ---
 

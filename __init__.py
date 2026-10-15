@@ -15,9 +15,6 @@ Bundles:
   • RayVLMFolder             — Ray's LLM: Folder Captioner
   • RayFastQwen3VL           — Ray's LLM: Fast Qwen3-VL Infer
   🔧 Tools
-  • RayPromptDexter          — Ray's Tools: PromptDexter Scraper
-  • RayCivitAI               — Ray's Tools: CivitAI Gallery Scraper
-  • RayLocalScraper          — Ray's Tools: Folder Image Scraper
   • RayPromptFetcher         — Ray's Tools: Prompt Scraper (local + web)
   • RayMetaInspect           — Ray's Tools: Metadata Inspector (read/embed)
   • RayTextFolder            — Ray's Tools: TXT Folder
@@ -39,9 +36,6 @@ _NODE_MODULES = {
     "RayKnob":             "ray_knob",
     "RaySwitch":           "ray_switch",
     "RayButtonDeck":       "ray_button_deck",
-    "RayPromptDexter":     "ray_promptdexter",
-    "RayCivitAI":          "ray_civitai",
-    "RayLocalScraper":     "ray_local_scraper",
     "RayTextFolder":       "ray_txt_folder",
     "RayVLMFolder":        "ray_vlm_folder",
     "RayFastQwen3VL":      "ray_fast_vlm",
@@ -102,9 +96,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayVLMFolder":        "💬 Ray's LLM: Folder Captioner",
     "RayFastQwen3VL":      "💬 Ray's LLM: Fast Qwen3-VL Infer",
     # 👑 Ray/🔧 Tools
-    "RayPromptDexter":     "🔧 Ray's Tools: PromptDexter Scraper",
-    "RayCivitAI":          "🔧 Ray's Tools: CivitAI Gallery Scraper",
-    "RayLocalScraper":     "🔧 Ray's Tools: Folder Image Scraper",
     "RayPromptFetcher":    "🔧 Ray's Tools: Prompt Scraper",
     "RayMetaInspect":      "🔧 Ray's Tools: Metadata Inspector",
     "RayTextFolder":       "🔧 Ray's Tools: TXT Folder",
