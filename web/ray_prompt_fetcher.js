@@ -1,4 +1,4 @@
-import { addBrowseButton } from "./browse_common.js";
+import { installPanel } from "./ray_panel.js";
 import { app } from "../../scripts/app.js";
 import {
     applyBucketTint,
@@ -102,14 +102,14 @@ function applyMode(node, mode) {
     for (const w of node.widgets || []) {
         // Only hide widgets owned by another mode. Shared widgets
         // (scraper_mode, seed, and the frontend's control_after_generate)
-        // stay visible. A Browse button follows the widget it belongs to.
-        const owner = w.ownerName || w.name;
-        const owned = prefixes.some((p) => owner?.startsWith(p));
-        commonSetHidden(node, w, owned && !owner.startsWith(keep));
+        // stay visible. In the panel this decides which rows show.
+        const owned = prefixes.some((p) => w.name?.startsWith(p));
+        if (owned) commonSetHidden(node, w, !w.name.startsWith(keep));
     }
     applyModeStyling(node, mode);
     updateRefreshControls(node, mode);
-    if (typeof node.computeSize === "function") {
+    if (node._rayPanel) node._rayPanel.schedule();
+    else if (typeof node.computeSize === "function") {
         const sz = node.computeSize();
         if (Array.isArray(node.size)) node.size[1] = sz[1];
         node.setSize?.([Array.isArray(node.size) ? node.size[0] : sz[0], sz[1]]);
@@ -117,11 +117,9 @@ function applyMode(node, mode) {
     node.setDirtyCanvas?.(true, true);
 }
 
-function applyModeStyling(node, mode) {
-    // Tools bucket base tint, hue-shifted per mode.
+function applyModeStyling(node) {
     // Black in every mode, like every Ray node.
     applyBucketTint(node, "Tools");
-    // MODE_LOCAL keeps the canonical Tools tint.
 }
 
 // PromptDexter category list arrives async via /ray_promptdexter/categories.
@@ -152,11 +150,6 @@ function updateDexterCategoryWidget(node, list, anyLabel) {
 // Refresh button + status line (PromptDexter sitemap, CivitAI cache)
 // ---------------------------------------------------------------------------
 
-const REFRESH_LABEL = {
-    [MODE_DEXTER]: "🔄 refresh sitemap",
-    [MODE_CIVITAI]: "🔄 clear cache",
-};
-
 async function postRefresh(url) {
     try {
         const r = await fetch(url, {
@@ -174,8 +167,12 @@ function setStatus(node, text, clearAfterMs = 0) {
     const el = node._rayScraperStatus;
     if (!el) return;
     el.textContent = text;
+    node._rayPanel?.schedule();
     if (clearAfterMs) {
-        setTimeout(() => { if (el.textContent === text) el.textContent = node._rayStatusDefault || ""; }, clearAfterMs);
+        setTimeout(() => {
+            if (el.textContent === text) el.textContent = node._rayStatusDefault || "";
+            node._rayPanel?.schedule();
+        }, clearAfterMs);
     }
 }
 
@@ -201,32 +198,47 @@ async function refreshSource(node) {
     node.setDirtyCanvas?.(true, true);
 }
 
-function injectRefreshControls(node) {
-    if (node._rayRefreshButton) return;
-    const status = document.createElement("div");
-    status.style.cssText = "padding:2px 6px;font-size:10px;color:#aaa;min-height:14px;";
-    if (typeof node.addDOMWidget === "function") {
-        node._rayStatusWidget = node.addDOMWidget("ray_scraper_status", "RAY_SCRAPER_STATUS", status, {
-            serialize: false, hideOnZoom: false, getMinHeight: () => 18, getHeight: () => 18,
-        });
-    }
-    node._rayScraperStatus = status;
-    const button = node.addWidget("button", REFRESH_LABEL[MODE_DEXTER], null, () => refreshSource(node), { serialize: false });
-    if (button) button.serialize = false;
-    node._rayRefreshButton = button;
-}
-
 function updateRefreshControls(node, mode) {
-    const wanted = mode === MODE_DEXTER || mode === MODE_CIVITAI;
-    if (node._rayRefreshButton) {
-        if (wanted) node._rayRefreshButton.name = REFRESH_LABEL[mode];
-        commonSetHidden(node, node._rayRefreshButton, !wanted);
-    }
-    if (node._rayStatusWidget) commonSetHidden(node, node._rayStatusWidget, !wanted);
-    if (node._rayScraperStatus) node._rayScraperStatus.style.display = wanted ? "" : "none";
     // The CivitAI token note only applies to CivitAI mode.
     node._rayStatusDefault = mode === MODE_CIVITAI ? (node._rayCivitNote || "") : "";
     setStatus(node, node._rayStatusDefault);
+}
+
+// The panel: one source at a time, with refresh icons on the rows they belong to and a status line under them.
+function scraperPanel(node) {
+    const status = document.createElement("div");
+    status.className = "rp-status";
+    status.setAttribute("aria-live", "polite");
+    node._rayScraperStatus = status;
+    const mode = () => getWidget(node, "scraper_mode")?.value;
+    const refresh = title => [{ icon: "refresh", title, onClick: () => refreshSource(node) }];
+    return { sections: [
+        { fields: [
+            { name: "scraper_mode", label: "Source", kind: "segment", labels: { [MODE_LOCAL]: "Local", [MODE_DEXTER]: "PromptDexter", [MODE_CIVITAI]: "CivitAI" } },
+            "seed",
+        ] },
+        { fields: [
+            { name: "local__folder", label: "Folder of images", browse: { kind: "folder", title: "Choose a folder of images" } },
+            { name: "local__recurse_subfolders", label: "Include subfolders" },
+            { name: "local__skip_no_prompt", label: "Skip images without prompts" },
+            { name: "local__prompt_best_try", label: "One prompt per image" },
+            { name: "local__refresh_listing", label: "Re-scan the folder" },
+        ] },
+        { fields: [
+            { name: "dexter__category", label: "Category", actions: refresh("Refresh the PromptDexter sitemap") },
+            { name: "dexter__clear_cache", label: "Forget recent picks" },
+            { name: "dexter__timeout", label: "Timeout (s)" },
+        ] },
+        { fields: [
+            { name: "civitai__mode", label: "Rating", kind: "segment", labels: { "Blue (SFW)": "Blue · SFW", "Red (NSFW)": "Red · NSFW" } },
+            { name: "civitai__base_model", label: "Base model", actions: refresh("Clear the CivitAI cache so the next run fetches again") },
+            { name: "civitai__period", label: "Period" },
+            { name: "civitai__sort", label: "Sort" },
+            { name: "civitai__username", label: "Uploader", placeholder: "Anyone" },
+            { name: "civitai__timeout", label: "Timeout (s)" },
+        ] },
+        { fields: [{ custom: () => status, when: () => !!status.textContent && [MODE_DEXTER, MODE_CIVITAI].includes(mode()) }] },
+    ] };
 }
 
 async function checkCivitToken(node) {
@@ -243,8 +255,8 @@ async function checkCivitToken(node) {
 async function bootstrap(node) {
     const modeW = getWidget(node, "scraper_mode");
     if (!modeW) return;
-    injectRefreshControls(node);
-    addBrowseButton(node, "local__folder", { kind: "folder", title: "Choose a folder of images" });
+    const spec = scraperPanel(node);
+    if (typeof node.addDOMWidget === "function") queueMicrotask(() => installPanel(node, spec));
     checkCivitToken(node);
 
     // Populate Dexter categories asynchronously — same source the dedicated
