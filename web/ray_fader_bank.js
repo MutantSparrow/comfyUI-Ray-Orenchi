@@ -42,6 +42,19 @@ export function syncOutputs(node, count) {
     while (node.outputs.length < count + 1) node.addOutput(`fader_${node.outputs.length}`, "FLOAT");
 }
 
+// Workflows saved before rows existed hold the count, ten faders and (in the real frontend) the face widget's
+// empty value. `rows` and faders 11-40 were added after the first ten, so slot their defaults in where they now
+// belong instead of letting the face's value land in `rows`.
+export function addFaderRows(data) {
+    for (const node of data?.nodes || []) {
+        const values = node?.widgets_values;
+        if (node?.type !== "RayFaderBank" || !Array.isArray(values)) continue;
+        const old = values.length === MAX_FADERS + 1 || (values.length === MAX_FADERS + 2 && typeof values[MAX_FADERS + 1] !== "number");
+        if (old) node.widgets_values = [...values.slice(0, MAX_FADERS + 1), 1, ...Array(TOTAL_FADERS - MAX_FADERS).fill(.5), ...values.slice(MAX_FADERS + 1)];
+    }
+    for (const subgraph of data?.definitions?.subgraphs || []) addFaderRows(subgraph);
+}
+
 function buildFaders(node, firstWidget) {
     const ui = createPanel(node, "fader", getFaderStyleCSS());
     const { element: panel, host, readout, hint } = ui;
@@ -225,6 +238,6 @@ registerAnalog(app, {
         { name: "faders", label: "Per row" }, { name: "rows", label: "Rows" },
     ] }] }),
     outputs: [["values", "FLOAT"], ...Array.from({ length: TOTAL_FADERS }, (_, i) => [`fader_${i + 1}`, "FLOAT"])],
-    build: buildFaders, curve: true,
+    build: buildFaders, curve: true, migrate: addFaderRows,
     heights: ui => ({ min: ui.minHeight(), max: undefined }),
 });
