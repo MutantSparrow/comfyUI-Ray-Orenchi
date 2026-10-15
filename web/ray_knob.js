@@ -1,7 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { KNOB_STYLES, DEFAULT_STYLE, getAllStyleCSS } from "./knob_styles.js";
 import { findWidget } from "./_common.js";
-import { createPanel, changeValue, editNode, isLinked, mountControlSVG, registerAnalog } from "./analog_common.js";
+import { createPanel, changeValue, editNode, isLinked, mountControlSVG, registerAnalog, wheelEdit } from "./analog_common.js";
 import { createKnobFeel } from "./analog_audio.js";
 
 // Shift slows any drag to this fraction of normal speed.
@@ -125,6 +125,14 @@ function buildKnob(node, widget) {
             feel.move(position(before), position(after), { stop: after === lo || after === hi });
         }
         render();
+    };
+    // Mouse wheel: 2% of the range per notch, a tenth of that with Shift.
+    ui.wheel = (units, event) => {
+        if (disabled()) return false;
+        const [lo, hi] = bounds(node);
+        const step = units * (hi - lo) * .02 * (event.shiftKey ? .1 : 1);
+        wheelEdit(node, () => setValue(Number((boundValue(node, widget.value) + step).toPrecision(10)), event), feel.end);
+        return true;
     };
     input.addEventListener("change", event => {
         const value = input.value.trim() === "" ? NaN : Number(input.value);
