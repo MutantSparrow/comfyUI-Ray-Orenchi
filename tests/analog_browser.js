@@ -13,6 +13,9 @@ import { isMuted, setMuted, createBank, VOICE_TABLES } from '/extensions/ray/ana
 import { isWheelOn, setWheelOn, wheelUnits } from '/extensions/ray/analog_common.js';
 import { clampCount, clampLevel, syncOutputs } from '/extensions/ray/ray_fader_bank.js';
 import { FADER_STYLES } from '/extensions/ray/fader_styles.js';
+import { THEMES, VOICE_CLASSES, FAMILIES, familyOf, MATERIALS } from '/extensions/ray/analog_themes.js';
+import { KNOBS, SLIDERS, SWITCHES, GENERATED_KNOBS, GENERATED_SLIDERS, GENERATED_SWITCHES } from '/extensions/ray/analog_hardware.js';
+import { knobVoice, switchVoice } from '/extensions/ray/analog_audio.js';
 
 const messages = [];
 let passes = 0;
@@ -137,7 +140,8 @@ try {
         styleItem.callback(); await new Promise(r=>setTimeout(r,20));
         const picker=document.querySelector('.ray-style-picker');
         check(!!picker && picker.getBoundingClientRect().left>=0 && picker.getBoundingClientRect().right<=innerWidth && picker.getBoundingClientRect().bottom<=innerHeight,'Style picker opens fully inside the window');
-        check([...picker.querySelectorAll('.ray-style-heading')].map(h=>h.textContent).join()==='Knobs,Sliders','Style picker groups knobs and sliders');
+        check([...picker.querySelectorAll('.ray-style-heading')].map(h=>h.textContent).join()==='Console,Broadcast,Mastering,Rack','Style picker groups the styles by family');
+        check([...picker.querySelectorAll('.ray-style-kind')].every(tag=>tag.textContent==='slider') && picker.querySelectorAll('.ray-style-kind').length===8,'Slider faces are tagged in the Control picker');
         check(picker.querySelectorAll('.ray-style-item').length===Object.keys(KNOB_STYLES).length,'Style picker lists every style');
         check(picker.scrollWidth<=picker.clientWidth,'Style picker never scrolls sideways');
         const target=[...picker.querySelectorAll('.ray-style-item')].find(b=>/Channel Fader/.test(b.textContent));
@@ -331,6 +335,74 @@ try {
     const ids=[...document.querySelectorAll('svg [id]')].map(el=>el.id);
     check(new Set(ids).size===ids.length,'All simultaneously mounted SVG resource IDs are unique');
     check([...document.querySelectorAll('svg [fill^="url(#"]')].every(el=>document.getElementById(el.getAttribute('fill').slice(5,-1))), 'SVG gradient references resolve');
+    // ---- one style list for every control -----------------------------------------------------------
+    {
+        const ids = Object.keys(THEMES);
+        const lists = { Control: KNOB_STYLES, Switch: SWITCH_STYLES, 'Button Deck': DECK_STYLES, 'Fader Bank': FADER_STYLES };
+        check(ids.length === 31 && new Set(ids.map(id => THEMES[id].label)).size === 31, 'There are 31 distinct styles');
+        check(ids.every(id => FAMILIES.includes(familyOf(THEMES[id].label))), 'Every style belongs to a family');
+        for (const [name, list] of Object.entries(lists)) {
+            check(Object.keys(list).length === 31 && ids.every(id => Object.hasOwn(list, id)), `${name} offers all 31 styles`);
+            check(ids.every(id => list[id].label === THEMES[id].label && list[id].panel === THEMES[id].panel), `${name} uses the shared names and panels`);
+        }
+        check(ids.every(id => Object.hasOwn(MATERIALS, THEMES[id].body) && Object.hasOwn(MATERIALS, THEMES[id].trim) && Object.hasOwn(VOICE_CLASSES, THEMES[id].voice)),
+            'Every style names real materials and a real sound class');
+
+        // The hand-drawn faces are untouched; only the missing ones are generated.
+        check(Object.entries(KNOBS).every(([id, face]) => KNOB_STYLES[id] === face) && Object.entries(SLIDERS).every(([id, face]) => KNOB_STYLES[id] === face),
+            'The hand-drawn knob and slider faces are used as drawn');
+        check(Object.entries(SWITCHES).every(([id, face]) => SWITCH_STYLES[id] === face), 'The hand-drawn switch faces are used as drawn');
+        check(Object.keys(GENERATED_KNOBS).length === 14 && Object.keys(GENERATED_SLIDERS).length === 3 && Object.keys(GENERATED_SWITCHES).length === 22,
+            'The Control gains 17 generated faces and the Switch 22');
+        check(['console_black', 'studio_silver', 'vintage_cream'].every(id => FADER_STYLES[id].label.includes(' · ')), 'The fader looks have family names');
+
+        for (const [id, face] of Object.entries(GENERATED_KNOBS))
+            check(/data-rotate/.test(face.svg) && /data-arc/.test(face.svg) && !face.kind, `Generated knob ${id} turns and lights its ring`);
+        for (const [id, face] of Object.entries(GENERATED_SLIDERS))
+            check(/data-slide/.test(face.svg) && /data-fill/.test(face.svg) && face.kind === 'slider', `Generated slider ${id} slides and fills`);
+        for (const [id, face] of Object.entries(GENERATED_SWITCHES))
+            check(/data-toggle/.test(face.svg) && /data-on-only/.test(face.svg) && /data-off-only/.test(face.svg), `Generated switch ${id} toggles and lights`);
+        for (const [id, face] of Object.entries(DECK_STYLES)) {
+            const cutout = face.legend === 'cutout';
+            check(/data-toggle/.test(face.svg) && /data-on-only/.test(face.svg) && (cutout ? Array.isArray(face.box) && /data-label/.test(face.svg) : !face.box),
+                `Deck button ${id} has its hooks (${face.legend})`);
+        }
+
+        // Every style makes a sound on every control.
+        const audio = new OfflineAudioContext(1, 4410, 44100), voices = createBank(audio, audio.destination).voices;
+        check(ids.every(id => voices.ticks.includes(knobVoice(id, false)) && voices.ticks.includes(knobVoice(id, true))), 'Every style has a knob and slider tick voice');
+        check(ids.every(id => voices.presses.includes(switchVoice(id))), 'Every style has a switch press voice');
+        check(Object.entries(DECK_STYLES).every(([id, face]) => voices.decks.includes(face.sound)), 'Every style has a deck press voice');
+        check(ids.every(id => ['fader', 'plastic', 'pan'].includes(knobVoice(id, true)) || THEMES[id].native === 'slider'), 'A style worn by a slider takes a scraping voice');
+
+        // And every style renders on every control.
+        const knob = make('knob'), face = knob._rayAnalog; document.body.append(face.element);
+        for (const id of ids) {
+            knob.properties.style = id; face.render();
+            const svg = face.host.querySelector('svg');
+            check(!!svg && (KNOB_STYLES[id].kind === 'slider' ? !!svg.querySelector('[data-slide]') : !!svg.querySelector('[data-rotate]')) && face.element.dataset.panel === THEMES[id].panel,
+                `Control renders ${id}`);
+        }
+        knob.onRemoved(); face.element.remove();
+        const toggle = make('switch'), sw = toggle._rayAnalog; document.body.append(sw.element);
+        for (const id of ids) {
+            toggle.properties.style = id; sw.render();
+            check(!!sw.host.querySelector('svg [data-toggle]') && sw.element.dataset.panel === THEMES[id].panel, `Switch renders ${id}`);
+        }
+        toggle.onRemoved(); sw.element.remove();
+        const deck = make('deck'), buttons = deck._rayAnalog; document.body.append(buttons.element);
+        for (const id of ids) {
+            deck.properties.style = id; buttons.render();
+            check(buttons.element.querySelectorAll('.ray-deck-button svg [data-toggle]').length === 3 && buttons.element.dataset.panel === THEMES[id].panel, `Button Deck renders ${id}`);
+        }
+        deck.onRemoved(); buttons.element.remove();
+        const bank = make('fader'), faders = bank._rayAnalog; document.body.append(faders.element);
+        for (const id of ids) {
+            bank.properties.style = id; faders.render();
+            check(faders.element.dataset.style === id && faders.element.dataset.panel === THEMES[id].panel, `Fader Bank renders ${id}`);
+        }
+        bank.onRemoved(); faders.element.remove();
+    }
     // ---- mouse wheel ------------------------------------------------------------------------------
     {
         const spin = (el, deltaY, init = {}) => {
@@ -504,7 +576,7 @@ try {
         setWheelOn(false);
 
         const labels = Object.values(FADER_STYLES);
-        check(labels.length === 3 && labels.every(style => style.label && style.panel), 'Three fader styles are defined');
+        check(labels.length === 31 && labels.every(style => style.label && style.panel && style.capTop && style.capBottom), 'The fader bank has all 31 styles');
         for (const key of Object.keys(FADER_STYLES)) {
             bank.properties.style = key; ui.render();
             check(ui.element.dataset.style === key && ui.element.dataset.panel === FADER_STYLES[key].panel, `Fader style ${key} applies`);
