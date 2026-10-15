@@ -4,6 +4,8 @@
 //
 // The mute preference is a listener setting, so it lives in localStorage rather than the workflow.
 
+import { THEMES, voiceFor } from "./analog_themes.js";
+
 const PREF_KEY = "ray.analog.muted.v1";
 const KNOB_DETENTS = 40;       // one click per printed scale mark (per sweep, or per turn on endless knobs)
 const SLIDER_DETENTS = 40;     // fine ticks along a slider's travel
@@ -49,9 +51,20 @@ const SWITCH_VOICE = {
     minimal_pill: "pill",
     dark_studio_dome: "dome",
 };
+// Styles drawn for another kind of control sound like their sound class does on this one.
+for (const [id, theme] of Object.entries(THEMES)) {
+    if (!(id in KNOB_VOICE)) KNOB_VOICE[id] = voiceFor(id, theme.native === "fader" ? "slider" : "knob");
+    if (!(id in SWITCH_VOICE)) SWITCH_VOICE[id] = voiceFor(id, "switch");
+}
 export const VOICE_TABLES = { knob: KNOB_VOICE, switch: SWITCH_VOICE };
-export const knobVoice = (key, slider) => KNOB_VOICE[key] || (slider ? "fader" : "rubber");
-export const switchVoice = key => SWITCH_VOICE[key] || "rocker";
+// A slider (including the fader bank, which can wear any style) needs a voice that scrapes; a knob style
+// used on a slider takes its class's slider voice.
+export const knobVoice = (key, slider) => {
+    const own = KNOB_VOICE[key];
+    if (!slider) return own || voiceFor(key, "knob") || "rubber";
+    return own && SLIDE[own] ? own : (voiceFor(key, "slider") || "fader");
+};
+export const switchVoice = key => SWITCH_VOICE[key] || voiceFor(key, "switch") || "rocker";
 
 // Continuous scrape under a dragged slider cap: [centre Hz, Q, level, speed that reaches full level].
 const SLIDE = {

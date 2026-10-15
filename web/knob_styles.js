@@ -1,5 +1,5 @@
 // Style IDs stay stable for saved workflows. Artwork is shared by both renderers.
-import { KNOBS, SLIDERS } from "./analog_hardware.js";
+import { KNOBS, SLIDERS, GENERATED_KNOBS, GENERATED_SLIDERS } from "./analog_hardware.js";
 
 let _brushedNodeURL = null;
 export function getBrushedAluminumURL() {
@@ -34,7 +34,9 @@ export function getBrushedAluminumURL() {
 }
 
 // Every rotary face sweeps min..max over 270°, starting at 7:30 with its indicator drawn pointing up.
-export const KNOB_STYLES = { ...KNOBS, ...SLIDERS };
+// Hand-drawn faces first, then a generated face for every other style, so the Control offers the same list
+// as every other analog node.
+export const KNOB_STYLES = { ...KNOBS, ...SLIDERS, ...GENERATED_KNOBS, ...GENERATED_SLIDERS };
 
 export const DEFAULT_STYLE = "console_rotary";
 

@@ -1,6 +1,7 @@
 // Original SVG artwork inspired by recording consoles and rack equipment. Every face (knob, slider
 // and switch) is built from the one material set in `defs`.
 // Scale marks are relative (0–10); the numeric readout remains in workflow units.
+import { THEMES, MARK, isLight } from "./analog_themes.js";
 const defs = `
 <defs>
   <linearGradient id="rim" x1="0" y1="0" x2=".8" y2="1">
@@ -496,3 +497,75 @@ export const SWITCHES = {
     },
 };
 
+// ---------------------------------------------------------------------------
+// Generated faces
+// ---------------------------------------------------------------------------
+// The faces above are drawn by hand, each for one kind of control. Every other style is built here from its
+// description in analog_themes.js (materials, accent and lamp colours), so any style can be picked on any
+// control. A generated face reuses the hand-drawn geometry, so it moves and lights up the same way.
+
+function knobFace(id, t) {
+    const light = isLight(t.body), mark = MARK[t.panel];
+    return svg(`${scale(mark)}${seat}
+      <circle r="43" fill="none" stroke="#101b1e" stroke-width="3"/>
+      <circle data-arc transform="rotate(135)" r="43" pathLength="100" fill="none" stroke="${t.lamp}" stroke-width="1.8" stroke-dasharray="0 100"/>
+      <circle r="37" fill="url(#${t.trim})"/>
+      <circle r="34.5" fill="url(#rubber)"/>${grips(40, 34.5, "#0b1214")}
+      <circle r="28.5" fill="#0b1113"/>
+      <circle cy="-.7" r="26" fill="url(#${t.body})" stroke="${light ? "#ffffff" : "#adc0c6"}" stroke-opacity=".3"/>
+      ${light ? machining([8, 12, 16, 20, 24]) : ""}
+      <circle r="23.5" fill="none" stroke="#000" stroke-opacity=".2" stroke-width=".5"/>
+      <g data-rotate><path d="M0 -13 V-31" stroke="${light ? "#ffffff" : "#0e1719"}" stroke-opacity=".55" stroke-width="4"/>
+        <path d="M0 -14 V-31" stroke="${t.accent}" stroke-width="2.2" stroke-linecap="round"/></g>`, `rk--${id}`);
+}
+
+function sliderFace(id, t) {
+    const light = isLight(t.body), mark = MARK[t.panel];
+    return svg(`
+      ${ruler("y", 20, { near: -16, far: -20, longFar: -24, color: mark })}
+      ${[0, 5, 10].map(n => `<text x="-27" y="${(travel(n / 10) + 2).toFixed(2)}" text-anchor="end" fill="${mark}" font-family="monospace" font-size="6">${n}</text>`).join("")}
+      <rect x="-5.5" y="-50" width="11" height="100" rx="5.5" fill="#fff" opacity=".3"/>
+      <rect x="-4.5" y="-50" width="9" height="100" rx="4.5" fill="#222a2b" opacity=".55"/>
+      <rect x="-3" y="-49" width="6" height="98" rx="3" fill="url(#slot)"/>
+      <g transform="translate(0,43)"><g data-fill data-axis="y">
+        <rect x="-5" y="-86" width="10" height="86" rx="5" fill="${t.lamp}" opacity=".2"/>
+        <rect x="-1.8" y="-86" width="3.6" height="86" rx="1.8" fill="${t.lamp}"/>
+      </g></g>
+      <g data-slide data-axis="y">
+        <rect x="-12" y="-14" width="27" height="36" rx="3" fill="#000" opacity=".32"/>
+        <rect x="-13.5" y="-18" width="27" height="36" rx="2.5" fill="url(#${t.body})" stroke="#000" stroke-opacity=".6"/>
+        <path d="M-11.5 -16.2 H11.5" stroke="${light ? "#ffffff" : "#aab1b1"}" stroke-opacity=".5"/>
+        ${grooves([-12, -8.5, -5, 5.5, 9, 12.5], 11)}
+        <path d="M-13 0 H13" stroke="${t.accent}" stroke-width="2.4"/>
+      </g>`, `rk--${id}`);
+}
+
+function switchFace(id, t) {
+    const light = isLight(t.body), mark = MARK[t.panel];
+    const edge = light ? "#ffffff" : "#919990";
+    return svg(`
+      <text x="0" y="-54" text-anchor="middle" fill="${mark}" font-family="monospace" font-size="7" letter-spacing="2">I / O</text>
+      <rect x="-27" y="-43" width="57" height="90" rx="5" fill="#000" opacity=".3"/>
+      <rect x="-29" y="-45" width="58" height="90" rx="4" fill="url(#${t.trim})"/>
+      <rect x="-26" y="-42" width="52" height="84" rx="3" fill="#080d0f"/>
+      <g data-toggle data-on-transform="translate(0,1)" data-off-transform="translate(0,-1)">
+        <rect x="-23" y="-38" width="46" height="76" rx="3" fill="url(#${t.body})" stroke="#000" stroke-opacity=".55" stroke-width=".6"/>
+        <path data-off-only d="M-20 -34 H20" stroke="${edge}" stroke-opacity=".8" stroke-width="2"/>
+        <path data-on-only d="M-20 34 H20" stroke="${edge}" stroke-opacity=".8" stroke-width="2"/>
+        <path d="M0 -26 V-16" stroke="${t.accent}" stroke-width="1.8"/>
+        <circle cy="23" r="5" fill="none" stroke="${t.accent}" stroke-width="1.4"/>
+        <rect x="-10" y="-5" width="20" height="7" rx="2" fill="#0d0a06" stroke="#070c0c"/>
+        <rect data-on-only x="-9" y="-4" width="18" height="5" rx="1" fill="${t.lamp}"/>
+        <rect data-off-only x="-9" y="-4" width="18" height="5" rx="1" fill="${t.lamp}" opacity=".22"/>
+      </g>`, `rs--${id}`);
+}
+
+const generated = (native, make, extra = () => ({})) => Object.fromEntries(Object.entries(THEMES)
+    .filter(([, t]) => native(t))
+    .map(([id, t]) => [id, { label: t.label, panel: t.panel, ...extra(t), svg: make(id, t) }]));
+
+// A rotary face for every style drawn as a switch or deck button, a slider for every fader look, and a
+// switch for everything that is not already one.
+export const GENERATED_KNOBS = generated(t => t.native === "switch" || t.native === "deck", knobFace);
+export const GENERATED_SLIDERS = generated(t => t.native === "fader", sliderFace, () => ({ kind: "slider" }));
+export const GENERATED_SWITCHES = generated(t => t.native !== "switch", switchFace);

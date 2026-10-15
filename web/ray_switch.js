@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { SWITCH_STYLES, DEFAULT_SWITCH_STYLE, getAllSwitchStyleCSS } from "./switch_styles.js";
-import { createPanel, changeValue, editNode, isLinked, mountControlSVG, registerAnalog } from "./analog_common.js";
+import { createPanel, changeValue, createWheelSteps, editNode, isLinked, mountControlSVG, registerAnalog } from "./analog_common.js";
 import { playSwitch } from "./analog_audio.js";
 
 function buildSwitch(node, widget) {
@@ -48,6 +48,19 @@ function buildSwitch(node, widget) {
         playSwitch(node.properties.style, next);
         ui.render();
     });
+    // Mouse wheel: up switches on, down switches off.
+    const wheelSteps = createWheelSteps();
+    ui.wheel = (units, event) => {
+        if (disabled()) return false;
+        const steps = wheelSteps(units);
+        if (steps && (steps > 0) !== !!widget.value) {
+            const next = steps > 0;
+            editNode(node, () => changeValue(node, widget, next, event));
+            playSwitch(node.properties.style, next);
+            ui.render();
+        }
+        return true;
+    };
     return ui;
 }
 
