@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { findWidget, setWidgetHidden } from "./_common.js";
 import { createPanel, changeValue, createWheelSteps, editNode, isLinked, mountControlSVG, registerAnalog } from "./analog_common.js";
+import { iconButton } from "./ray_panel.js";
 import { DECK_STYLES, DEFAULT_DECK_STYLE, getDeckStyleCSS, gridShape, layoutLegend } from "./deck_styles.js";
 import { playDeck } from "./analog_audio.js";
 
@@ -213,9 +214,6 @@ function buildDeck(node, widget) {
         area.setSelectionRange(area.value.length, area.value.length);
     };
 
-    const edit = node.addWidget?.("button", "✎ Edit entries…", null, () => ui.openEditor());
-    if (edit) edit.serialize = false;
-    ui.compactWidgets = () => (edit ? [edit] : []);
     ui.cancelDrag = () => { node._rayDeckEditor?.close(); node._rayDeckEditor?.remove(); node._rayDeckEditor = null; };
     // Initial size: room for the rows this deck needs.
     queueMicrotask(() => { ui.render(); ui.fitNode(); });
@@ -229,4 +227,24 @@ registerAnalog(app, {
     outputs: [["value", "STRING"]], build: buildDeck,
     heights: ui => ({ min: ui.minHeight(), max: undefined }),
     menuItems: node => [{ content: "Edit entries…", callback: () => node._rayAnalog?.openEditor() }],
+    // Entries are edited in a popout: the panel shows how many there are, with an edit button.
+    panel: (node, ui) => {
+        const row = document.createElement("div");
+        row.className = "rp-row";
+        const label = document.createElement("span");
+        label.className = "rp-label"; label.textContent = "Entries";
+        const control = document.createElement("div");
+        control.className = "rp-control";
+        const summary = document.createElement("span");
+        summary.className = "rp-summary";
+        const edit = iconButton("edit", "Edit the entries, one per line", () => ui.openEditor());
+        control.append(summary, edit);
+        row.append(label, control);
+        const update = () => {
+            const count = parseEntries(findWidget(node, "entries")?.value).length;
+            summary.textContent = `${count} button${count === 1 ? "" : "s"}`;
+            edit.disabled = isLinked(node, "entries") || isLinked(node, "selected");
+        };
+        return { skip: ["entries", "selected"], sections: [{ fields: [{ custom: () => row, update, when: n => !n.properties?.compact }] }] };
+    },
 });

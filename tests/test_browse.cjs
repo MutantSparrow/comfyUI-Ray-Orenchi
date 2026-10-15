@@ -15,8 +15,8 @@ const context = {
     api: { fetchApi: async (url, options) => { requests.push({ url, body: JSON.parse(options.body), options }); return reply(); } },
 };
 vm.createContext(context);
-vm.runInContext(source + "\nthis.browsePath = browsePath; this.browseInto = browseInto; this.addBrowseButton = addBrowseButton; this.IMAGE_FILTERS = IMAGE_FILTERS;", context);
-const { browsePath, browseInto, addBrowseButton, IMAGE_FILTERS } = context;
+vm.runInContext(source + "\nthis.browsePath = browsePath; this.browseInto = browseInto; this.IMAGE_FILTERS = IMAGE_FILTERS;", context);
+const { browsePath, browseInto, IMAGE_FILTERS } = context;
 
 function makeNode(widgets = ["folder", "recurse", "limit"], inputs = []) {
     const node = {
@@ -56,62 +56,7 @@ const failWith = (status, body) => { reply = () => ({ ok: false, status, json: a
     answer({ ok: true });
     assert.equal(await browsePath("folder", ""), null);
 
-    // ---- the button ----
-    const node = makeNode();
-    const button = addBrowseButton(node, "folder", { kind: "folder", title: "Pick" });
-    assert.equal(node.widgets.map(w => w.name).join(), "folder,📂 Browse for a folder…,recurse,limit", "sits directly under its path widget");
-    assert.equal(button.serialize, false);
-    assert.equal(button.options.serialize, false);
-    assert.equal(button.ownerName, "folder");
-    assert.equal(addBrowseButton(node, "folder"), null, "never added twice");
-    assert.equal(node.widgets.length, 4);
-    assert.equal(addBrowseButton(node, "missing"), null);
-    assert.equal(addBrowseButton({ widgets: node.widgets }, "folder"), null, "needs a node that can add widgets");
-    const file = addBrowseButton(makeNode(["path"]), "path", { kind: "file" });
-    assert.equal(file.name, "📂 Browse for a file…");
-    assert.equal(addBrowseButton(makeNode(["x"]), "x", { label: "Choose…" }).name, "Choose…");
-
-    // ---- clicking it ----
-    answer({ ok: true, path: "E:/Photos/2026" });
-    const before = requests.length;
-    const click = button.callback();
-    assert.equal(button.name, "⏳ Waiting for the dialog…");
-    const second = button.callback();           // a second click while the dialog is open does nothing
-    await Promise.all([click, second]);
-    assert.equal(requests.length, before + 1);
-    assert.equal(requests.at(-1).body.initial, "C:/start");
-    assert.equal(requests.at(-1).body.kind, "folder");
-    assert.equal(node.widgets[0].value, "E:/Photos/2026");
-    assert.equal(node.widgets[0].seen, "E:/Photos/2026", "the widget's callback runs, like typing it");
-    assert.equal(button.name, "📂 Browse for a folder…");
-    assert.equal(node.graph.before, 1);
-    assert.equal(node.graph.before, node.graph.after, "one balanced undo step");
-
-    answer({ ok: true, cancelled: true });
-    await button.callback();
-    assert.equal(node.widgets[0].value, "E:/Photos/2026", "cancelling leaves the path alone");
-    assert.equal(node.graph.before, 1);
-
-    failWith(501, { ok: false, error: "No file dialog is available here. Type the path instead." });
-    await button.callback();
-    assert.equal(node.widgets[0].value, "E:/Photos/2026");
-    assert.equal(toasts.at(-1).detail, "No file dialog is available here. Type the path instead.");
-    assert.equal(toasts.at(-1).severity, "warn");
-    assert.equal(button.name, "📂 Browse for a folder…", "the label comes back after an error");
-
-    // a path driven by a link is not browsable
-    const linked = makeNode(["folder"], [{ name: "folder", widget: { name: "folder" }, link: 12 }]);
-    const lb = addBrowseButton(linked, "folder");
-    const count = requests.length;
-    await lb.callback();
-    assert.equal(requests.length, count);
-    assert.match(toasts.at(-1).detail, /driven by a link/);
-    linked.inputs[0].link = null;
-    answer({ ok: true, path: "F:/x" });
-    await lb.callback();
-    assert.equal(linked.widgets[0].value, "F:/x");
-
-    // browseInto works without a button (Save Image uses browsePath directly; this is the shared path)
+    // browseInto writes the chosen path into a widget, the way typing it would
     assert.equal(await browseInto(makeNode(["nothing"]), "folder"), false);
     answer({ ok: true, path: "G:/y" });
     const plain = makeNode();

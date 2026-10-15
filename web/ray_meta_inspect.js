@@ -16,14 +16,18 @@ const MODE_VISIBLE = {
     [MODE_EMBED]: new Set(["mode", "path", "metadata_json"]),
 };
 
+// The widgets the mode decides about; anything else (the panel itself) is left alone.
+const MODE_ALL = new Set(Object.values(MODE_VISIBLE).flatMap(set => [...set]));
+
 function setWidgetHidden(widget, hidden) {
     commonSetHidden(null, widget, hidden);
 }
 
 function applyMode(node, mode) {
     const keep = MODE_VISIBLE[mode] || MODE_VISIBLE[MODE_INSPECT];
-    for (const w of node.widgets || []) setWidgetHidden(w, !keep.has(w.ownerName || w.name));
-    if (typeof node.computeSize === "function") {
+    for (const w of node.widgets || []) if (MODE_ALL.has(w.name)) setWidgetHidden(w, !keep.has(w.name));
+    if (node._rayPanel) node._rayPanel.schedule();
+    else if (typeof node.computeSize === "function") {
         const sz = node.computeSize();
         if (Array.isArray(node.size)) node.size[1] = sz[1];
         node.setSize?.([Array.isArray(node.size) ? node.size[0] : sz[0], sz[1]]);
