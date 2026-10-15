@@ -82,6 +82,22 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 
 ---
 
+## 📂 Browse buttons (folder and file paths)
+
+Every node that takes a folder or file path has a **📂 Browse** button right under the path, and Save Image's **Browse…** button works the same way: **Save Image** (save folder), **Folder Captioner** (`folder`), **TXT Folder** (`directory`), **Film Stock** (`assets_folder`), **Metadata Inspector** (`path`, an image file) and **Prompt Scraper** (`local__folder`, shown only in Local Folder mode). The button opens your operating system's own dialog, then writes the chosen path into the widget exactly as if you had typed it, so linked inputs, undo and the widget's own refresh behave the same. Typing or pasting a path still works, and a path driven by a link cannot be browsed.
+
+A web page cannot read the absolute path of a folder from the browser's picker, so the ComfyUI server opens the dialog itself and sends the path back. That means **ComfyUI must be running on the computer you are sitting at** (ComfyUI Desktop and local installs do); when you open ComfyUI from another machine, Browse says so and you type the path. The dialog starts in the folder currently in the widget, or the nearest parent that exists.
+
+| System | Dialog |
+|--------|--------|
+| Windows | The standard Windows folder or file dialog, through PowerShell 7 (`pwsh`, modern look) or Windows PowerShell; Tk if neither starts |
+| macOS | The Finder's choose-folder / choose-file window (`osascript`) |
+| Linux | `zenity`, then `kdialog`, then Tk |
+
+If none of those can start, Browse shows the reason and you type the path. Only one dialog can be open at a time, and a dialog left open for fifteen minutes is closed.
+
+---
+
 ## 🎛️ Ray's Analog: Styles (shared by every analog node)
 
 Every analog node (Control, Switch, Button Deck and Fader Bank) offers the same 31 styles, grouped by family in the **Style…** picker: Console, Broadcast, Mastering and Rack. A style is a look (its materials, panel, accent and lamp colours, and the sound it makes), so picking "Broadcast · Bakelite Flip" on a knob gives a bakelite knob with a brass-lit ring, and on a fader bank bakelite caps.
