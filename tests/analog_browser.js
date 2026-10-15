@@ -176,8 +176,12 @@ try {
             const deck=make('deck',accessor), ui=deck._rayAnalog; document.body.append(ui.element);
             const entriesW=widget(deck,'entries'), selectedW=widget(deck,'selected');
             check(entriesW.hidden===true,'The raw entries box is hidden');
-            const editW=deck.widgets.find(w=>w.name==='✎ Edit entries…');
-            check(!!editW && editW.type==='button','An Edit entries button widget sits above the deck');
+            await new Promise(r=>setTimeout(r,0));
+            const editRow=()=>deck._rayPanel?.rows.find(r=>r.custom);
+            const editB=()=>editRow()?.element.querySelector('button[title^="Edit the entries"]');
+            check(!deck.widgets.some(w=>w.type==='button') && !!editB(),'The deck panel has an edit button for the entries, not a native button widget');
+            const hostEl=deck.widgets.find(w=>w.name==='deck_ui').element;
+            check(hostEl.classList.contains('ray-analog-host') && hostEl.firstElementChild===deck._rayPanel.root.parentElement,'The panel sits above the deck in the same DOM widget');
             entriesW.value='Alpha\nBeta\nGamma\nDelta\nEpsilon'; ui.render();
             const buttons=()=>[...ui.host.querySelectorAll('.ray-deck-button')];
             const lit=()=>buttons().filter(b=>b.getAttribute('aria-checked')==='true').map(b=>b.title);
@@ -210,10 +214,13 @@ try {
                 if (style.legend==='tape') check([...ui.host.querySelectorAll('.ray-deck-sticker')].map(s=>s.textContent).join()==='Alpha,Beta,Gamma,Delta,Epsilon',`Deck style ${key} puts each entry on a Dymo sticker`);
                 else check([...buttons()[1].querySelectorAll('[data-label]')].every(t=>t.textContent==='Beta'),`Deck style ${key} cuts each entry into its button`);
             }
-            deck.properties.compact=true; ui.applyCompact();
-            check(editW.hidden===true,'Compact mode hides the Edit entries button');
-            deck.properties.compact=false; ui.applyCompact();
-            check(editW.hidden===false && entriesW.hidden===true,'Expanding restores the button and keeps the raw entries box hidden');
+            deck.properties.compact=true; ui.applyCompact(); deck._rayPanel.refresh();
+            check(editRow().element.hidden===true && deck._rayPanel.root.hidden===true,'Compact mode hides the entries row');
+            deck.properties.compact=false; ui.applyCompact(); deck._rayPanel.refresh();
+            check(editRow().element.hidden===false && entriesW.hidden===true && /5 buttons/.test(editRow().element.textContent),'Expanding brings it back, with the entry count, and keeps the raw entries box hidden');
+            editB().click(); await new Promise(r=>setTimeout(r,30));
+            check(!!document.querySelector('.ray-deck-editor'),'The edit button opens the entries popout');
+            document.querySelector('.ray-deck-editor')?.close(); document.querySelector('.ray-deck-editor')?.remove();
             ui.openEditor(); await new Promise(r=>setTimeout(r,30));
             const dialog=document.querySelector('.ray-deck-editor'), area=dialog.querySelector('textarea');
             check(area.value===entriesW.value,'The popout starts with the current entries');

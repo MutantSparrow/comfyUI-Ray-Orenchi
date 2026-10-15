@@ -8,6 +8,7 @@ http.createServer((req, res) => {
     let file;
     if (pathname === '/') file = path.join(__dirname, 'analog_browser.html');
     else if (pathname === '/scripts/app.js') file = path.join(__dirname, 'analog_fixture.js');
+    else if (pathname === '/scripts/api.js') file = path.join(__dirname, 'save_image_api_fixture.js');
     else if (pathname.startsWith('/extensions/ray/')) file = path.join(root, 'web', path.basename(pathname));
     else if (pathname.startsWith('/tests/')) file = path.join(__dirname, path.basename(pathname));
     if (!file || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
