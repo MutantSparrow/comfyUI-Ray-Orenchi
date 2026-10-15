@@ -160,13 +160,12 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
-                "**Browse…** opens your system's folder dialog and sets the save folder. You can still type a path, or use the recent-folders list.",
+                "The folder button next to **Directory** opens your system's folder dialog and pastes the path. A blank directory saves to ComfyUI's output folder; the ▾ in the field recalls the last three save folders.",
                 "The Save Image buttons choose None, 1, 2 or Both; saving happens when the workflow runs. None only previews.",
                 "With two images connected, drag the ‹ › handle to compare them. The preview is otherwise click-through, so right-click, middle-drag and the wheel still reach the canvas.",
                 "The picture fills the node: resize the node to enlarge it. Image sizes and the save status sit on the picture, and with several images the arrows at the bottom right step through the pairs.",
-                "**🏷 Build filename…** under `filename_prefix` opens a panel to build the name from tokens: `{date}`, `{time}`, `{counter}`, `{index}`, `{input}`, `{hash}` and `{widget:ID.NAME}` (the value of any widget in the workflow). The file is saved as exactly `<name>.png`.",
+                "The **{ }** button next to **Filename prefix** opens a panel to build the name from tokens: `{date}`, `{time}`, `{counter}`, `{index}`, `{input}`, `{hash}` and `{widget:ID.NAME}` (the value of any widget in the workflow). The file is saved as exactly `<name>.png`.",
                 "Spaces and characters a filename cannot hold are replaced with `_`, and nothing is ever overwritten: `{counter}` moves on to the next free number, otherwise `-2`, `-3`… is added.",
-                "The arrow next to Browse… recalls the last three save folders.",
                 "Right-click → Save without metadata omits workflow data; Open image location in Explorer opens the last save folder (Windows host).",
                 "Files are 8-bit PNGs at input resolution, alpha included.",
             ],

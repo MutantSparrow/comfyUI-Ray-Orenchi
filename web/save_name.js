@@ -248,6 +248,7 @@ export function openNameBuilder(node) {
         widget.value = value;
         widget.callback?.(value, app.canvas, node, undefined, undefined);
         node.setDirtyCanvas?.(true, true);
+        node._raySave?.sync?.();
         showPreview();
     }
     function showPreview() {
@@ -365,13 +366,21 @@ export function openNameBuilder(node) {
     return panel;
 }
 
-// "🏷 Build filename…" directly under the prefix, and widget tokens filled in from the live workflow whenever a
-// prompt is queued (the saved workflow keeps the template you typed).
+// Widget tokens are filled in from the live workflow whenever a prompt is queued; the saved workflow keeps the
+// template you typed.
+export function resolveOnQueue(node) {
+    const target = node.widgets?.find(w => w.name === "filename_prefix");
+    if (!target) return false;
+    target.serializeValue = async () => resolveWidgetTokens(target.value ?? "", node.graph);
+    return true;
+}
+
+// For frontends without DOM widgets: "🏷 Build filename…" directly under the native prefix widget.
 export function installNameBuilder(node) {
     const widgets = node.widgets;
     const target = widgets?.find(w => w.name === "filename_prefix");
     if (!target || typeof node.addWidget !== "function" || widgets.some(w => w.isRayName)) return null;
-    target.serializeValue = async () => resolveWidgetTokens(target.value ?? "", node.graph);
+    resolveOnQueue(node);
     const button = node.addWidget("button", "🏷 Build filename…", null, () => openNameBuilder(node), { serialize: false });
     if (!button) return null;
     button.serialize = false;
