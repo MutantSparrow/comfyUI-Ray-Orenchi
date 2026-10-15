@@ -84,7 +84,7 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 
 ## 📂 Browse buttons (folder and file paths)
 
-Every node that takes a folder or file path has a **📂 Browse** button right under the path, and Save Image's **Browse…** button works the same way: **Save Image** (save folder), **Folder Captioner** (`folder`), **TXT Folder** (`directory`), **Film Stock** (`assets_folder`), **Metadata Inspector** (`path`, an image file) and **Prompt Scraper** (`local__folder`, shown only in Local Folder mode). The button opens your operating system's own dialog, then writes the chosen path into the widget exactly as if you had typed it, so linked inputs, undo and the widget's own refresh behave the same. Typing or pasting a path still works, and a path driven by a link cannot be browsed.
+Every node that takes a folder or file path has a **📂 Browse** button right under the path, and Save Image's folder button next to **Directory** works the same way: **Save Image** (save folder), **Folder Captioner** (`folder`), **TXT Folder** (`directory`), **Film Stock** (`assets_folder`), **Metadata Inspector** (`path`, an image file) and **Prompt Scraper** (`local__folder`, shown only in Local Folder mode). The button opens your operating system's own dialog, then writes the chosen path into the widget exactly as if you had typed it, so linked inputs, undo and the widget's own refresh behave the same. Typing or pasting a path still works, and a path driven by a link cannot be browsed.
 
 A browser never tells a page where a picked file lives on disk, so the ComfyUI server shows the dialog and sends the path back: Python's built-in Tk dialog, which is the standard system dialog on Windows and macOS (on Linux, install `python3-tk`). That means **ComfyUI must be running on the computer you are sitting at** (ComfyUI Desktop and local installs do); opened from another machine, Browse says so and you type the path. The dialog starts in the folder currently in the widget, or the nearest parent that exists.
 
@@ -479,7 +479,7 @@ the inference device must be a GPU. The checkpoint must fit the available resour
 | `image_1` | Required IMAGE batch. |
 | `image_2` | Optional IMAGE batch; enables comparison. |
 | `save_image` | `none`, `1` (default), `2`, or `both`; presented as compact segmented buttons. |
-| `directory` | Blank for ComfyUI output, relative to output, or an absolute destination. **Browse…** opens your system's folder dialog. |
+| `directory` | Blank for ComfyUI output (shown as `/output`), relative to output, or an absolute destination. The folder button opens your system's folder dialog; the ▾ in the field recalls the last three save folders. |
 | `filename_prefix` | The file's name without the extension, built from text and tokens such as `{date}` and `{counter}`. See Filename builder below. |
 | `save_without_metadata` | Right-click toggle; removes prompt/workflow PNG text metadata. Defaults to false. |
 
@@ -493,7 +493,7 @@ three successful destinations per browser, independently of workflow values.
 
 ### Filename builder
 
-Files are saved as exactly **`<filename_prefix>.png`**: the prefix is the whole name. Click **🏷 Build filename…** under `filename_prefix` for a small panel (drag its title bar to move it) where chips insert tokens at the cursor, a live preview shows the result, and a widget picker lists every widget of every node in the workflow. You can also type tokens yourself. A new Save Image starts with `Ray_{date}_{counter}`, which saves `Ray_2026-10-16_0001.png`, `Ray_2026-10-16_0002.png`, and so on.
+Files are saved as exactly **`<filename_prefix>.png`**: the prefix is the whole name. Click the **{ }** button next to the filename prefix for a small panel (drag its title bar to move it) where chips insert tokens at the cursor, a live preview shows the result, and a widget picker lists every widget of every node in the workflow. You can also type tokens yourself. A new Save Image starts with `Ray_{date}_{counter}`, which saves `Ray_2026-10-16_0001.png`, `Ray_2026-10-16_0002.png`, and so on.
 
 | Token | Gives | Example |
 |-------|-------|---------|
