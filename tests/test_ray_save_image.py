@@ -99,16 +99,47 @@ class SaveTests(unittest.TestCase):
         absolute = self.root / "chosen elsewhere"
         result = self.run_save(directory=str(absolute))
         self.assertEqual(Path(result["ray_saved"][0]).parent.resolve(), absolute.resolve())
-        for prefix in ("../escape", "C:\\escape", "name:stream", "bad\x00name"):
-            with self.assertRaises(ValueError): self.run_save(filename_prefix=prefix)
+        # A prefix is a filename, never a second way to choose the folder: reserved characters are replaced.
+        for prefix, stem in (("../escape", "_escape"), ("C:\\escape", "C__escape"), ("name:stream", "name_stream"), ("bad\x00name", "bad_name")):
+            saved = Path(self.run_save(filename_prefix=prefix, directory=str(absolute))["ray_saved"][0])
+            self.assertEqual(saved.parent.resolve(), absolute.resolve())
+            self.assertEqual(saved.name, stem + ".png")
         with self.assertRaises(ValueError): self.run_save(save_image="invalid")
 
-    def test_folder_listing_only_directories(self):
-        self.run_save()
-        (self.root / "output" / "Child").mkdir()
-        result = module.list_directories("")
-        self.assertEqual([f["name"] for f in result["folders"]], ["Child"])
-        self.assertEqual(result["path"], str((self.root / "output").resolve()))
+    def saved_names(self, **kwargs):
+        kwargs.setdefault("directory", str(self.root / "named"))
+        kwargs.setdefault("prompt", {})
+        result = self.node.save(self.one, image_2=self.two, extra_pnginfo={}, **kwargs)
+        return [Path(p).name for p in result["ui"]["ray_saved"]]
+
+    def test_the_default_name_is_the_date_and_a_counter(self):
+        first, second = self.saved_names(), self.saved_names()
+        self.assertRegex(first[0], r"^Ray_\d{4}-\d{2}-\d{2}_0001\.png$")
+        self.assertRegex(second[0], r"^Ray_\d{4}-\d{2}-\d{2}_0002\.png$")
+        self.assertRegex(self.saved_names(filename_prefix="   ")[0], r"^Ray_\d{4}-\d{2}-\d{2}_0003\.png$")   # blank means the default
+
+    def test_a_file_is_saved_as_exactly_the_prefix_and_the_extension(self):
+        self.assertEqual(self.saved_names(filename_prefix="shot"), ["shot.png"])
+        self.assertEqual(self.saved_names(filename_prefix="shot"), ["shot-2.png"])     # never overwritten
+        self.assertEqual(self.saved_names(filename_prefix="  my shot?  "), ["my_shot_.png"])
+
+    def test_tokens_name_each_image_of_each_input(self):
+        self.assertEqual(self.saved_names(save_image="both", filename_prefix="p_{input}_{index}"), ["p_1_1.png", "p_2_1.png", "p_2_2.png"])
+        self.assertEqual(self.saved_names(save_image="both", filename_prefix="p"), ["p.png", "p-2.png", "p-3.png"])
+        self.assertEqual(self.saved_names(save_image="both", filename_prefix="{counter:2}_{input}"), ["01_1.png", "01_2.png", "02_2.png"])      # a counter counts files that share the rest of the name
+
+    def test_widget_values_come_from_the_queued_graph(self):
+        prompt = {"5": {"inputs": {"seed": 99, "text": "a cat / a dog?"}}, "6": {"inputs": {"seed": ["5", 0]}}}
+        self.assertEqual(self.saved_names(prompt=prompt, filename_prefix="s{widget:5.seed}_{widget:5.text}"), ["s99_a_cat_a_dog.png"])
+        self.assertEqual(self.saved_names(prompt=prompt, filename_prefix="v{widget:6.seed}"), ["v.png"])      # a link has no value yet
+        self.assertEqual(self.saved_names(prompt=prompt, filename_prefix="m{widget:77.nothing}"), ["m.png"])
+        self.assertEqual(self.saved_names(prompt=None, filename_prefix="n{widget:5.seed}"), ["n.png"])
+
+    def test_a_bad_template_is_reported_and_only_matters_when_saving(self):
+        with self.assertRaisesRegex(ValueError, "Unknown filename token"):
+            self.saved_names(filename_prefix="{nope}")
+        self.assertEqual(self.saved_names(save_image="none", filename_prefix="{nope}"), [])
+        self.assertFalse((self.root / "named").exists() and any((self.root / "named").iterdir()))
 
     def test_explorer_opens_only_existing_folder(self):
         self.run_save()

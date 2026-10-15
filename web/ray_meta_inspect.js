@@ -22,7 +22,7 @@ function setWidgetHidden(widget, hidden) {
 
 function applyMode(node, mode) {
     const keep = MODE_VISIBLE[mode] || MODE_VISIBLE[MODE_INSPECT];
-    for (const w of node.widgets || []) setWidgetHidden(w, !keep.has(w.name));
+    for (const w of node.widgets || []) setWidgetHidden(w, !keep.has(w.ownerName || w.name));
     if (typeof node.computeSize === "function") {
         const sz = node.computeSize();
         if (Array.isArray(node.size)) node.size[1] = sz[1];
