@@ -11,7 +11,7 @@ import { SWITCH_STYLES } from '/extensions/ray/switch_styles.js';
 import { quantizeInt, boundValue } from '/extensions/ray/ray_knob.js';
 import { isMuted, setMuted, createBank, VOICE_TABLES } from '/extensions/ray/analog_audio.js';
 import { isWheelOn, setWheelOn, wheelUnits } from '/extensions/ray/analog_common.js';
-import { clampCount, clampRows, clampLevel, syncOutputs } from '/extensions/ray/ray_fader_bank.js';
+import { clampCount, clampRows, clampLevel, syncOutputs, addFaderRows } from '/extensions/ray/ray_fader_bank.js';
 import { FADER_STYLES } from '/extensions/ray/fader_styles.js';
 import { THEMES, VOICE_CLASSES, FAMILIES, familyOf, MATERIALS } from '/extensions/ray/analog_themes.js';
 import { KNOBS, SLIDERS, SWITCHES, GENERATED_KNOBS, GENERATED_SLIDERS, GENERATED_SWITCHES } from '/extensions/ray/analog_hardware.js';
@@ -704,6 +704,18 @@ try {
     {
         check(clampCount(0) === 2 && clampCount(99) === 10 && clampCount('x') === 4 && clampCount(5.9) === 5, 'Fader count clamps to 2..10');
         check(clampRows(0) === 1 && clampRows(9) === 4 && clampRows('x') === 1 && clampRows(2.7) === 2, 'Fader rows clamp to 1..4');
+        const oldBank = (values) => ({ nodes: [{ type: 'RayFaderBank', widgets_values: values }] });
+        const ten = [6, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1];
+        let saved = oldBank([...ten, '']); addFaderRows(saved);
+        let v = saved.nodes[0].widgets_values;
+        check(v.length === 43 && JSON.stringify(v.slice(0, 11)) === JSON.stringify(ten) && v[11] === 1 && v.slice(12, 42).every(x => x === .5) && v[42] === '', 'An old Fader Bank save gets one row and the new faders, with its own values in place');
+        saved = oldBank([...ten]); addFaderRows(saved);
+        check(saved.nodes[0].widgets_values.length === 42 && saved.nodes[0].widgets_values[11] === 1, 'An old save without the face value is migrated too');
+        const current = [...ten, 3, ...Array(30).fill(.25), ''];
+        saved = oldBank([...current]); addFaderRows(saved);
+        check(JSON.stringify(saved.nodes[0].widgets_values) === JSON.stringify(current), 'A save with rows is left alone');
+        saved = { nodes: [], definitions: { subgraphs: [oldBank([...ten, ''])] } }; addFaderRows(saved);
+        check(saved.definitions.subgraphs[0].nodes[0].widgets_values[11] === 1, 'Fader Banks inside subgraphs are migrated');
         check(clampLevel(-1) === 0 && clampLevel(3) === 1 && clampLevel(NaN) === .5 && clampLevel('.25') === .25, 'Fader levels clamp to 0..1');
         const bank = make('fader'), ui = bank._rayAnalog;
         document.body.append(ui.element);
