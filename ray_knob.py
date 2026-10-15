@@ -9,10 +9,10 @@ class RayKnob:
         "plugs into either side without a converter.\n\n"
         "Right-click for the style picker (nine knobs, five sliders), Mute "
         "sound (knobs, sliders and switches make hardware sounds), Compact "
-        "mode (strips everything except the brushed panel, Dymo tape, face, "
-        "and readout — title bar gone, config widgets hidden, input/output "
-        "pins stashed when unwired), and Edit label. The Dymo tape above the "
-        "face is double-click editable and is saved with the workflow."
+        "mode (the faceplate alone: no title bar, pins, setup panel or node "
+        "background; drag it by its frame, links meet it under the face), and "
+        "Edit label. The Dymo tape above the face is double-click editable and "
+        "is saved with the workflow."
     )
 
     @classmethod

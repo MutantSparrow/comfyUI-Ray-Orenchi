@@ -67,5 +67,5 @@ function buildSwitch(node, widget) {
 registerAnalog(app, {
     kind: "switch", name: "RaySwitch", title: "🎛️ Ray's Analog: Switch",
     styles: SWITCH_STYLES, defaultStyle: DEFAULT_SWITCH_STYLE, valueName: "state",
-    outputs: [["bool", "BOOLEAN"]], build: buildSwitch,
+    outputs: [["bool", "BOOLEAN"]], build: buildSwitch, compactWidth: 180,
 });

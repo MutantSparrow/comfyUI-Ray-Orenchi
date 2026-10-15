@@ -3,7 +3,7 @@ import '/extensions/ray/ray_knob.js';
 import '/extensions/ray/ray_switch.js';
 import '/extensions/ray/ray_button_deck.js';
 import '/extensions/ray/ray_fader_bank.js';
-import { DECK_STYLES, gridShape } from '/extensions/ray/deck_styles.js';
+import { DECK_STYLES, gridShape, fitGrid } from '/extensions/ray/deck_styles.js';
 import { parseEntries } from '/extensions/ray/ray_button_deck.js';
 import { migrateClipInput } from '/extensions/ray/ray_vlm_folder.js';
 import { KNOB_STYLES } from '/extensions/ray/knob_styles.js';
@@ -11,7 +11,7 @@ import { SWITCH_STYLES } from '/extensions/ray/switch_styles.js';
 import { quantizeInt, boundValue } from '/extensions/ray/ray_knob.js';
 import { isMuted, setMuted, createBank, VOICE_TABLES } from '/extensions/ray/analog_audio.js';
 import { isWheelOn, setWheelOn, wheelUnits } from '/extensions/ray/analog_common.js';
-import { clampCount, clampLevel, syncOutputs } from '/extensions/ray/ray_fader_bank.js';
+import { clampCount, clampRows, clampLevel, syncOutputs } from '/extensions/ray/ray_fader_bank.js';
 import { FADER_STYLES } from '/extensions/ray/fader_styles.js';
 import { THEMES, VOICE_CLASSES, FAMILIES, familyOf, MATERIALS } from '/extensions/ray/analog_themes.js';
 import { KNOBS, SLIDERS, SWITCHES, GENERATED_KNOBS, GENERATED_SLIDERS, GENERATED_SWITCHES } from '/extensions/ray/analog_hardware.js';
@@ -42,6 +42,17 @@ try {
         check(knob.outputs === slots && knob.outputs.length===2,'Compact preserves actual output slots');
         check(knob.title.includes('Knob'),'Compact preserves saved title');
         check(knob.widgets.slice(0,4).every(w=>w.hidden),'Compact hides numeric configuration');
+        check(knob.renderingBgColor==='transparent' && knob.widgets_start_y===0 && Object.hasOwn(knob,'drawSlots') && Object.hasOwn(knob,'drawBadges'),'Compact draws no node background, slots or badges');
+        check(knob.size[0]===180 && knob.size[1]>=232 && JSON.stringify(knob.computeSize())==='[180,232]','Compact shrinks a Control to its faceplate');
+        const faceWidget=knob.widgets.find(w=>w.name==='knob_ui').element;
+        check(faceWidget.classList.contains('ray-analog-bare'),'Compact marks the face for the Nodes 2.0 rules');
+        knob.setSize([180,240]); knob.inputs=[{name:'min_value',widget:{name:'min_value'},link:3}]; knob.arrange();
+        check(JSON.stringify(knob.inputs[0].pos)==='[54,120]' && JSON.stringify(knob.outputs.map(o=>o.pos))==='[[126,120],[126,120]]','Compact links meet the node under its face');
+        knob.properties.compact=false; control.applyCompact();
+        check(!['renderingBgColor','widgets_start_y','drawSlots','drawBadges','computeSize','arrange'].some(k=>Object.hasOwn(knob,k)) && knob.outputs.every(o=>!('pos' in o)) && !('pos' in knob.inputs[0]) && !faceWidget.classList.contains('ray-analog-bare'),'Expanding restores the normal node');
+        knob.inputs=[];
+        knob.setSize([400,400]); knob.properties.compact=true; control.applyCompact({resize:false});
+        check(knob.size[0]===400 && knob.size[1]===400,'A loaded compact node keeps its saved size');
         knob.properties.compact=false; control.applyCompact();
         check(knob.widgets.slice(0,4).every(w=>!w.hidden && ['number','toggle'].includes(w.type)),'Expand restores native types');
         check(JSON.stringify(values)===JSON.stringify(knob.widgets.slice(0,5).map(w=>w.value)),'Presentation preserves serialized input order and values');
@@ -172,6 +183,11 @@ try {
         const shapes={1:[1,1],2:[2,1],3:[2,2],4:[2,2],5:[3,2],6:[3,2],7:[3,3],9:[3,3],10:[4,3],12:[4,3],13:[4,4]};
         for (const [n,[cols,rows]] of Object.entries(shapes)) { const g=gridShape(Number(n)); check(g.cols===cols && g.rows===rows,`${n} buttons arrange as ${cols} x ${rows}`); }
         check(JSON.stringify(parseEntries('  a \r\n\r\nb\na\n c'))==='["a","b","c"]','Entries: one per line, trimmed, blanks and repeats dropped');
+        const fit=(n,w,h,extra=0)=>{const g=fitGrid(n,w,h,6,extra);return `${g.cols}x${g.rows}`;};
+        check(fit(4,400,100)==='4x1' && fit(4,200,200)==='2x2' && fit(4,100,400)==='1x4','Four buttons line up in a wide face, stack in a tall one, and square up in a square one');
+        check(fit(5,300,200)==='3x2' && fit(6,600,100)==='6x1' && fit(3,140,140)==='2x2','The grid gives the buttons the most room');
+        check(fit(4,300,150,40)==='4x1' && fit(4,300,150)==='2x2','A sticker under each button counts against the height');
+        check(fit(4,0,0)==='2x2','An unmeasured face falls back to a square-ish grid');
         for (const accessor of [false,true]) {
             const deck=make('deck',accessor), ui=deck._rayAnalog; document.body.append(ui.element);
             const entriesW=widget(deck,'entries'), selectedW=widget(deck,'selected');
@@ -185,7 +201,8 @@ try {
             entriesW.value='Alpha\nBeta\nGamma\nDelta\nEpsilon'; ui.render();
             const buttons=()=>[...ui.host.querySelectorAll('.ray-deck-button')];
             const lit=()=>buttons().filter(b=>b.getAttribute('aria-checked')==='true').map(b=>b.title);
-            check(buttons().length===5 && ui.host.style.getPropertyValue('--deck-cols')==='3','Five entries make five buttons in three columns');
+            const want=fitGrid(5,ui.host.clientWidth-4,ui.host.clientHeight-4,6,DECK_STYLES[deck.properties.style].legend==='tape'?20:0);
+            check(buttons().length===5 && ui.host.style.getPropertyValue('--deck-cols')===String(want.cols) && ui.host.style.getPropertyValue('--deck-rows')===String(want.rows),'Five entries make five buttons in the grid that fits the face');
             check(JSON.stringify(lit())==='["Alpha"]','With nothing stored the first button is the lit one');
             buttons()[2].click();
             check(selectedW.value==='Gamma' && JSON.stringify(lit())==='["Gamma"]' && deck.callbacks===1,'Pressing a button stores its text and lights only that button');
@@ -225,7 +242,7 @@ try {
             const dialog=document.querySelector('.ray-deck-editor'), area=dialog.querySelector('textarea');
             check(area.value===entriesW.value,'The popout starts with the current entries');
             area.value='One\nTwo\n\nTwo\nThree\nFour'; area.dispatchEvent(new Event('input'));
-            check(/4 buttons · 2 × 2 grid · 1 repeated or extra line ignored/.test(dialog.querySelector('.ray-deck-editor-info').textContent),'The popout previews the button count and grid');
+            check(/4 buttons · 1 repeated or extra line ignored/.test(dialog.querySelector('.ray-deck-editor-info').textContent),'The popout previews the button count');
             [...dialog.querySelectorAll('button')].find(b=>b.textContent==='Apply').click();
             await new Promise(r=>setTimeout(r,30));
             check(entriesW.value==='One\nTwo\nThree\nFour' && buttons().length===4 && !document.querySelector('.ray-deck-editor'),'Applying stores normalized entries, rebuilds the deck and closes');
@@ -686,6 +703,7 @@ try {
     // ---- fader bank -------------------------------------------------------------------------------
     {
         check(clampCount(0) === 2 && clampCount(99) === 10 && clampCount('x') === 4 && clampCount(5.9) === 5, 'Fader count clamps to 2..10');
+        check(clampRows(0) === 1 && clampRows(9) === 4 && clampRows('x') === 1 && clampRows(2.7) === 2, 'Fader rows clamp to 1..4');
         check(clampLevel(-1) === 0 && clampLevel(3) === 1 && clampLevel(NaN) === .5 && clampLevel('.25') === .25, 'Fader levels clamp to 0..1');
         const bank = make('fader'), ui = bank._rayAnalog;
         document.body.append(ui.element);
@@ -708,6 +726,14 @@ try {
         check(strips().length === 10, 'A count above ten is held at ten');
         widget(bank, 'faders').value = 3; widget(bank, 'faders').callback();
         check(strips().length === 3 && bank.outputs.length === 4, 'Back down to three');
+        const rowsOf = () => [...ui.element.querySelectorAll('.ray-fader-row')].map(r => r.querySelectorAll('.ray-fader-strip').length).join(',');
+        widget(bank, 'faders').value = 6; widget(bank, 'rows').value = 2; widget(bank, 'rows').callback();
+        check(strips().length === 12 && rowsOf() === '6,6' && bank.outputs.length === 13 && bank.outputs[12].name === 'fader_12', 'A second row of six makes twelve faders and twelve outputs');
+        check(strips()[6].querySelector('.ray-fader-num').textContent === '7' && strips()[6].getAttribute('aria-label') === 'Fader 7', 'Numbering carries on into the next row');
+        widget(bank, 'faders').value = 10; widget(bank, 'rows').value = 9; widget(bank, 'rows').callback();
+        check(strips().length === 40 && rowsOf() === '10,10,10,10' && bank.outputs.length === 41, 'Rows stop at four: forty faders at most');
+        widget(bank, 'faders').value = 3; widget(bank, 'rows').value = 1; widget(bank, 'rows').callback();
+        check(strips().length === 3 && rowsOf() === '3' && bank.outputs.length === 4, 'Back to one row of three');
 
         const first = strips()[0];
         first.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
@@ -783,7 +809,7 @@ try {
         check(ui.element.dataset.style === 'console_black', 'An unknown style falls back to the default');
 
         const plain = make('fader', false, false);
-        check(plain._rayAnalog === undefined && plain.outputs.length === 11, 'Without DOM widgets the native widgets and every output stay');
+        check(plain._rayAnalog === undefined && plain.outputs.length === 41, 'Without DOM widgets the native widgets and every output stay');
         bank.onRemoved(); ui.element.remove();
     }
     document.querySelector('#results').textContent=`${passes} checks passed\n`+messages.join('\n');
