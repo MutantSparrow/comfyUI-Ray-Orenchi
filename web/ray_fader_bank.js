@@ -3,6 +3,7 @@ import { findWidget, setWidgetHidden } from "./_common.js";
 import { createPanel, changeValue, editNode, isLinked, registerAnalog, wheelEdit } from "./analog_common.js";
 import { FADER_STYLES, DEFAULT_FADER_STYLE, getFaderStyleCSS } from "./fader_styles.js";
 import { createKnobFeel } from "./analog_audio.js";
+import { responseOf } from "./analog_curve.js";
 
 const MIN_FADERS = 2, MAX_FADERS = 10, DEFAULT_FADERS = 4;
 const FINE = .05;          // Shift slows a drag to this fraction
@@ -53,6 +54,10 @@ function buildFaders(node, firstWidget) {
     let strips = [], built = 0, last = 0, drag = null;
     const count = () => Math.min(clampCount(countWidget?.value), widgets.length);
     const level = i => clampLevel(widgets[i]?.value);
+    // Where a fader's cap sits on its track, 0..1, through the bank's response curve; and a fader moved along
+    // its track by `delta` of the travel, as a value.
+    const trackAt = i => responseOf(node).inverse(level(i));
+    const nudged = (i, delta) => responseOf(node).forward(trackAt(i) + delta);
     const disabled = i => isLinked(node, `fader_${i + 1}`) || !!widgets[i]?.disabled || !!widgets[i]?.computedDisabled;
     const format = value => value.toFixed(2);
 
@@ -112,8 +117,8 @@ function buildFaders(node, firstWidget) {
                 window.addEventListener("blur", cancelDrag);
                 // Grabbing the cap drags it where it is; the track elsewhere jumps the cap to the pointer.
                 const { fraction } = fractionAt(strip, event);
-                if (Math.abs(fraction - level(i)) > CAP / Math.max(1, strip.track.getBoundingClientRect().height - CAP) * .6) {
-                    setLevel(i, fraction, event);
+                if (Math.abs(fraction - trackAt(i)) > CAP / Math.max(1, strip.track.getBoundingClientRect().height - CAP) * .6) {
+                    setLevel(i, responseOf(node).forward(fraction), event);
                 }
                 ui.render();
             });
@@ -124,7 +129,7 @@ function buildFaders(node, firstWidget) {
                 const { travel } = fractionAt(strip, event);
                 const moved = (drag.lastY - event.clientY) / travel * (event.shiftKey ? FINE : 1);
                 drag.lastY = event.clientY;
-                setLevel(i, level(i) + moved, event);
+                setLevel(i, nudged(i, moved), event);
             });
             for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) el.addEventListener(type, endDrag);
             el.addEventListener("keydown", event => {
@@ -133,7 +138,7 @@ function buildFaders(node, firstWidget) {
                 let value;
                 if (event.key === "Home") value = 0;
                 else if (event.key === "End") value = 1;
-                else if (Object.hasOwn(steps, event.key)) value = level(i) + steps[event.key] * fine;
+                else if (Object.hasOwn(steps, event.key)) value = nudged(i, steps[event.key] * fine);
                 else return;
                 event.preventDefault();
                 editNode(node, () => setLevel(i, value, event));
@@ -160,10 +165,10 @@ function buildFaders(node, firstWidget) {
         panel.dataset.style = key;
         panel.dataset.panel = FADER_STYLES[key].panel || "silver";
         strips.forEach((strip, i) => {
-            const value = level(i);
-            if (strip.at !== value) {
-                strip.at = value;
-                strip.el.style.setProperty("--v", String(value));
+            const value = level(i), track = trackAt(i);
+            if (strip.at !== track || strip.value !== value) {
+                strip.at = track; strip.value = value;
+                strip.el.style.setProperty("--v", String(track));
                 strip.el.setAttribute("aria-valuenow", String(value));
                 strip.el.setAttribute("aria-valuetext", format(value));
                 strip.el.title = `Fader ${i + 1}: ${format(value)}`;
@@ -173,7 +178,7 @@ function buildFaders(node, firstWidget) {
         const shown = Math.min(last, n - 1);
         readoutText.textContent = `F${shown + 1}  ${format(level(shown))}`;
         const any = strips.some((_, i) => disabled(i));
-        hint.textContent = `${n} FADERS  /  0 … 1  /  ${any ? "SOME EXTERNAL  /  " : ""}SHIFT · FINE`;
+        hint.textContent = `${n} FADERS  /  0 … 1  /  ${responseOf(node).linear ? "" : "CURVE  /  "}${any ? "SOME EXTERNAL  /  " : ""}SHIFT · FINE`;
     };
 
     // Mouse wheel over a fader: 2% per notch, a tenth of that with Shift. Anywhere else the canvas keeps it.
@@ -181,9 +186,14 @@ function buildFaders(node, firstWidget) {
         const at = strips.findIndex(strip => strip.el.contains(event.target));
         if (at < 0 || disabled(at)) return false;
         const step = units * .02 * (event.shiftKey ? .1 : 1);
-        wheelEdit(node, () => setLevel(at, level(at) + step, event), feel.end);
+        wheelEdit(node, () => setLevel(at, nudged(at, step), event), feel.end);
         return true;
     };
+
+    ui.curveInfo = () => ({
+        title: `Response curve · ${node.properties.ray_label || "Fader Bank"}`,
+        range: () => [0, 1], format: value => value.toFixed(3), changed: () => ui.render(),
+    });
 
     ui.render();
     return ui;
@@ -194,6 +204,6 @@ registerAnalog(app, {
     extensionName: "Ray.FaderBank", menuName: "Fader",
     styles: FADER_STYLES, defaultStyle: DEFAULT_FADER_STYLE, valueName: "fader_1", configNames: ["faders"],
     outputs: [["values", "FLOAT"], ...Array.from({ length: MAX_FADERS }, (_, i) => [`fader_${i + 1}`, "FLOAT"])],
-    build: buildFaders,
+    build: buildFaders, curve: true,
     heights: () => ({ min: 250, max: undefined }),
 });
