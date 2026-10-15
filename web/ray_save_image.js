@@ -2,6 +2,7 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { findWidget, setWidgetHidden } from "./_common.js";
 import { browsePath, notify } from "./browse_common.js";
+import { installNameBuilder } from "./save_name.js";
 
 const modes = ["none", "1", "2", "both"];
 const historyKey = "ray.saveImage.paths.v1";
@@ -204,6 +205,7 @@ app.registerExtension({
         const proto = nodeType.prototype, created = proto.onNodeCreated;
         proto.onNodeCreated = function () {
             const result = created?.apply(this, arguments); this.color = this.bgcolor = "#000000";
+            installNameBuilder(this);
             if (!this.addDOMWidget) return result;
             this._raySave = build(this);
             for (const name of ["save_image", "save_without_metadata"]) setWidgetHidden(this, findWidget(this, name), true);

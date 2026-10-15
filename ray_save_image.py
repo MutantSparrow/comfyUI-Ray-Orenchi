@@ -1,6 +1,7 @@
 """PNG output and comparison previews; no image tensors survive an execution."""
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,6 +10,11 @@ from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 import folder_paths
 from comfy.cli_args import args
+
+try:
+    from . import filename_template as names
+except ImportError:
+    import filename_template as names
 
 
 def destination_path(value):
@@ -19,6 +25,16 @@ def destination_path(value):
     return path.resolve()
 
 
+def prompt_widgets(prompt):
+    """Looks up a widget value on any node of the queued graph. A value that comes from another node's output (a
+    link) has no value yet, so it is skipped; the web page fills those in before the prompt is sent."""
+    def lookup(node_id, name):
+        node = prompt.get(str(node_id)) if isinstance(prompt, dict) else None
+        value = node.get("inputs", {}).get(name) if isinstance(node, dict) else None
+        return None if isinstance(value, (list, tuple, dict)) else value
+    return lookup
+
+
 class RaySaveImage:
     @classmethod
     def INPUT_TYPES(cls):
@@ -27,7 +43,7 @@ class RaySaveImage:
                 "image_1": ("IMAGE", {"tooltip": "Connect the primary image or batch."}),
                 "save_image": (["none", "1", "2", "both"], {"default": "1", "tooltip": "Choose which input batches to save; none only previews."}),
                 "directory": ("STRING", {"default": "", "tooltip": "Choose an absolute folder, or a path relative to ComfyUI output. Blank uses output."}),
-                "filename_prefix": ("STRING", {"default": "Ray", "tooltip": "Set a filename prefix; input number and a unique ID are appended."}),
+                "filename_prefix": ("STRING", {"default": names.DEFAULT_TEMPLATE, "tooltip": "The file name, without the extension: text and {tokens} such as {date}, {counter}, {hash}, {index}, {input} and {widget:ID.NAME}. Spaces and characters a filename cannot hold are replaced, and nothing is overwritten. Use the Build filename button."}),
                 "save_without_metadata": ("BOOLEAN", {"default": False, "tooltip": "Omit prompt and workflow metadata from saved PNGs."}),
             },
             "optional": {"image_2": ("IMAGE", {"tooltip": "Connect another image or batch to enable slider comparison."})},
@@ -39,19 +55,21 @@ class RaySaveImage:
     FUNCTION = "save"
     OUTPUT_NODE = True
     CATEGORY = "👑 Ray/🔧 Tools"
-    DESCRIPTION = "Save PNG images or compare two inputs with a draggable preview divider."
+    DESCRIPTION = ("Save PNG images or compare two inputs with a draggable preview divider. Files are saved as "
+                   "<filename_prefix>.png: build the name from text and tokens (date, counter, hash, widget values...) "
+                   "with the Build filename button. Existing files are never overwritten.")
 
-    def save(self, image_1, save_image="1", directory="", filename_prefix="Ray",
+    def save(self, image_1, save_image="1", directory="", filename_prefix=names.DEFAULT_TEMPLATE,
              save_without_metadata=False, image_2=None, prompt=None, extra_pnginfo=None, node_id=None):
         if save_image not in ("none", "1", "2", "both"):
             raise ValueError("Save Image must be none, 1, 2, or both.")
         if save_image == "2" and image_2 is None:
             raise ValueError("Connect image_2 or choose Save Image 1 / none.")
         selected = {"none": set(), "1": {1}, "2": {2}, "both": {1, 2}}[save_image]
-        # A prefix is a filename, never a second way to select the destination.
-        prefix = filename_prefix.strip() or "Ray"
-        if selected and (any(c in prefix for c in '<>:"/\\|?*') or any(ord(c) < 32 for c in prefix)):
-            raise ValueError("Filename prefix cannot contain path separators or reserved filename characters.")
+        # The prefix is the file's name, never a second way to select the destination: separators and other
+        # reserved characters are replaced, so it cannot leave the chosen folder.
+        parts = names.parse(filename_prefix.strip() or names.DEFAULT_TEMPLATE) if selected else None
+        now, widgets = datetime.now(), prompt_widgets(prompt)
         output = destination_path(directory) if selected else None
         if output is not None:
             output.mkdir(parents=True, exist_ok=True)
@@ -75,10 +93,10 @@ class RaySaveImage:
                 image = Image.fromarray(pixels)
                 token = uuid4().hex
                 if number in selected:
-                    filename = f"{prefix}_{number}_{index + 1:04}_{token}.png"
-                    target = output / filename
-                    # Exclusive creation prevents overwriting even concurrent runs.
-                    with target.open("xb") as stream:
+                    # Exclusive creation prevents overwriting, even by concurrent runs.
+                    target, stream = names.create_unique(
+                        output, parts, {"now": now, "index": index + 1, "input": number, "widgets": widgets}, ".png")
+                    with stream:
                         image.save(stream, format="PNG", pnginfo=metadata, compress_level=4)
                     saved.append(str(target))
                 preview_name = f"{token}.png"
