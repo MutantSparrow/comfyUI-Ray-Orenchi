@@ -1,13 +1,9 @@
-"""HTTP route that opens the operating system's own file or folder dialog.
+"""HTTP route behind the Browse buttons: shows a file or folder dialog and returns the chosen path.
 
-A web page cannot learn the absolute path of a folder from the browser's picker, so the Browse buttons ask
-the ComfyUI server to open the native dialog and send the chosen path back. The server runs on the same
-computer as the browser (ComfyUI Desktop and local installs), so the dialog appears on your screen. The
-route refuses requests from other machines, because a dialog opened there would appear on the server.
-
-The dialog comes from the platform: Windows PowerShell / pwsh (WinForms), macOS osascript, Linux zenity or
-kdialog, with Tk as a last resort. The path travels back on stdout; nothing the page sends is ever run as code
-(it reaches the dialog through environment variables or arguments only).
+A web page is never told where a picked file lives on disk, so the ComfyUI server shows the dialog itself,
+with Python's built-in Tk (the system dialog on Windows and macOS), and sends the path back to be pasted into
+the widget. The dialog runs in its own process so a stuck dialog can never block the server, and nothing the
+page sends is run as code: values reach it as arguments only.
 """
 
 from __future__ import annotations
@@ -15,7 +11,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import threading
@@ -27,11 +22,7 @@ _busy = threading.Lock()
 
 
 class BrowseUnavailable(Exception):
-    """No file dialog can be shown on this machine. `retry` says another dialog program may still work."""
-
-    def __init__(self, message, retry=False):
-        super().__init__(message)
-        self.retry = retry
+    """The dialog could not be shown."""
 
 
 class BrowseBusy(Exception):
@@ -56,8 +47,8 @@ def clean_filters(filters):
 
 
 def start_location(kind, initial):
-    """The directory a dialog should open in (and the file to preselect), from a path the user may have typed
-    wrongly: the nearest folder that exists, or nothing."""
+    """The folder a dialog opens in (and the file to preselect), from a path that may be mistyped: the nearest
+    folder that exists, or nothing."""
     text = str(initial or "").strip().strip('"')
     if not text or not os.path.isabs(text):
         return "", ""
@@ -72,35 +63,6 @@ def start_location(kind, initial):
     return path, ""
 
 
-_POWERSHELL = r"""
-$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Windows.Forms
-[System.Windows.Forms.Application]::EnableVisualStyles()
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-# A hidden top-most owner brings the dialog to the front instead of leaving it behind the browser.
-$owner = New-Object System.Windows.Forms.Form
-$owner.TopMost = $true; $owner.ShowInTaskbar = $false; $owner.Opacity = 0
-$owner.StartPosition = 'CenterScreen'; $owner.Width = 1; $owner.Height = 1
-$owner.Show(); $owner.Activate()
-try {
-    if ($env:RAY_BROWSE_KIND -eq 'folder') {
-        $d = New-Object System.Windows.Forms.FolderBrowserDialog
-        $d.Description = $env:RAY_BROWSE_TITLE
-        try { $d.UseDescriptionForTitle = $true } catch {}
-        if ($env:RAY_BROWSE_DIR) { $d.SelectedPath = $env:RAY_BROWSE_DIR }
-        $d.ShowNewFolderButton = $true
-        if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($d.SelectedPath) }
-    } else {
-        $d = New-Object System.Windows.Forms.OpenFileDialog
-        $d.Title = $env:RAY_BROWSE_TITLE
-        $d.Filter = $env:RAY_BROWSE_FILTER
-        if ($env:RAY_BROWSE_DIR) { $d.InitialDirectory = $env:RAY_BROWSE_DIR }
-        if ($env:RAY_BROWSE_NAME) { $d.FileName = $env:RAY_BROWSE_NAME }
-        if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($d.FileName) }
-    }
-} finally { $owner.Dispose() }
-"""
-
 _TK = r"""
 import json, sys
 try:
@@ -112,106 +74,42 @@ kind, folder, name, title, filters = sys.argv[1:6]
 root = tkinter.Tk()
 root.withdraw()
 try:
-    root.attributes("-topmost", True)
+    root.attributes("-topmost", True)   # in front of the browser rather than behind it
 except Exception:
     pass
+root.update()
 types = [(label, " ".join("*." + e for e in exts)) for label, exts in json.loads(filters)] + [("All files", "*.*")]
 if kind == "folder":
-    path = filedialog.askdirectory(title=title, initialdir=folder or None, mustexist=False)
+    path = filedialog.askdirectory(parent=root, title=title, initialdir=folder or None, mustexist=False)
 else:
-    path = filedialog.askopenfilename(title=title, initialdir=folder or None, initialfile=name or None, filetypes=types)
-sys.stdout.write(path or "")
+    path = filedialog.askopenfilename(parent=root, title=title, initialdir=folder or None, initialfile=name or None, filetypes=types)
+sys.stdout.buffer.write((path or "").encode("utf-8"))
 """
 
-_APPLESCRIPT = """on run argv
-    set promptText to item 1 of argv
-    set kindText to item 2 of argv
-    set startDir to item 3 of argv
-    if kindText is "folder" then
-        if startDir is "" then
-            return POSIX path of (choose folder with prompt promptText)
-        end if
-        return POSIX path of (choose folder with prompt promptText default location (POSIX file startDir as alias))
-    end if
-    if startDir is "" then
-        return POSIX path of (choose file with prompt promptText)
-    end if
-    return POSIX path of (choose file with prompt promptText default location (POSIX file startDir as alias))
-end run"""
 
-
-def windows_filter(filters):
-    parts = []
-    for label, exts in filters:
-        pattern = ";".join(f"*.{e}" for e in exts)
-        parts += [f"{label} ({pattern})", pattern]
-    return "|".join(parts + ["All files (*.*)", "*.*"])
-
-
-def build_candidates(kind, initial, title, filters, platform=None, which=shutil.which):
-    """Every (argv, extra environment) that can show the dialog here, best first, ending with Tk. Each prints
-    the chosen path. Pure, so it can be tested."""
-    platform = platform or sys.platform
+def build_command(kind, initial, title, filters):
+    """The command that shows the dialog and prints the chosen path. Pure, so it can be tested."""
     folder, name = start_location(kind, initial)
-    filters = clean_filters(filters)
     title = str(title or ("Choose a folder" if kind == "folder" else "Choose a file"))[:120]
-    found = []
-    if platform.startswith("win"):
-        env = {"RAY_BROWSE_KIND": kind, "RAY_BROWSE_TITLE": title, "RAY_BROWSE_DIR": folder,
-               "RAY_BROWSE_NAME": name, "RAY_BROWSE_FILTER": windows_filter(filters)}
-        # pwsh (PowerShell 7) shows the modern folder dialog; Windows PowerShell shows the older tree.
-        for shell in dict.fromkeys(s for s in (which("pwsh"), which("powershell")) if s):
-            found.append(([shell, "-NoProfile", "-NonInteractive", "-STA", "-ExecutionPolicy", "Bypass", "-Command", _POWERSHELL], env))
-    elif platform == "darwin":
-        if which("osascript"):
-            found.append((["osascript", "-e", _APPLESCRIPT, title, kind, folder], {}))
-    else:
-        if which("zenity"):
-            argv = ["zenity", "--file-selection", "--title", title]
-            if kind == "folder":
-                argv.append("--directory")
-            if folder:
-                argv += ["--filename", os.path.join(folder, name) if name else folder.rstrip("/") + "/"]
-            for label, exts in filters:
-                argv.append(f"--file-filter={label} | " + " ".join(f"*.{e}" for e in exts))
-            found.append((argv, {}))
-        if which("kdialog"):
-            start = os.path.join(folder, name) if folder else os.path.expanduser("~")
-            if kind == "folder":
-                found.append((["kdialog", "--title", title, "--getexistingdirectory", start], {}))
-            else:
-                pattern = "|".join(" ".join(f"*.{e}" for e in exts) + f"|{label}" for label, exts in filters) if filters else "*"
-                found.append((["kdialog", "--title", title, "--getopenfilename", start, pattern], {}))
-    found.append(([sys.executable, "-c", _TK, kind, folder, name, title, json.dumps(filters)], {}))
-    return found
+    return [sys.executable, "-c", _TK, kind, folder, name, title, json.dumps(clean_filters(filters))]
 
 
-def build_command(kind, initial, title, filters, platform=None, which=shutil.which):
-    """The preferred dialog command alone."""
-    return build_candidates(kind, initial, title, filters, platform, which)[0]
-
-
-def run_command(argv, extra_env, timeout=TIMEOUT_SECONDS):
-    """Run the dialog. Returns the chosen path, or None when the user closed it."""
-    env = dict(os.environ)
-    env.update(extra_env)
+def run_command(argv, timeout=TIMEOUT_SECONDS):
+    """Run the dialog. Returns the chosen path (with the system's separators), or None when it was closed."""
     kwargs = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)} if os.name == "nt" else {}
     try:
-        done = subprocess.run(argv, capture_output=True, timeout=timeout, env=env, stdin=subprocess.DEVNULL, **kwargs)
+        done = subprocess.run(argv, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL, **kwargs)
     except OSError as error:
-        raise BrowseUnavailable(f"The file dialog could not be started ({error}).", retry=True) from error
+        raise BrowseUnavailable(f"The file dialog could not be started ({error}).") from error
     except subprocess.TimeoutExpired as error:
         raise BrowseUnavailable("The file dialog was left open for too long and was closed.") from error
     out = done.stdout.decode("utf-8-sig", errors="replace").strip("\r\n")
-    err = done.stderr.decode("utf-8", errors="replace").strip()
-    if done.returncode == 0:
-        return out or None
-    # zenity, kdialog and osascript report "cancelled" as exit 1; osascript also says error -128.
-    if done.returncode == 1 and (not err or "-128" in err or "cancel" in err.lower()):
-        return None
-    if done.returncode == 3 and argv and argv[0] == sys.executable:
-        raise BrowseUnavailable("No file dialog is available here. Type the path instead.")
-    raise BrowseUnavailable((err.splitlines() or ["The file dialog failed."])[-1][:200], retry=True)
+    if done.returncode == 3:
+        raise BrowseUnavailable("Python's Tk is not installed, so no file dialog can be shown. Type the path instead.")
+    if done.returncode != 0:
+        err = done.stderr.decode("utf-8", errors="replace").strip()
+        raise BrowseUnavailable((err.splitlines() or ["The file dialog failed."])[-1][:200])
+    return os.path.normpath(out) if out else None
 
 
 def pick(kind, initial="", title="", filters=None):
@@ -220,15 +118,7 @@ def pick(kind, initial="", title="", filters=None):
     if not _busy.acquire(blocking=False):
         raise BrowseBusy("A file dialog is already open.")
     try:
-        last = None
-        for argv, extra_env in build_candidates(kind, initial, title, filters):
-            try:
-                return run_command(argv, extra_env)
-            except BrowseUnavailable as error:
-                last = error
-                if not error.retry:
-                    raise
-        raise last or BrowseUnavailable("No file dialog is available here. Type the path instead.")
+        return run_command(build_command(kind, initial, title, filters))
     finally:
         _busy.release()
 
@@ -248,8 +138,9 @@ if PromptServer is not None:
 
     @PromptServer.instance.routes.post("/ray/browse")
     async def browse(request):
+        # A dialog requested from another computer would open on this one, where nobody can answer it.
         if not is_local(request.remote):
-            return web.json_response({"ok": False, "error": "Browse only works when ComfyUI runs on this computer. Type the path instead."}, status=403)
+            return web.json_response({"ok": False, "error": "Browse needs ComfyUI to run on this computer. Type the path instead."}, status=403)
         if request.content_type != "application/json":
             return web.json_response({"ok": False, "error": "Expected a JSON request."}, status=415)
         try:
