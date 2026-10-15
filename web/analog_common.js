@@ -22,6 +22,99 @@ export function changeValue(node, widget, value, event) {
     node.setDirtyCanvas?.(true, true);
 }
 
+// ---------------------------------------------------------------------------
+// Mouse wheel. A listener preference, like mute: it lives in localStorage, not in the workflow. When on,
+// scrolling over an analog node drives its face instead of zooming the canvas. Ctrl / Cmd + wheel still
+// zooms, and a control fed by a link lets the wheel through.
+// ---------------------------------------------------------------------------
+
+const WHEEL_PREF = "ray.analog.wheel.v1";
+let wheelOn = false;
+try { wheelOn = localStorage.getItem(WHEEL_PREF) === "1"; } catch { /* preference stays off */ }
+let wheelApp = null;
+
+export const isWheelOn = () => wheelOn;
+export function setWheelOn(value) {
+    wheelOn = !!value;
+    try { localStorage.setItem(WHEEL_PREF, wheelOn ? "1" : "0"); } catch { /* preference stays in memory */ }
+}
+
+// Wheel notches, positive when scrolling up. A mouse notch is 1; a trackpad sends many small fractions.
+export function wheelUnits(event) {
+    const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    const scale = event.deltaMode === 1 ? 33 : event.deltaMode === 2 ? 800 : 1;
+    return -(delta || 0) * scale / 100;
+}
+
+// Whole steps from a stream of fractional notches; the remainder is forgotten after a pause.
+export function createWheelSteps() {
+    let carry = 0, last = 0;
+    return units => {
+        const now = performance.now();
+        if (now - last > 400) carry = 0;
+        last = now;
+        carry += units;
+        const steps = Math.trunc(carry);
+        carry -= steps;
+        return steps;
+    };
+}
+
+// One undo step for a burst of wheel changes, and `onIdle` when the burst ends.
+const wheelBursts = new WeakMap();
+export function wheelEdit(node, apply, onIdle) {
+    let burst = wheelBursts.get(node);
+    if (!burst) {
+        burst = { graph: node.graph, timer: 0 };
+        burst.graph?.beforeChange?.();
+        wheelBursts.set(node, burst);
+    }
+    apply();
+    clearTimeout(burst.timer);
+    burst.timer = setTimeout(() => {
+        wheelBursts.delete(node);
+        burst.graph?.afterChange?.();
+        onIdle?.();
+    }, 350);
+}
+
+function nodeUnder(event) {
+    const target = event.target;
+    const panel = target?.closest?.(".ray-analog-panel");
+    if (panel?._rayNode) return panel._rayNode;
+    const graph = wheelApp?.canvas?.graph || wheelApp?.graph;
+    const vue = target?.closest?.("[data-node-id]");
+    if (vue && graph) return graph.getNodeById?.(vue.dataset.nodeId) || graph.getNodeById?.(Number(vue.dataset.nodeId)) || null;
+    const canvas = wheelApp?.canvas;
+    if (canvas && target === canvas.canvas && canvas.convertEventToCanvasOffset) {
+        const [x, y] = canvas.convertEventToCanvasOffset(event);
+        return graph?.getNodeOnPos?.(x, y) || null;
+    }
+    return null;
+}
+
+// The legacy canvas never sees a wheel that lands on a control's panel, so a wheel the control declines
+// (Ctrl / Cmd to zoom, or a linked control) is handed to the canvas, which zooms as it does elsewhere.
+function passToCanvas(event) {
+    const canvas = wheelApp?.canvas;
+    if (!event.target?.closest?.(".ray-analog-panel") || event.target.closest("[data-node-id]") || !canvas?.processMouseWheel) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    canvas.processMouseWheel(event);
+}
+
+function onWheel(event) {
+    if (!wheelOn) return;
+    const ui = nodeUnder(event)?._rayAnalog;
+    if (!ui?.wheel) return;
+    const units = wheelUnits(event);
+    if (!units) return;
+    if (event.ctrlKey || event.metaKey || !ui.wheel(units, event)) { passToCanvas(event); return; }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+}
+if (typeof window !== "undefined") window.addEventListener("wheel", onWheel, { capture: true, passive: false });
+
 export function editNode(node, action) {
     const graph = node.graph;
     graph?.beforeChange?.();
@@ -204,6 +297,7 @@ export function createPanel(node, kind, css) {
     }
     const element = document.createElement("div");
     element.className = `ray-analog-panel ray-${kind}-wrap`;
+    element._rayNode = node;
     const dymo = mountDymoLabel(node, { placeholder: kind.toUpperCase() });
     element.appendChild(dymo.root);
     const host = document.createElement(kind === "switch" ? "button" : "div");
@@ -248,6 +342,7 @@ export function repairAnalogWorkflow(data, name, title, outputs) {
 export function registerAnalog(app, { kind, name, title, styles, defaultStyle, valueName, configNames = [], outputs, build, migrate,
     extensionName = `Ray.${kind === "knob" ? "Knob" : "Switch"}`, menuName = kind === "knob" ? "Control" : "Switch",
     heights = () => ({ min: 232, max: 232 }), menuItems = () => [] }) {
+    wheelApp = app;
     app.registerExtension({
         name: extensionName,
         beforeConfigureGraph(data) { repairAnalogWorkflow(data, name, title, outputs); migrate?.(data); },
@@ -362,6 +457,7 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                         }) },
                     { content: "Edit label…", callback: () => this._rayDymo?.beginEdit() },
                     ...menuItems(this),
+                    { content: `${isWheelOn() ? "● " : ""}Mouse wheel control`, callback: () => setWheelOn(!isWheelOn()) },
                     { content: isMuted() ? "🔈 Unmute sound" : "🔇 Mute sound", callback: () => setMuted(!isMuted()) },
                 );
                 return result;

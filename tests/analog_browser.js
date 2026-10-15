@@ -9,6 +9,7 @@ import { KNOB_STYLES } from '/extensions/ray/knob_styles.js';
 import { SWITCH_STYLES } from '/extensions/ray/switch_styles.js';
 import { quantizeInt, boundValue } from '/extensions/ray/ray_knob.js';
 import { isMuted, setMuted, createBank, VOICE_TABLES } from '/extensions/ray/analog_audio.js';
+import { isWheelOn, setWheelOn, wheelUnits } from '/extensions/ray/analog_common.js';
 
 const messages = [];
 let passes = 0;
@@ -327,6 +328,88 @@ try {
     const ids=[...document.querySelectorAll('svg [id]')].map(el=>el.id);
     check(new Set(ids).size===ids.length,'All simultaneously mounted SVG resource IDs are unique');
     check([...document.querySelectorAll('svg [fill^="url(#"]')].every(el=>document.getElementById(el.getAttribute('fill').slice(5,-1))), 'SVG gradient references resolve');
+    // ---- mouse wheel ------------------------------------------------------------------------------
+    {
+        const spin = (el, deltaY, init = {}) => {
+            const event = new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true, ...init });
+            el.dispatchEvent(event);
+            return event;
+        };
+        const idle = () => new Promise(resolve => setTimeout(resolve, 450));
+        check(!isWheelOn(), 'Mouse wheel control starts off');
+        check(wheelUnits({ deltaY: -100, deltaX: 0, deltaMode: 0 }) === 1 && wheelUnits({ deltaY: 3, deltaX: 0, deltaMode: 1 }) < -0.9
+            && wheelUnits({ deltaY: 0, deltaX: 100, deltaMode: 0 }) === -1, 'Wheel deltas become notches: up is positive, lines and horizontal deltas count');
+
+        const knob = make('knob'), face = knob._rayAnalog;
+        document.body.append(face.element);
+        const value = widget(knob, 'knob_value');
+        let event = spin(face.element, -100);
+        check(!event.defaultPrevented && value.value === 0, 'Scrolling does nothing to the control while the preference is off');
+
+        setWheelOn(true);
+        check(isWheelOn() && localStorage.getItem('ray.analog.wheel.v1') === '1', 'The wheel preference persists in the browser');
+        event = spin(face.element, -100);
+        check(event.defaultPrevented && Math.abs(value.value - 4) < 1e-9, 'A notch up moves a knob 2% of its range and blocks the canvas zoom');
+        spin(face.element, 100);
+        check(Math.abs(value.value) < 1e-9, 'A notch down moves it back');
+        spin(face.element, -100, { shiftKey: true });
+        check(Math.abs(value.value - .4) < 1e-9, 'Shift makes wheel steps ten times finer');
+        spin(face.element, -100, { ctrlKey: true });
+        check(Math.abs(value.value - .4) < 1e-9 && !spin(face.element, -100, { metaKey: true }).defaultPrevented, 'Ctrl / Cmd + wheel is left to the canvas zoom');
+        for (let i = 0; i < 80; i++) spin(face.element, -100);
+        check(value.value === 100, 'The wheel stops at the maximum');
+        for (let i = 0; i < 120; i++) spin(face.element, 100);
+        check(value.value === -100, 'and at the minimum');
+        widget(knob, 'min_value').value = 0; widget(knob, 'max_value').value = 1; value.value = 0;
+        for (let i = 0; i < 5; i++) spin(face.element, -100);
+        check(Math.abs(value.value - .1) < 1e-12, 'Steps follow the range, so 0 to 1 is controllable and carries no float noise');
+        await idle();
+        check(knob.graph.before === knob.graph.after, 'A burst of wheel steps is one balanced undo step');
+        spin(face.element, -100); spin(face.element, -100);
+        await idle();
+        check(knob.graph.before === knob.graph.after && knob.graph.before > 0, 'Bursts after a pause are balanced as well');
+        knob.inputs = [{ name: 'knob_value', link: 4 }]; knob.onConnectionsChange();
+        const before = value.value;
+        event = spin(face.element, -100);
+        check(!event.defaultPrevented && value.value === before, 'A linked control ignores the wheel and lets the canvas zoom');
+        knob.inputs = []; knob.onConnectionsChange();
+        knob.onRemoved(); face.element.remove();
+
+        const toggle = make('switch'), ui = toggle._rayAnalog;
+        document.body.append(ui.element);
+        const state = widget(toggle, 'state');
+        event = spin(ui.element, 100);
+        check(event.defaultPrevented && state.value === false, 'Wheel down leaves an off switch off');
+        spin(ui.element, -100);
+        check(state.value === true, 'Wheel up switches on');
+        spin(ui.element, -100);
+        check(state.value === true, 'Another notch up leaves it on');
+        spin(ui.element, 100);
+        check(state.value === false, 'Wheel down switches off');
+        ui.element.remove(); toggle.onRemoved();
+
+        const deck = make('deck'), buttons = deck._rayAnalog;
+        document.body.append(buttons.element);
+        widget(deck, 'entries').value = 'A\nB\nC'; widget(deck, 'selected').value = 'A'; buttons.render();
+        const selected = widget(deck, 'selected');
+        spin(buttons.element, 100);
+        check(selected.value === 'B', 'Wheel down presses the next button');
+        spin(buttons.element, 100); spin(buttons.element, 100);
+        event = spin(buttons.element, 100);
+        check(selected.value === 'C' && event.defaultPrevented, 'The deck stops at the last button and still keeps the wheel');
+        spin(buttons.element, -100);
+        check(selected.value === 'B', 'Wheel up presses the previous button');
+        widget(deck, 'selected').value = 'gone'; buttons.render();
+        spin(buttons.element, 100);
+        check(selected.value === 'B', 'From a missing stored value the deck steps from the first button');
+        buttons.element.remove(); deck.onRemoved();
+
+        const elsewhere = document.createElement('div'); document.body.append(elsewhere);
+        check(!spin(elsewhere, -100).defaultPrevented, 'Scrolling anywhere else is untouched');
+        elsewhere.remove();
+        setWheelOn(false);
+        check(!isWheelOn() && localStorage.getItem('ray.analog.wheel.v1') === '0', 'The preference turns off again');
+    }
     document.querySelector('#results').textContent=`${passes} checks passed\n`+messages.join('\n');
     document.querySelector('summary').textContent=`Regression results — ${passes} checks passed`;
 } catch(error) {
