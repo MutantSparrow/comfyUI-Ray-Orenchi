@@ -52,14 +52,25 @@ export function getRadialBrushedURL(palette = ["#f5f5f5", "#c8c8c8", "#7a7a7a"])
 // Palette + tint helpers
 // ---------------------------------------------------------------------------
 
-// `bg` is the node body (always black); `edge` is the title-bar color that
-// identifies the bucket.
+// Every Ray node is black: body (`bg`) and title bar (`edge`). Colored title bars were hard to read against
+// many ComfyUI themes, so the buckets no longer differ by color. The keys stay for the callers.
 export const RAY_PALETTE = {
-    VFX:     { bg: "#000000", edge: "#8a3ac8" },  // violet header
-    Analog:  { bg: "#000000", edge: "#000000" },  // black — knob / switch
-    Tools:   { bg: "#000000", edge: "#c8873a" },  // amber header
-    LLM:     { bg: "#000000", edge: "#3a73c8" },  // blue header
+    VFX:     { bg: "#000000", edge: "#000000" },
+    Analog:  { bg: "#000000", edge: "#000000" },
+    Tools:   { bg: "#000000", edge: "#000000" },
+    LLM:     { bg: "#000000", edge: "#000000" },
 };
+
+// Title-bar colors Ray nodes used to get by default (bucket colors and the Prompt Scraper's per-mode
+// variants). Saved workflows still carry them; they are turned black on load.
+const _LEGACY_EDGE = ["#8a3ac8", "#c8873a", "#3a73c8"];
+let _legacyEdges = null;
+export function isLegacyTitleColor(hex) {
+    if (typeof hex !== "string") return false;
+    _legacyEdges ||= new Set(_LEGACY_EDGE.flatMap(
+        (base) => _LEGACY_SHIFTS.map((deg) => shiftTint(base, deg).toLowerCase())));
+    return _legacyEdges.has(hex.toLowerCase());
+}
 
 // Body colors used before the black-body palette, including the hue-shifted
 // variants of the mode-tinted nodes. Saved workflows still carry them.

@@ -1,8 +1,12 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { findWidget, setWidgetHidden } from "./_common.js";
+import { browsePath, notify } from "./browse_common.js";
+import { installNameBuilder, openNameBuilder, resolveOnQueue } from "./save_name.js";
 
 const modes = ["none", "1", "2", "both"];
+const DEFAULT_PREFIX_HINT = "Ray_{date}_{counter}";
+let fieldIds = 0;
 const historyKey = "ray.saveImage.paths.v1";
 function history() {
     try {
@@ -40,80 +44,72 @@ function styles() {
     css.textContent = `
 .dom-widget:has(> .ray-save) {pointer-events:none !important}
 .ray-save {box-sizing:border-box;width:100%;height:100%;padding:2px;display:flex;flex-direction:column;gap:2px;background:#000;color:#eee;font:12px system-ui;border-radius:8px;overflow:hidden;pointer-events:none}
-.ray-save button,.ray-save select,.ray-save-handle {pointer-events:auto}
-.ray-save *, .ray-save-dialog * {box-sizing:border-box}
-.ray-save button,.ray-save select,.ray-save-dialog button,.ray-save-dialog input,.ray-save-dialog select {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:4px;padding:3px 6px;min-width:0}
+.ray-save button,.ray-save select,.ray-save input,.ray-save-handle {pointer-events:auto}
+.ray-save * {box-sizing:border-box}
+.ray-save button,.ray-save select {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:4px;padding:3px 6px;min-width:0}
 .ray-save button:disabled {opacity:.4}
-.ray-save button:hover:not(:disabled),.ray-save-dialog button:hover {background:#454753}
-.ray-save :focus-visible,.ray-save-dialog :focus-visible {outline:2px solid #b9a4fa;outline-offset:2px}
-.ray-save-toolbar {display:flex;gap:5px;align-items:center;flex-shrink:0}
-.ray-save-toolbar label {white-space:nowrap;font-size:11px}
-.ray-save > .ray-save-toolbar {gap:4px}
-.ray-save-stops {display:flex;flex-shrink:0;gap:0;margin-right:auto;border:1px solid #444;border-radius:4px;overflow:hidden}
-.ray-save-stops button {flex:0 0 auto;padding:3px 6px;font-size:11px;background:transparent;border:0;border-radius:0}
-.ray-save-stops button[aria-pressed=true] {background:#ddd;color:#111}
+.ray-save button:hover:not(:disabled) {background:#454753}
+.ray-save :focus-visible {outline:2px solid #b9a4fa;outline-offset:2px}
+.ray-save-head {display:flex;flex-direction:column;gap:6px;padding:6px 6px 9px;border-bottom:1px solid #2b2b2b;flex-shrink:0}
+.ray-save-label {font-size:11px;color:#a3a3a3}
+.ray-save-row {display:flex;gap:6px;align-items:center;min-width:0;flex-wrap:wrap}
+.ray-save-group {display:flex;gap:6px;align-items:center;flex:1 1 200px;min-width:0}
+.ray-save-row.ray-save-fixed {flex-wrap:nowrap}
+.ray-save-input {flex:1 1 0;width:auto;min-width:0;height:28px;padding:4px 9px;background:#141414;color:#eee;border:1px solid #3a3a3a;border-radius:5px;font:12px system-ui}
+.ray-save-input::placeholder {color:#6f6f6f}
+.ray-save-input:disabled {opacity:.55}
+.ray-save button.ray-save-icon {flex:0 0 auto;width:32px;height:28px;padding:0;display:grid;place-items:center;font:600 13px ui-monospace,monospace}
+.ray-save-icon svg {width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
+.ray-save-dir {font-size:11px;color:#a3a3a3;white-space:nowrap}
+.ray-save-path {position:relative;flex:1 1 auto;min-width:90px;display:flex}
+.ray-save-path .ray-save-input {padding-right:26px}
+.ray-save-path select {position:absolute;right:1px;top:1px;bottom:1px;width:24px;padding:0;opacity:0;cursor:pointer}
+.ray-save-chevron {position:absolute;right:1px;top:1px;bottom:1px;width:24px;display:grid;place-items:center;color:#9a9a9a;font-size:11px;pointer-events:none;border-left:1px solid #2c2c2c}
+.ray-save-path select:disabled + .ray-save-chevron {opacity:.35}
+.ray-save-stops {display:flex;flex-shrink:0;gap:0;border:1px solid #444;border-radius:5px;overflow:hidden}
+.ray-save-stops button {flex:0 0 auto;height:26px;padding:3px 9px;font-size:12px;background:transparent;border:0;border-radius:0}
+.ray-save-stops button + button {border-left:1px solid #2f2f2f}
+.ray-save .ray-save-stops button[aria-pressed=true], .ray-save .ray-save-stops button[aria-pressed=true]:hover {background:#e2e2e2;color:#111}
 .ray-save-stage {position:relative;flex:1 1 0;min-height:0;overflow:hidden;border-radius:5px;background:#000}
 .ray-save-stage img {position:absolute;width:100%;height:100%;object-fit:contain;inset:0;pointer-events:none}
 .ray-save-overlay {position:absolute;inset:0;pointer-events:none;background:#000}
 .ray-save-divider {position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 2px #000;pointer-events:none}
 .ray-save-handle {position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#f5f3fa;color:#222;border-radius:12px;padding:8px 5px;white-space:nowrap;font:bold 13px system-ui;box-shadow:0 1px 5px #0008;cursor:ew-resize;touch-action:none}
-.ray-save-empty {position:absolute;inset:0;display:grid;place-items:center;color:#bbb;text-align:center;padding:24px;pointer-events:none}
+.ray-save-empty {position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;color:#8c8c8c;text-align:center;padding:24px;pointer-events:none}
+.ray-save-empty svg {width:52px;height:52px;fill:none;stroke:#5c5c5c;stroke-width:1.6;stroke-linejoin:round}
 .ray-save-badge {position:absolute;top:8px;background:#111b;padding:3px 6px;border-radius:3px;pointer-events:none;font-size:10px}
 .ray-save-info {position:absolute;left:6px;bottom:6px;max-width:calc(100% - 120px);display:flex;flex-direction:column;align-items:flex-start;gap:2px;pointer-events:none}
 .ray-save-info > span {max-width:100%;padding:2px 5px;border-radius:3px;background:#000b;color:#ddd;font-size:10px;line-height:1.3;white-space:pre-line;overflow:hidden;text-overflow:ellipsis}
 .ray-save-info > span:empty {display:none}
 .ray-save-nav {position:absolute;right:6px;bottom:6px;display:flex;align-items:center;gap:3px;padding:2px;border-radius:5px;background:#000b;font-size:10px;color:#ddd}
 .ray-save-nav button {padding:1px 6px}
-.ray-save-dialog {width:min(620px,90vw);max-height:80vh;background:#24252b;color:#eee;border:1px solid #62616d;border-radius:10px;padding:16px;font:13px system-ui}
-.ray-save-dialog::backdrop {background:#0008}
-.ray-save-dialog h3 {margin:0 0 12px;font-size:16px}
-.ray-save-dialog .ray-save-toolbar {margin-bottom:10px}
-.ray-save-dialog input {flex:1;width:100%}
-.ray-save-folders {display:flex;flex-direction:column;gap:4px;overflow:auto;height:260px;margin:10px 0}
-.ray-save-folders button {text-align:left}
-.ray-save-dialog .ray-save-error {min-height:18px;color:#ffb1aa;overflow-wrap:anywhere}
 `;
     document.head.append(css);
 }
 
-function folderPicker(node) {
-    const dialog = element("dialog", "ray-save-dialog");
-    dialog.append(element("h3", "", "Choose save folder"));
-    const row = element("div", "ray-save-toolbar"), path = element("input");
-    path.setAttribute("aria-label", "Folder path");
-    const list = element("div", "ray-save-folders"), error = element("div", "ray-save-error");
-    const roots = element("select"); roots.setAttribute("aria-label", "Drive");
-    const choose = button("Use this folder", () => {
-        if (!current) return;
-        update(node, "directory", current); dialog.close();
+// A text field that edits a native widget: the whole edit is one undo step, and it shows when a link sets it.
+function textField(node, name) {
+    const input = element("input", "ray-save-input");
+    input.type = "text"; input.spellcheck = false; input.autocomplete = "off";
+    let editing = false;
+    input.addEventListener("focus", () => { if (!editing) { node.graph?.beforeChange?.(); editing = true; } });
+    input.addEventListener("input", () => {
+        const widget = findWidget(node, name);
+        if (!widget || linked(node, name)) return;
+        widget.value = input.value; widget.callback?.(input.value);
+        node.setDirtyCanvas?.(true, true);
     });
-    let current = "", parent = "", requestNumber = 0;
-    const controller = new AbortController();
-    async function load(value) {
-        const request = ++requestNumber; error.textContent = "Loading…"; choose.disabled = true;
-        try {
-            const response = await api.fetchApi(`/ray/save-image/folders?${new URLSearchParams({path: value})}`, {signal: controller.signal});
-            const data = await response.json();
-            if (request !== requestNumber || !dialog.isConnected) return;
-            if (!response.ok) throw new Error(data.error || "Cannot open folder.");
-            current = data.path; parent = data.parent; path.value = current;
-            roots.replaceChildren(...data.roots.map(root => { const o = element("option", "", root); o.value = root; return o; }));
-            roots.value = data.roots.find(root => current.toLowerCase().startsWith(root.toLowerCase())) || data.roots[0];
-            list.replaceChildren(...data.folders.map(folder => button(`▸ ${folder.name}`, () => load(folder.path))));
-            error.textContent = data.folders.length ? "" : "No subfolders. You can choose this folder.";
-            choose.disabled = false;
-        } catch (e) { if (e.name !== "AbortError" && request === requestNumber) error.textContent = e.message; }
-    }
-    roots.onchange = () => load(roots.value);
-    path.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); load(path.value); } });
-    row.append(roots, button("↑", () => load(parent)), path, button("Open", () => load(path.value)));
-    const footer = element("div", "ray-save-toolbar");
-    footer.append(button("Cancel", () => dialog.close()), choose);
-    dialog.append(row, list, error, footer);
-    dialog.addEventListener("close", () => { controller.abort(); dialog.remove(); node._raySaveDialog = null; });
-    dialog.addEventListener("keydown", e => e.stopPropagation());
-    node._raySaveDialog?.close(); node._raySaveDialog = dialog;
-    document.body.append(dialog); dialog.showModal(); load(findWidget(node, "directory")?.value || "");
+    input.addEventListener("blur", () => { if (editing) { editing = false; node.graph?.afterChange?.(); } });
+    input.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); input.blur(); } });
+    return input;
+}
+
+// The folder button opens the system's own folder dialog (see browse_routes.py) and pastes the path.
+async function browseFolder(node) {
+    try {
+        const picked = await browsePath("folder", findWidget(node, "directory")?.value || "", { title: "Choose the save folder" });
+        if (picked) update(node, "directory", picked);
+    } catch (error) { notify(error.message); }
 }
 
 function build(node) {
@@ -123,24 +119,49 @@ function build(node) {
     window.addEventListener("keydown", e => { if (e.code === "Space" || e.key === " ") spaceHeld = true; }, {capture: true, signal: navigation.signal});
     window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") spaceHeld = false; }, {capture: true, signal: navigation.signal});
     window.addEventListener("blur", () => { spaceHeld = false; }, {signal: navigation.signal});
-    const root = element("div", "ray-save"), toolbar = element("div", "ray-save-toolbar");
-    const browse = button("Browse…", () => folderPicker(node));
-    const recent = element("select"); recent.title = "Last three save folders"; recent.setAttribute("aria-label", "Recent save folders");
-    function recentOptions() {
-        recent.replaceChildren(element("option", "", ""), ...history().map(p => { const o = element("option", "", p); o.value = p; return o; }));
-        recent.selectedIndex = 0;
-    }
-    recent.style.width = "25px"; recentOptions();
-    recent.addEventListener("pointerdown", recentOptions);
-    recent.onchange = () => { if (recent.selectedIndex > 0) update(node, "directory", recent.value); recent.selectedIndex = 0; };
-    const state = element("span", "ray-save-status");
+    const root = element("div", "ray-save"), head = element("div", "ray-save-head");
+    // Filename prefix, with { } opening the filename builder.
+    const prefixLabel = element("label", "ray-save-label", "Filename prefix");
+    const prefix = textField(node, "filename_prefix");
+    prefix.id = `ray-save-prefix-${++fieldIds}`; prefixLabel.htmlFor = prefix.id;
+    const tokens = button("{ }", () => openNameBuilder(node));
+    tokens.className = "ray-save-icon"; tokens.title = "Build the filename from tokens: date, counter, hash, widget values…";
+    tokens.setAttribute("aria-label", "Build filename");
+    const prefixRow = element("div", "ray-save-row ray-save-fixed");
+    prefixRow.append(prefix, tokens);
+    // Save choice, then the directory: folder dialog, path, and the last three save folders in a drop-down.
     const stops = element("div", "ray-save-stops");
     stops.setAttribute("role", "group"); stops.setAttribute("aria-label", "Save Image");
     modes.forEach(mode => stops.append(button(mode === "none" ? "None" : mode === "both" ? "Both" : mode, () => update(node, "save_image", mode))));
-    toolbar.append(stops, browse, recent);
+    const dirLabel = element("label", "ray-save-dir", "Directory");
+    const browse = button("", () => browseFolder(node));
+    browse.className = "ray-save-icon"; browse.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h6l2 2h10v10H3z"/></svg>';
+    browse.title = "Choose the save folder"; browse.setAttribute("aria-label", "Choose the save folder");
+    const directory = textField(node, "directory");
+    directory.id = `ray-save-dir-${fieldIds}`; dirLabel.htmlFor = directory.id;
+    const recent = element("select"); recent.title = "Last three save folders"; recent.setAttribute("aria-label", "Recent save folders");
+    function recentOptions() {
+        const paths = history();
+        recent.replaceChildren(element("option", "", ""), ...paths.map(p => { const o = element("option", "", p); o.value = p; return o; }));
+        recent.selectedIndex = 0;
+        recent.title = paths.length ? "Last three save folders" : "No save folders yet";
+    }
+    recentOptions();
+    recent.addEventListener("pointerdown", recentOptions);
+    recent.onchange = () => { if (recent.selectedIndex > 0) update(node, "directory", recent.value); recent.selectedIndex = 0; };
+    const path = element("div", "ray-save-path");
+    path.append(directory, recent, element("span", "ray-save-chevron", "▾"));
+    const group = element("div", "ray-save-group");
+    group.append(dirLabel, browse, path);
+    const row = element("div", "ray-save-row");
+    row.append(stops, group);
+    head.append(prefixLabel, prefixRow, row);
+    const state = element("span", "ray-save-status");
     const stage = element("div", "ray-save-stage"), first = element("img"), second = element("img"), overlay = element("div", "ray-save-overlay");
     first.alt = "Image 1"; second.alt = "Image 2"; overlay.append(first);
-    const divider = element("div", "ray-save-divider"), handle = element("span", "ray-save-handle", "‹ ›"), empty = element("div", "ray-save-empty", "Queue the workflow to preview images");
+    const divider = element("div", "ray-save-divider"), handle = element("span", "ray-save-handle", "‹ ›"), empty = element("div", "ray-save-empty");
+    empty.innerHTML = '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="7" width="38" height="34" rx="3"/><circle cx="17" cy="17" r="3.5"/><path d="M5 35l11-11 9 9 6-6 12 12"/></svg>';
+    empty.append(element("span", "", "Queue the workflow to preview images"));
     const left = element("span", "ray-save-badge", "1"), right = element("span", "ray-save-badge", "2");
     left.style.left = "8px"; right.style.right = "8px";
     divider.append(handle);
@@ -195,7 +216,7 @@ function build(node) {
         });
         divider.hidden = !comparing; left.hidden = !pair[0]; right.hidden = !pair[1];
         handle.setAttribute("aria-disabled", String(!comparing));
-        empty.hidden = !!(pair[0] || pair[1]); empty.style.display = empty.hidden ? "none" : "grid";
+        empty.hidden = !!(pair[0] || pair[1]); empty.style.display = empty.hidden ? "none" : "flex";
         batch.hidden = total <= 1; batch.style.display = batch.hidden ? "none" : "flex";
         count.textContent = `${index + 1} / ${total}${!comparing && arrays[1].length ? " · Unpaired image" : ""}`;
         previous.disabled = index === 0; next.disabled = index >= total - 1;
@@ -203,7 +224,7 @@ function build(node) {
         updateSizes();
     }
     [first, second].forEach(img => img.addEventListener("error", () => { state.textContent = "Preview expired. Queue again to refresh."; }));
-    root.append(toolbar, stage);
+    root.append(head, stage);
     // Keep canvas navigation alive over DOM widgets. Only ordinary control
     // interactions belong to this panel; wheel, Space-pan and middle-pan bubble.
     root.addEventListener("pointerdown", e => { panClick = spaceHeld || e.button === 1; }, true);
@@ -214,6 +235,8 @@ function build(node) {
         if (!spaceHeld && e.button === 0) e.stopPropagation();
     });
     for (const event of ["keydown", "keyup"]) root.addEventListener(event, e => {
+        // Typing in a field belongs to the field, never to canvas shortcuts.
+        if (e.target instanceof HTMLInputElement) { e.stopPropagation(); return; }
         if (e.ctrlKey || e.metaKey || e.altKey || e.code === "Space" || e.key === " ") return;
         if (e.defaultPrevented || ["Enter", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) e.stopPropagation();
     });
@@ -222,7 +245,15 @@ function build(node) {
         sync() {
             const mode = findWidget(node, "save_image")?.value || "1";
             [...stops.children].forEach((b, i) => { b.disabled = linked(node, "save_image"); b.setAttribute("aria-pressed", String(mode === modes[i])); });
-            browse.disabled = recent.disabled = linked(node, "directory");
+            for (const [input, name, hint] of [[prefix, "filename_prefix", DEFAULT_PREFIX_HINT], [directory, "directory", "/output"]]) {
+                const isLinked = linked(node, name);
+                input.disabled = isLinked;
+                input.placeholder = isLinked ? "Set by a link" : hint;
+                if (document.activeElement !== input) input.value = isLinked ? "" : String(findWidget(node, name)?.value ?? "");
+            }
+            tokens.disabled = linked(node, "filename_prefix");
+            browse.disabled = linked(node, "directory");
+            recent.disabled = browse.disabled || !history().length;
         },
         executed(message) {
             arrays = [message.ray_images_1 || [], message.ray_images_2 || []]; index = 0;
@@ -231,7 +262,7 @@ function build(node) {
             if (message.ray_directory?.[0]) { remember(message.ray_directory[0]); recentOptions(); }
             show();
         },
-        destroy() { navigation.abort(); node._raySaveDialog?.close(); first.removeAttribute("src"); second.removeAttribute("src"); },
+        destroy() { navigation.abort(); first.removeAttribute("src"); second.removeAttribute("src"); },
     };
     show(); ui.sync(); return ui;
 }
@@ -243,13 +274,14 @@ app.registerExtension({
         const proto = nodeType.prototype, created = proto.onNodeCreated;
         proto.onNodeCreated = function () {
             const result = created?.apply(this, arguments); this.color = this.bgcolor = "#000000";
-            if (!this.addDOMWidget) return result;
+            if (!this.addDOMWidget) { installNameBuilder(this); return result; }
+            resolveOnQueue(this);
             this._raySave = build(this);
-            for (const name of ["save_image", "save_without_metadata"]) setWidgetHidden(this, findWidget(this, name), true);
+            for (const name of ["save_image", "save_without_metadata", "filename_prefix", "directory"]) setWidgetHidden(this, findWidget(this, name), true);
             this.addDOMWidget("ray_save_preview", "RAY_SAVE_IMAGE", this._raySave.root, {
-                serialize: false, hideOnZoom: false, getMinHeight: () => 120, getHeight: () => 300,
+                serialize: false, hideOnZoom: false, getMinHeight: () => 230, getHeight: () => 380,
             });
-            this.setSize?.([Math.max(this.size?.[0] || 0, 320), Math.max(this.size?.[1] || 0, 400)]);
+            this.setSize?.([Math.max(this.size?.[0] || 0, 420), Math.max(this.size?.[1] || 0, 480)]);
             return result;
         };
         for (const event of ["onConfigure", "onConnectionsChange"]) {
@@ -265,7 +297,7 @@ app.registerExtension({
             this._raySave?.executed(message); return result;
         };
         const removed = proto.onRemoved;
-        proto.onRemoved = function () { this._raySave?.destroy(); return removed?.apply(this, arguments); };
+        proto.onRemoved = function () { this._raySave?.destroy(); this._rayNameBuilder?.close(); return removed?.apply(this, arguments); };
         const menu = proto.getExtraMenuOptions;
         proto.getExtraMenuOptions = function (canvas, options) {
             const result = menu?.apply(this, arguments), widget = findWidget(this, "save_without_metadata");
