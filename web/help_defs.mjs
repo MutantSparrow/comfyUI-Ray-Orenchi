@@ -101,6 +101,20 @@ export const RAY_HELP_DEFS = {
         }],
     },
 
+    RayFaderBank: {
+        summary: "A bank of 2 to 10 analog faders. Each fader is a vertical slider that outputs a float from 0 to 1.",
+        sections: [{
+            heading: "Notes",
+            bullets: [
+                "Set `faders` (2–10). The node shows one output per fader (`fader_1`…) and hides the rest; `values` is every active fader as a list, in order.",
+                "Drag a fader, click its track to jump the cap there, or focus one and use Arrow keys (0.01, Shift for 0.001), PageUp/PageDown (0.1), Home and End. Shift slows a drag 20×.",
+                "With Mouse wheel control on (right-click), scrolling over a fader moves just that one: 2% per notch, a tenth of that with Shift.",
+                "Lowering `faders` removes the extra outputs and any links on them. A fader fed by a link is locked and says so.",
+                "Right-click → Fader Style… picks one of three looks; Compact mode hides the `faders` widget; Edit label… renames the tape label; Mute sound silences all analog controls.",
+            ],
+        }],
+    },
+
     RaySwitch: {
         summary: "An analog-style toggle switch that outputs a boolean.",
         sections: [{

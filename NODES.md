@@ -4,7 +4,7 @@ All nodes live under `👑 Ray/` in the ComfyUI add-node menu, split across
 four bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
-- `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck).
+- `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck, Fader Bank).
 - `👑 Ray/🔧 Tools` — prompt scraper, metadata inspector, TXT folder, Save Image.
 - `👑 Ray/💬 LLM` — local vision-language inference and folder captioning.
 
@@ -158,6 +158,29 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 Pressing a button plays its latch sound, followed by a softer release as the previously pressed button pops out. **Mute sound** in the right-click menu silences every analog control. With **Mouse wheel control** on, wheel down presses the next button and wheel up the previous one, stopping at the ends.
 
 **Right-click menu.** **Deck Style…** (the picker used by the other analog nodes), **Edit entries…**, **Compact mode**, **Edit label…** (the Dymo tape above the deck) and **Mute sound**. Style, compact flag and label persist with the workflow.
+
+---
+
+## 🎛️ Ray's Analog: Fader Bank (`RayFaderBank`)
+
+**Purpose.** A bank of two to ten vertical faders, like a small mixing desk. Each fader outputs a float from 0 to 1, and the whole bank comes out as a list too. Good for blend weights, strengths and anything else you want to balance by eye.
+
+**Category:** `👑 Ray/🎛️ Analog`
+
+| Pin | Type | Notes |
+|-----|------|-------|
+| **Control** `faders` | int 2–10 | How many faders the bank has. The node shows that many outputs and hides the rest. |
+| **Control** `fader_1` … `fader_10` | float 0–1 | Fader positions, driven by the bank. The raw widgets are hidden; the faders are the control. |
+| **Output** `values` | FLOAT (list) | Every active fader, in order, as a list. Downstream nodes run once per value, like the other list outputs in the pack. |
+| **Output** `fader_1` … `fader_N` | FLOAT | One output per active fader. |
+
+**Optional outputs.** The outputs follow `faders`: raising it adds faders and their outputs on the right, and lowering it removes the last ones, together with any links attached to them. The outputs that stay keep their slot numbers, so existing links are never rewired. `values` is always the first output.
+
+**Using it.** Drag a cap, or click the track to jump it to the pointer. Shift slows a drag to a twentieth. Focus a fader to use Arrow keys (0.01; Shift for 0.001), PageUp/PageDown (0.1), Home (0) and End (1). With **Mouse wheel control** on, scrolling over a fader moves that fader only: 2% per notch, a tenth of that with Shift. The readout under the faders shows the last one touched. A fader fed by a link is locked and the hint line says so. The node widens as you add faders.
+
+**Styles.** Console black (grey caps on a charcoal panel), Studio silver (black caps on brushed aluminium) and Vintage cream (cream caps with a red line on an olive panel). Faders scrape and tick like the slider faces of the Control, and thud at the end stops.
+
+**Right-click menu.** **Fader Style…**, **Mouse wheel control**, **Compact mode** (hides the `faders` widget), **Edit label…** and **Mute sound**. Style, compact flag, label and fader positions persist with the workflow.
 
 ---
 
