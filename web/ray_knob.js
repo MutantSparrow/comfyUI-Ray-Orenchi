@@ -3,6 +3,7 @@ import { KNOB_STYLES, DEFAULT_STYLE, getAllStyleCSS } from "./knob_styles.js";
 import { findWidget } from "./_common.js";
 import { createPanel, changeValue, editNode, isLinked, mountControlSVG, registerAnalog, wheelEdit } from "./analog_common.js";
 import { createKnobFeel } from "./analog_audio.js";
+import { responseOf } from "./analog_curve.js";
 
 // Shift slows any drag to this fraction of normal speed.
 const FINE = .05;
@@ -64,11 +65,18 @@ function buildKnob(node, widget) {
             ? ((event.clientX - (rect.left + rect.width / 2)) / unit + 43) / 86
             : (43 - (event.clientY - (rect.top + rect.height / 2)) / unit) / 86;
     };
-    // Dial position in detent units: 0..1 from min to max.
+    // Where a value sits on the dial, 0..1 from min to max, through the control's response curve.
     const position = value => {
         const [lo, hi] = bounds(node);
-        return hi > lo ? (value - lo) / (hi - lo) : 0;
+        return hi > lo ? responseOf(node).inverse((value - lo) / (hi - lo)) : 0;
     };
+    // The value at a dial position, and a value moved along the dial by `delta` of its travel.
+    const valueAt = pos => {
+        const [lo, hi] = bounds(node);
+        const fraction = responseOf(node).forward(pos);
+        return fraction >= 1 ? hi : lo + fraction * (hi - lo);
+    };
+    const nudged = (value, delta) => valueAt(position(value) + delta);
     const render = () => {
         const key = Object.hasOwn(KNOB_STYLES, node.properties.style) ? node.properties.style : DEFAULT_STYLE;
         const style = KNOB_STYLES[key];
@@ -87,7 +95,7 @@ function buildKnob(node, widget) {
         }
         const [lo, hi] = bounds(node);
         const value = boundValue(node, widget.value);
-        const fraction = hi > lo ? (value - lo) / (hi - lo) : 0;
+        const fraction = position(value);
         const angle = -SWEEP_DEGREES / 2 + fraction * SWEEP_DEGREES;
         for (const el of rotating) el.setAttribute("transform", `rotate(${angle.toFixed(3)})`);
         // The arc ring is drawn starting at 7:30; its path length is 100 for a full circle.
@@ -112,7 +120,8 @@ function buildKnob(node, widget) {
         host.setAttribute("aria-valuetext", `${text}; ${integerText}`);
         host.setAttribute("aria-disabled", String(disabled()));
         input.disabled = disabled();
-        hint.textContent = disabled() ? "EXTERNAL CONTROL" : `${format(lo)} … ${format(hi)}  /  SHIFT · FINE`;
+        hint.textContent = disabled() ? "EXTERNAL CONTROL"
+            : `${format(lo)} … ${format(hi)}  /  ${responseOf(node).linear ? "" : "CURVE  /  "}SHIFT · FINE`;
     };
     ui.render = render;
     const setValue = (value, event) => {
@@ -126,14 +135,17 @@ function buildKnob(node, widget) {
         }
         render();
     };
-    // Mouse wheel: 2% of the range per notch, a tenth of that with Shift.
+    // Mouse wheel: 2% of the dial per notch, a tenth of that with Shift.
     ui.wheel = (units, event) => {
         if (disabled()) return false;
-        const [lo, hi] = bounds(node);
-        const step = units * (hi - lo) * .02 * (event.shiftKey ? .1 : 1);
-        wheelEdit(node, () => setValue(Number((boundValue(node, widget.value) + step).toPrecision(10)), event), feel.end);
+        const step = units * .02 * (event.shiftKey ? .1 : 1);
+        wheelEdit(node, () => setValue(Number(nudged(boundValue(node, widget.value), step).toPrecision(10)), event), feel.end);
         return true;
     };
+    ui.curveInfo = () => ({
+        title: `Response curve · ${node.properties.ray_label || "Control"}`,
+        range: () => bounds(node), format, changed: () => ui.render(),
+    });
     input.addEventListener("change", event => {
         const value = input.value.trim() === "" ? NaN : Number(input.value);
         if (Number.isFinite(value)) editNode(node, () => setValue(value, event));
@@ -147,12 +159,12 @@ function buildKnob(node, widget) {
     });
     host.addEventListener("keydown", event => {
         const [lo, hi] = bounds(node);
-        const step = (hi - lo) / 200 * (event.shiftKey ? .1 : 1);
+        const step = 1 / 200 * (event.shiftKey ? .1 : 1);
         const increments = { ArrowUp: step, ArrowRight: step, ArrowDown: -step, ArrowLeft: -step, PageUp: step * 10, PageDown: -step * 10 };
         let value;
         if (event.key === "Home") value = lo;
         else if (event.key === "End") value = hi;
-        else if (Object.hasOwn(increments, event.key)) value = boundValue(node, widget.value) + increments[event.key];
+        else if (Object.hasOwn(increments, event.key)) value = nudged(boundValue(node, widget.value), increments[event.key]);
         else return;
         event.preventDefault();
         editNode(node, () => setValue(value, event));
@@ -182,10 +194,9 @@ function buildKnob(node, widget) {
         window.addEventListener("blur", cancelDrag);
         // Clicking the track outside the cap jumps there; grabbing the cap drags it without a jump.
         if (slide) {
-            const [lo, hi] = bounds(node);
             const target = pointerFraction(event);
-            const current = hi > lo ? (boundValue(node, widget.value) - lo) / (hi - lo) : 0;
-            if (Math.abs(target - current) > .17) setValue(lo + Math.max(0, Math.min(1, target)) * (hi - lo), event);
+            const current = position(boundValue(node, widget.value));
+            if (Math.abs(target - current) > .17) setValue(valueAt(Math.max(0, Math.min(1, target))), event);
         }
     });
     host.addEventListener("pointermove", event => {
@@ -194,34 +205,36 @@ function buildKnob(node, widget) {
         if (!host.isConnected || disabled()) { cancelDrag(); return; }
         let delta;
         if (slide) {
-            const [lo, hi] = bounds(node);
             const moved = slideAxis() === "x" ? event.clientX - drag.lastX : drag.lastY - event.clientY;
-            delta = moved / (drag.unit * 86) * (hi - lo);
+            delta = moved / (drag.unit * 86);
         } else {
             const prev = Math.atan2(drag.lastY - drag.y, drag.lastX - drag.x);
             const next = Math.atan2(event.clientY - drag.y, event.clientX - drag.x);
-            const [lo, hi] = bounds(node);
             // The dial follows the pointer: a full sweep of the dial covers min to max.
-            delta = Math.atan2(Math.sin(next - prev), Math.cos(next - prev)) / (SWEEP_DEGREES * Math.PI / 180) * (hi - lo);
+            delta = Math.atan2(Math.sin(next - prev), Math.cos(next - prev)) / (SWEEP_DEGREES * Math.PI / 180);
             // Ignore the unstable angle close to the spindle.
             if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 8 ||
                 Math.hypot(drag.lastX - drag.x, drag.lastY - drag.y) < 8) delta = 0;
         }
         drag.lastX = event.clientX; drag.lastY = event.clientY;
-        setValue(boundValue(node, widget.value) + delta * (event.shiftKey ? FINE : 1), event);
+        setValue(nudged(boundValue(node, widget.value), delta * (event.shiftKey ? FINE : 1)), event);
     });
     for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) host.addEventListener(type, endDrag);
     return ui;
 }
 
 // Older workflows saved a spin_value widget between max_value and clamp. Drop its saved value and
-// input slot, shifting links into the later slots, so nothing lands in the wrong widget.
+// input slot, shifting links into the later slots, so nothing lands in the wrong widget. The old layout is
+// recognised by shape, not length: allow_negative, a boolean, sat fifth ([min, max, spin, clamp, allow,
+// value]), while now the fifth value is the number the knob holds. (The face's own widget adds a sixth,
+// empty value to every current save, so six values alone does not mean an old workflow.)
 export function removeSpinValue(data) {
     const links = Array.isArray(data?.links) ? data.links : [];
     const read = (link, index, key) => Array.isArray(link) ? link[index] : link?.[key];
     for (const node of data?.nodes || []) {
         if (node?.type !== "RayKnob") continue;
-        if (Array.isArray(node.widgets_values) && node.widgets_values.length === 6) node.widgets_values.splice(2, 1);
+        const values = node.widgets_values;
+        if (Array.isArray(values) && values.length >= 6 && typeof values[4] === "boolean") values.splice(2, 1);
         const at = Array.isArray(node.inputs) ? node.inputs.findIndex(input => input?.name === "spin_value") : -1;
         if (at < 0) continue;
         node.inputs.splice(at, 1);
@@ -249,5 +262,5 @@ registerAnalog(app, {
     kind: "knob", name: "RayKnob", title: "🎛️ Ray's Analog: Control (Knob / Slider)",
     styles: KNOB_STYLES, defaultStyle: DEFAULT_STYLE, valueName: "knob_value",
     configNames: ["min_value", "max_value", "clamp", "allow_negative"],
-    outputs: [["int", "INT"], ["float", "FLOAT"]], build: buildKnob, migrate: removeSpinValue,
+    outputs: [["int", "INT"], ["float", "FLOAT"]], build: buildKnob, migrate: removeSpinValue, curve: true,
 });
