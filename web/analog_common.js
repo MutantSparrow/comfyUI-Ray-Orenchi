@@ -1,6 +1,7 @@
 import { applyBucketTint, findWidget, mountDymoLabel, setWidgetHidden } from "./_common.js";
 import { getBrushedAluminumURL } from "./knob_styles.js";
 import { isMuted, setMuted } from "./analog_audio.js";
+import { FAMILIES, familyOf } from "./analog_themes.js";
 
 let nextSvgId = 0;
 
@@ -21,6 +22,99 @@ export function changeValue(node, widget, value, event) {
     widget.callback?.(value, undefined, node, undefined, event);
     node.setDirtyCanvas?.(true, true);
 }
+
+// ---------------------------------------------------------------------------
+// Mouse wheel. A listener preference, like mute: it lives in localStorage, not in the workflow. When on,
+// scrolling over an analog node drives its face instead of zooming the canvas. Ctrl / Cmd + wheel still
+// zooms, and a control fed by a link lets the wheel through.
+// ---------------------------------------------------------------------------
+
+const WHEEL_PREF = "ray.analog.wheel.v1";
+let wheelOn = false;
+try { wheelOn = localStorage.getItem(WHEEL_PREF) === "1"; } catch { /* preference stays off */ }
+let wheelApp = null;
+
+export const isWheelOn = () => wheelOn;
+export function setWheelOn(value) {
+    wheelOn = !!value;
+    try { localStorage.setItem(WHEEL_PREF, wheelOn ? "1" : "0"); } catch { /* preference stays in memory */ }
+}
+
+// Wheel notches, positive when scrolling up. A mouse notch is 1; a trackpad sends many small fractions.
+export function wheelUnits(event) {
+    const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    const scale = event.deltaMode === 1 ? 33 : event.deltaMode === 2 ? 800 : 1;
+    return -(delta || 0) * scale / 100;
+}
+
+// Whole steps from a stream of fractional notches; the remainder is forgotten after a pause.
+export function createWheelSteps() {
+    let carry = 0, last = 0;
+    return units => {
+        const now = performance.now();
+        if (now - last > 400) carry = 0;
+        last = now;
+        carry += units;
+        const steps = Math.trunc(carry);
+        carry -= steps;
+        return steps;
+    };
+}
+
+// One undo step for a burst of wheel changes, and `onIdle` when the burst ends.
+const wheelBursts = new WeakMap();
+export function wheelEdit(node, apply, onIdle) {
+    let burst = wheelBursts.get(node);
+    if (!burst) {
+        burst = { graph: node.graph, timer: 0 };
+        burst.graph?.beforeChange?.();
+        wheelBursts.set(node, burst);
+    }
+    apply();
+    clearTimeout(burst.timer);
+    burst.timer = setTimeout(() => {
+        wheelBursts.delete(node);
+        burst.graph?.afterChange?.();
+        onIdle?.();
+    }, 350);
+}
+
+function nodeUnder(event) {
+    const target = event.target;
+    const panel = target?.closest?.(".ray-analog-panel");
+    if (panel?._rayNode) return panel._rayNode;
+    const graph = wheelApp?.canvas?.graph || wheelApp?.graph;
+    const vue = target?.closest?.("[data-node-id]");
+    if (vue && graph) return graph.getNodeById?.(vue.dataset.nodeId) || graph.getNodeById?.(Number(vue.dataset.nodeId)) || null;
+    const canvas = wheelApp?.canvas;
+    if (canvas && target === canvas.canvas && canvas.convertEventToCanvasOffset) {
+        const [x, y] = canvas.convertEventToCanvasOffset(event);
+        return graph?.getNodeOnPos?.(x, y) || null;
+    }
+    return null;
+}
+
+// The legacy canvas never sees a wheel that lands on a control's panel, so a wheel the control declines
+// (Ctrl / Cmd to zoom, or a linked control) is handed to the canvas, which zooms as it does elsewhere.
+function passToCanvas(event) {
+    const canvas = wheelApp?.canvas;
+    if (!event.target?.closest?.(".ray-analog-panel") || event.target.closest("[data-node-id]") || !canvas?.processMouseWheel) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    canvas.processMouseWheel(event);
+}
+
+function onWheel(event) {
+    if (!wheelOn) return;
+    const ui = nodeUnder(event)?._rayAnalog;
+    if (!ui?.wheel) return;
+    const units = wheelUnits(event);
+    if (!units) return;
+    if (event.ctrlKey || event.metaKey || !ui.wheel(units, event)) { passToCanvas(event); return; }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+}
+if (typeof window !== "undefined") window.addEventListener("wheel", onWheel, { capture: true, passive: false });
 
 export function editNode(node, action) {
     const graph = node.graph;
@@ -83,6 +177,7 @@ function injectStyles() {
 .ray-style-swatch { flex:none; width:10px; height:10px; border-radius:3px; border:1px solid #0009; background:#b6b8bb; }
 .ray-style-swatch[data-panel="charcoal"] { background:#34464a; }
 .ray-style-swatch[data-panel="olive"] { background:#c6c8ad; }
+.ray-style-kind { padding-left:8px; font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#8d9096; }
 .ray-style-mark { margin-left:auto; padding-left:12px; }
 .ray-analog-panel .ray-analog-face {
     display:block; flex:0 0 140px; width:140px; height:140px; max-width:100%;
@@ -134,14 +229,15 @@ export function openStylePicker(node, kind, styles) {
     const picker = document.createElement("div");
     picker.className = "ray-style-picker";
     picker.setAttribute("role", "menu");
-    picker.setAttribute("aria-label", `${kind === "knob" ? "Control" : kind === "deck" ? "Button deck" : "Switch"} style`);
-    // Knob faces first, then sliders, each under a heading.
-    const entries = Object.entries(styles).sort(([, a], [, b]) => (a.kind === "slider") - (b.kind === "slider"));
+    picker.setAttribute("aria-label", `${{ knob: "Control", deck: "Button deck", fader: "Fader" }[kind] || "Switch"} style`);
+    // Every analog control offers the same styles, grouped by family.
+    const rank = style => { const at = FAMILIES.indexOf(familyOf(style.label)); return at < 0 ? FAMILIES.length : at; };
+    const entries = Object.entries(styles).sort(([, a], [, b]) => rank(a) - rank(b) || a.label.localeCompare(b.label));
     const items = [];
     let group = null;
     for (const [key, style] of entries) {
-        const heading = kind === "knob" ? (style.kind === "slider" ? "Sliders" : "Knobs") : null;
-        if (heading && heading !== group) {
+        const heading = familyOf(style.label);
+        if (heading !== group) {
             const title = document.createElement("div");
             title.className = "ray-style-heading"; title.setAttribute("role", "presentation"); title.textContent = heading;
             picker.append(title);
@@ -154,8 +250,13 @@ export function openStylePicker(node, kind, styles) {
         const swatch = document.createElement("span");
         swatch.className = "ray-style-swatch"; swatch.dataset.panel = style.panel || "silver";
         const label = document.createElement("span");
-        label.textContent = style.label;
+        label.textContent = style.label.includes(" · ") ? style.label.split(" · ").slice(1).join(" · ") : style.label;
         item.append(swatch, label);
+        if (style.kind === "slider") {
+            const tag = document.createElement("span");
+            tag.className = "ray-style-kind"; tag.textContent = "slider";
+            item.append(tag);
+        }
         if (current) {
             const mark = document.createElement("span");
             mark.className = "ray-style-mark"; mark.textContent = "●";
@@ -204,11 +305,12 @@ export function createPanel(node, kind, css) {
     }
     const element = document.createElement("div");
     element.className = `ray-analog-panel ray-${kind}-wrap`;
+    element._rayNode = node;
     const dymo = mountDymoLabel(node, { placeholder: kind.toUpperCase() });
     element.appendChild(dymo.root);
     const host = document.createElement(kind === "switch" ? "button" : "div");
     if (kind === "switch") host.type = "button";
-    host.className = `ray-analog-face ${kind === "knob" ? "rk-host" : kind === "deck" ? "ray-deck-host" : "rs-host"}`;
+    host.className = `ray-analog-face ${{ knob: "rk-host", deck: "ray-deck-host", fader: "ray-fader-host" }[kind] || "rs-host"}`;
     host.tabIndex = 0;
     element.appendChild(host);
     const readout = document.createElement("div");
@@ -248,6 +350,7 @@ export function repairAnalogWorkflow(data, name, title, outputs) {
 export function registerAnalog(app, { kind, name, title, styles, defaultStyle, valueName, configNames = [], outputs, build, migrate,
     extensionName = `Ray.${kind === "knob" ? "Knob" : "Switch"}`, menuName = kind === "knob" ? "Control" : "Switch",
     heights = () => ({ min: 232, max: 232 }), menuItems = () => [] }) {
+    wheelApp = app;
     app.registerExtension({
         name: extensionName,
         beforeConfigureGraph(data) { repairAnalogWorkflow(data, name, title, outputs); migrate?.(data); },
@@ -362,6 +465,7 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                         }) },
                     { content: "Edit label…", callback: () => this._rayDymo?.beginEdit() },
                     ...menuItems(this),
+                    { content: `${isWheelOn() ? "● " : ""}Mouse wheel control`, callback: () => setWheelOn(!isWheelOn()) },
                     { content: isMuted() ? "🔈 Unmute sound" : "🔇 Mute sound", callback: () => setMuted(!isMuted()) },
                 );
                 return result;

@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { findWidget, setWidgetHidden } from "./_common.js";
-import { createPanel, changeValue, editNode, isLinked, mountControlSVG, registerAnalog } from "./analog_common.js";
+import { createPanel, changeValue, createWheelSteps, editNode, isLinked, mountControlSVG, registerAnalog } from "./analog_common.js";
 import { DECK_STYLES, DEFAULT_DECK_STYLE, getDeckStyleCSS, gridShape, layoutLegend } from "./deck_styles.js";
 import { playDeck } from "./analog_audio.js";
 
@@ -64,6 +64,18 @@ function buildDeck(node, widget) {
         if (text !== shown) playDeck(DECK_STYLES[styleKey()].sound, !!shown);
         ui.render();
     }
+
+    // Mouse wheel: down presses the next button, up the previous one, stopping at the ends.
+    const wheelSteps = createWheelSteps();
+    ui.wheel = (units, event) => {
+        if (disabled()) return false;
+        const steps = wheelSteps(units);
+        if (steps && items.length) {
+            const at = Math.max(0, items.indexOf(shownEntry()));
+            press(items[Math.max(0, Math.min(items.length - 1, at - steps))], event);
+        }
+        return true;
+    };
 
     function navigate(event, index) {
         const last = cells.length - 1;
