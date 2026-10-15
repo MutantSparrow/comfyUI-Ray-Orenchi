@@ -539,7 +539,8 @@ def _post_crop_vignette(
     # feather LR slider 0..100 → falloff width 0.05..1.0
     width = 0.05 + (max(0.0, min(100.0, feather)) / 100.0) * 0.95
     mask = ((radius - start) / width).clamp(0.0, 1.0)
-    factor = 1.0 - mask * (amount / 100.0)
+    # Lightroom convention: a negative amount darkens the edges, a positive amount lightens them.
+    factor = 1.0 + mask * (amount / 100.0)
     factor = factor.clamp(0.0, 2.0).unsqueeze(-1)
     return (rgb_bhwc * factor).clamp(0.0, 1.0)
 
