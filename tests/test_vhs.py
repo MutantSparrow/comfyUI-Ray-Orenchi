@@ -6,6 +6,10 @@ import torch
 import ray_vhs as rv
 
 
+_NO_OSD = dict(effect_fade=0.0, osd_status="Off", osd_status_corner="TL", osd_stamp="Off",
+               osd_stamp_corner="BR", osd_date="", osd_color="White")
+
+
 def _flat(h=32, w=64, color=(0.5, 0.5, 0.5)):
     img = torch.zeros((1, h, w, 3), dtype=torch.float32)
     img[..., 0] = color[0]
@@ -29,9 +33,15 @@ def test_input_types_declares_required():
     it = rv.RayVHS.INPUT_TYPES()
     req = it["required"]
     for k in ("image", "preset", "chroma_blur", "head_switch", "tracking_jitter",
-              "dropout_rate", "hiss", "yc_separation", "osd_mode", "osd_corner",
-              "osd_date", "seed"):
+              "dropout_rate", "hiss", "yc_separation", "effect_fade", "osd_status",
+              "osd_status_corner", "osd_stamp", "osd_stamp_corner", "osd_date", "osd_color", "seed"):
         assert k in req, f"missing widget: {k}"
+    assert "osd_mode" not in req and "osd_corner" not in req
+    # The fade starts at 0 (the full effect), not at the sliders' -1 "use the preset" sentinel.
+    fade = req["effect_fade"][1]
+    assert fade["default"] == 0.0 and fade["min"] == 0.0 and fade["max"] == 1.0
+    assert rv.OSD_COLORS.keys() == {"White", "Yellow", "Green"}
+    assert req["osd_color"][0] == ["White", "Yellow", "Green"]
 
 
 def test_presets_cover_v1_set():
@@ -50,7 +60,7 @@ def test_node_returns_image_tensor():
         image=img, preset="Pristine SP",
         chroma_blur=-1.0, head_switch=-1.0, tracking_jitter=-1.0,
         dropout_rate=-1.0, hiss=-1.0, yc_separation=-1.0,
-        osd_mode="Off", osd_corner="BL", osd_date="", seed=42,
+        **_NO_OSD, seed=42,
     )
     assert out.shape == img.shape
     assert out.dtype == torch.float32
@@ -98,13 +108,13 @@ def test_osd_alters_chosen_corner():
         image=img, preset="Pristine SP",
         chroma_blur=0.0, head_switch=0.0, tracking_jitter=0.0,
         dropout_rate=0.0, hiss=0.0, yc_separation=0.0,
-        osd_mode="Off", osd_corner="BL", osd_date="", seed=0,
+        **_NO_OSD, seed=0,
     )
     (with_osd,) = node.process(
         image=img, preset="Pristine SP",
         chroma_blur=0.0, head_switch=0.0, tracking_jitter=0.0,
         dropout_rate=0.0, hiss=0.0, yc_separation=0.0,
-        osd_mode="▶ PLAY", osd_corner="BL", osd_date="", seed=0,
+        **{**_NO_OSD, "osd_status": "▶ PLAY", "osd_status_corner": "BL"}, seed=0,
     )
     bl_diff = (no_osd[:, -32:, :96] - with_osd[:, -32:, :96]).abs().mean().item()
     tr_diff = (no_osd[:, :32, -96:] - with_osd[:, :32, -96:]).abs().mean().item()
@@ -118,7 +128,7 @@ def test_seed_is_deterministic():
         image=img, preset="Worn EP",
         chroma_blur=-1.0, head_switch=-1.0, tracking_jitter=-1.0,
         dropout_rate=-1.0, hiss=-1.0, yc_separation=-1.0,
-        osd_mode="Off", osd_corner="BL", osd_date="", seed=999,
+        **_NO_OSD, seed=999,
     )
     (a,) = node.process(**kwargs)
     (b,) = node.process(**kwargs)
@@ -132,13 +142,13 @@ def test_slider_overrides_preset():
         image=img, preset="Gen-3 dub",
         chroma_blur=0.0, head_switch=0.0, tracking_jitter=0.0,
         dropout_rate=0.0, hiss=0.0, yc_separation=0.0,
-        osd_mode="Off", osd_corner="BL", osd_date="", seed=0,
+        **_NO_OSD, seed=0,
     )
     (dirty,) = node.process(
         image=img, preset="Gen-3 dub",
         chroma_blur=-1.0, head_switch=-1.0, tracking_jitter=-1.0,
         dropout_rate=-1.0, hiss=-1.0, yc_separation=-1.0,
-        osd_mode="Off", osd_corner="BL", osd_date="", seed=0,
+        **_NO_OSD, seed=0,
     )
     # Override-all-to-zero should be visibly cleaner than the preset
     assert (clean - img).abs().mean().item() < (dirty - img).abs().mean().item()
@@ -152,16 +162,22 @@ def test_common_yuv_round_trip():
 
 
 def _lit(img):
-    """(rows, cols) of pixels bright enough to be the cream OSD text."""
+    """(rows, cols) of pixels bright enough to be OSD text."""
     return (img[0].max(dim=-1).values > 0.8).nonzero(as_tuple=True)
+
+
+def _burn(img, lines, color="White"):
+    """The OSD exactly as the character generator draws it, before any tape or analog wobble."""
+    return rv._burn_in_osd(img, lines, color, 0.0, 0)
 
 
 def test_osd_needs_no_system_font_glyphs():
     # Consolas and Courier New have no ▶, which used to print a missing-glyph box. The OSD is drawn from a
     # built-in pixel font, so its text is plain ASCII and the symbols are icons.
-    for mode in rv.OSD_MODES:
+    for mode in rv.OSD_STATUS + rv.OSD_STAMP:
         assert rv._osd_text(mode, "").isascii(), mode
     assert rv._osd_icon("▶ PLAY") == "play" and rv._osd_icon("● REC") == "rec"
+    assert rv._osd_icon("❚❚ PAUSE") == "pause" and rv._osd_icon("■ STOP") == "stop"
     assert rv._osd_icon("Date") is None and rv._osd_icon("Off") is None
 
 
@@ -179,35 +195,136 @@ def test_pixel_font_covers_everything_the_osd_can_show():
     assert rv._osd_glyph("☃") == rv._osd_glyph("?")
 
 
-def test_osd_text_is_drawn_in_pixels_for_every_mode():
-    img = _flat(h=128, w=256, color=(0.0, 0.0, 0.0))
-    for mode, icon in (("PLAY", "play"), ("REC", "rec"), ("2026 10 12", None), ("12:30", None)):
-        rows, cols = _lit(rv._draw_osd(img, mode, "BL", icon))
-        assert len(rows) > 20, mode
-        assert cols.max() < 128, f"{mode} should stay in the left half"
+def test_osd_lines_follow_the_switches():
+    assert rv.osd_lines() == []
+    only_stamp = rv.osd_lines("Off", "TL", "Time", "BR")
+    assert [line[2] for line in only_stamp] == ["BR"] and ":" in only_stamp[0][0]
+    both = rv.osd_lines("● REC", "TL", "Date", "BR", "1987 06 05")
+    assert [(t, i, c) for t, i, c in both] == [("REC", "rec", "TL"), ("1987 06 05", None, "BR")]
+    assert rv.osd_lines("Off", "TL", "Date", "BR", "")[0][0].replace(" ", "").isdigit()
+    # A custom date is only for the Date stamp; Time ignores it.
+    assert "1987" not in rv.osd_lines("Off", "TL", "Time", "BR", "1987 06 05")[0][0]
 
 
-def test_osd_icon_sits_left_of_the_text_and_pushes_it_right():
+def test_two_osd_lines_show_at_once_in_their_own_corners():
     img = _flat(h=128, w=256, color=(0.0, 0.0, 0.0))
-    _, plain_cols = _lit(rv._draw_osd(img, "PLAY", "BL"))
-    for icon in ("play", "rec"):
-        _, cols = _lit(rv._draw_osd(img, "PLAY", "BL", icon))
-        assert cols.min() == plain_cols.min()                   # the icon starts where the text used to
-        assert cols.max() > plain_cols.max(), icon              # and the text moved right to make room
+    rows, cols = _lit(_burn(img, rv.osd_lines("● REC", "TL", "Date+Time", "BR")))
+    top_left = (rows < 64) & (cols < 128)
+    bottom_right = (rows >= 64) & (cols >= 128)
+    assert top_left.sum() > 20 and bottom_right.sum() > 20
+    assert not ((rows < 64) & (cols >= 128)).any() and not ((rows >= 64) & (cols < 128)).any()
+
+
+def test_lines_sharing_a_corner_stack_status_above_stamp():
+    img = _flat(h=256, w=512, color=(0.0, 0.0, 0.0))
+    one = _lit(_burn(img, rv.osd_lines("▶ PLAY", "BL", "Off", "BL")))[0]
+    two = _lit(_burn(img, rv.osd_lines("▶ PLAY", "BL", "Date", "BL")))[0]
+    assert two.max() == one.max() or two.max() >= one.max()           # the block still ends at the margin
+    assert two.min() < one.min()                                       # and grows upward
+    assert (two.max() - two.min()) > 2 * (one.max() - one.min())
+
+
+def test_osd_colours():
+    img = _flat(h=128, w=256, color=(0.0, 0.0, 0.0))
+    lines = rv.osd_lines("▶ PLAY", "TL", "Off", "BR")
+
+    def lit_mean(color):
+        out = _burn(img, lines, color)
+        mask = out[0].max(dim=-1).values > 0.8
+        return out[0][mask].mean(dim=0)
+
+    white, yellow, green = lit_mean("White"), lit_mean("Yellow"), lit_mean("Green")
+    assert white.min() > 0.85
+    assert yellow[0] > 0.9 and yellow[1] > 0.7 and yellow[2] < 0.2
+    assert green[1] > 0.9 and green[0] < 0.4 and green[2] < 0.5
+    assert torch.equal(_burn(img, lines, "nonsense"), _burn(img, lines, "White"))
 
 
 def test_osd_stays_inside_every_corner():
     img = _flat(h=128, w=256, color=(0.0, 0.0, 0.0))
     for corner, left, top in (("TL", True, True), ("TR", False, True), ("BL", True, False), ("BR", False, False)):
-        rows, cols = _lit(rv._draw_osd(img, "REC", corner, "rec"))
+        rows, cols = _lit(_burn(img, [("REC", "rec", corner)]))
         assert rows.min() >= 0 and rows.max() < 128 and cols.min() >= 0 and cols.max() < 256, corner
         assert (cols.float().mean() < 128) == left and (rows.float().mean() < 64) == top, corner
 
 
+def test_bottom_osd_stays_clear_of_the_head_switch_band():
+    img = _flat(h=480, w=640, color=(0.0, 0.0, 0.0))
+    rows, _ = _lit(_burn(img, [("REC", "rec", "BL")]))
+    assert rows.max() < 480 - int(480 * (0.016 + 0.040)) - 4
+
+
+def test_osd_icon_sits_left_of_the_text_and_pushes_it_right():
+    img = _flat(h=128, w=256, color=(0.0, 0.0, 0.0))
+    _, plain_cols = _lit(_burn(img, [("PLAY", None, "BL")]))
+    for icon in ("play", "rec", "pause", "stop"):
+        _, cols = _lit(_burn(img, [("PLAY", icon, "BL")]))
+        assert cols.min() == plain_cols.min()                   # the icon starts where the text used to
+        assert cols.max() > plain_cols.max(), icon              # and the text moved right to make room
+
+
 def test_osd_scales_with_the_image():
-    small = _lit(rv._draw_osd(_flat(h=128, w=256, color=(0, 0, 0)), "PLAY", "BL", "play"))[0]
-    big = _lit(rv._draw_osd(_flat(h=1024, w=2048, color=(0, 0, 0)), "PLAY", "BL", "play"))[0]
+    small = _lit(_burn(_flat(h=128, w=256, color=(0, 0, 0)), [("PLAY", "play", "BL")]))[0]
+    big = _lit(_burn(_flat(h=1024, w=2048, color=(0, 0, 0)), [("PLAY", "play", "BL")]))[0]
     assert (big.max() - big.min()) > 4 * (small.max() - small.min())
+
+
+def test_osd_has_a_dark_outline_and_a_smeared_shadow_on_bright_pictures():
+    img = _flat(h=256, w=512, color=(0.8, 0.8, 0.8))
+    out = _burn(img, [("REC", "rec", "TL")])
+    darkened = (out[0].max(dim=-1).values < 0.7).nonzero(as_tuple=True)
+    lit_rows, lit_cols = _lit(out)
+    assert len(darkened[0]) > len(lit_rows) * 0.5                            # outline plus shadow around the text
+    assert darkened[1].max() > lit_cols.max()                                 # the shadow trails past the glyphs
+
+
+def test_osd_goes_through_the_tape_instead_of_sitting_on_top():
+    img = _flat(h=240, w=640, color=(0.0, 0.0, 0.0))
+    lines = rv.osd_lines("● REC", "TL", "Off", "BR")
+    p = replace_params(rv.PRESETS["Worn EP"], head_switch=0.0, tracking_jitter=0.0, dropout_rate=0.0, hiss=0.0)
+    crisp = _burn(img, lines, "Yellow")
+    taped = rv.apply_vhs(img, p, p, osd=lines, osd_color="Yellow", seed=3)
+    assert (taped[0].max(dim=-1).values > 0.95).sum() < (crisp[0].max(dim=-1).values > 0.95).sum()   # softened
+    # Colour bleeds past the glyphs: pixels the crisp OSD left black pick up chroma.
+    outside = crisp[0].max(dim=-1).values == 0
+    bleed = rv.rgb_to_yuv(taped)[0, ..., 1:].abs().amax(dim=-1)
+    assert (bleed[outside] > 0.02).sum() > 50
+    # A different seed gives the OSD its own jitter; the same seed repeats it exactly.
+    again = rv.apply_vhs(img, p, p, osd=lines, osd_color="Yellow", seed=3)
+    other = rv.apply_vhs(img, p, p, osd=lines, osd_color="Yellow", seed=4)
+    assert torch.equal(taped, again) and not torch.equal(taped, other)
+
+
+def replace_params(p, **changes):
+    from dataclasses import replace
+    return replace(p, **changes)
+
+
+def test_effect_fade_blends_back_toward_the_source():
+    img = torch.rand((1, 64, 96, 3))
+    p = rv.PRESETS["Gen-3 dub"]
+    full = rv.apply_vhs(img, p, p, seed=1, effect_fade=0.0)
+    half = rv.apply_vhs(img, p, p, seed=1, effect_fade=0.5)
+    none = rv.apply_vhs(img, p, p, seed=1, effect_fade=1.0)
+    assert torch.allclose(none, img, atol=1e-6)
+    assert torch.allclose(half, 0.5 * full + 0.5 * img, atol=1e-5)
+    assert torch.equal(full, rv.apply_vhs(img, p, p, seed=1))        # 0 is the default and changes nothing
+    # Out-of-range values are clamped rather than extrapolating.
+    assert torch.equal(rv.apply_vhs(img, p, p, seed=1, effect_fade=7.0), none)
+    assert torch.equal(rv.apply_vhs(img, p, p, seed=1, effect_fade=-3.0), full)
+
+
+def test_effect_fade_keeps_a_crisp_osd():
+    img = _flat(h=128, w=256, color=(0.0, 0.0, 0.0))
+    p = rv.PRESETS["Chewed tape"]
+    lines = rv.osd_lines("● REC", "TL", "Date", "BR")
+    out = rv.apply_vhs(img, p, p, osd=lines, osd_color="Green", seed=2, effect_fade=1.0)
+    assert torch.equal(out, _burn(img, lines, "Green"))
+    through_node, = rv.RayVHS().process(
+        image=img, preset="Chewed tape", chroma_blur=-1.0, head_switch=-1.0, tracking_jitter=-1.0,
+        dropout_rate=-1.0, hiss=-1.0, yc_separation=-1.0,
+        **{**_NO_OSD, "effect_fade": 1.0, "osd_status": "● REC", "osd_color": "Green"}, seed=2)
+    assert through_node.shape == img.shape and (through_node[0].max(dim=-1).values > 0.8).any()
 
 
 # ---------------------------------------------------------------------------
@@ -261,14 +378,14 @@ def test_every_preset_runs_through_the_node_and_stays_in_range():
         (out,) = rv.RayVHS().process(
             image=img, preset=name, chroma_blur=-1.0, head_switch=-1.0, tracking_jitter=-1.0,
             dropout_rate=-1.0, hiss=-1.0, yc_separation=-1.0,
-            osd_mode="▶ PLAY", osd_corner="BL", osd_date="", seed=11)
+            **{**_NO_OSD, "osd_status": "▶ PLAY", "osd_stamp": "Date+Time"}, seed=11)
         assert out.shape == img.shape and out.min() >= 0.0 and out.max() <= 1.0, name
 
 
 def test_tiny_images_and_extreme_sliders_do_not_crash():
     worst = rv.PRESETS["Chewed tape"]
     for shape in ((1, 1, 1, 3), (1, 2, 3, 3), (1, 8, 8, 3), (3, 5, 200, 3)):
-        out = rv.apply_vhs(torch.rand(shape), worst, worst, seed=2, osd_mode="● REC")
+        out = rv.apply_vhs(torch.rand(shape), worst, worst, seed=2, osd=rv.osd_lines("● REC", "TL", "Date+Time", "BR"))
         assert out.shape == shape and torch.isfinite(out).all()
 
 
