@@ -16,6 +16,7 @@ import { FADER_STYLES } from '/extensions/ray/fader_styles.js';
 import { THEMES, VOICE_CLASSES, FAMILIES, familyOf, MATERIALS } from '/extensions/ray/analog_themes.js';
 import { KNOBS, SLIDERS, SWITCHES, GENERATED_KNOBS, GENERATED_SLIDERS, GENERATED_SWITCHES } from '/extensions/ray/analog_hardware.js';
 import { knobVoice, switchVoice } from '/extensions/ray/analog_audio.js';
+import { compile, PRESETS, normalizePoints, responseOf, presetName, curvePoints, IDENTITY, POINT_LIMIT, DEFAULT_CURVE } from '/extensions/ray/analog_curve.js';
 
 const messages = [];
 let passes = 0;
@@ -262,6 +263,21 @@ try {
     for(const extension of app.extensions) extension.beforeConfigureGraph(old);
     check(first===JSON.stringify(old),'Migration is idempotent');
     {
+        // Every current save has a sixth, empty value for the face's own widget; it must not be mistaken for an old layout.
+        const current = {nodes:[{type:'RayKnob',properties:{},outputs:[],widgets_values:[-100,100,0,true,3.67,'']}]};
+        for(const extension of app.extensions) extension.beforeConfigureGraph(current);
+        check(JSON.stringify(current.nodes[0].widgets_values)==='[-100,100,0,true,3.67,""]','A current save with six values is left exactly as it is');
+        const spun = {nodes:[{type:'RayKnob',properties:{},outputs:[],widgets_values:[-100,100,20,0,true,17,'']}]};
+        for(const extension of app.extensions) extension.beforeConfigureGraph(spun);
+        check(JSON.stringify(spun.nodes[0].widgets_values)==='[-100,100,0,true,17,""]','An old save that also has the face value is migrated too');
+        const again = JSON.stringify(spun);
+        for(const extension of app.extensions) extension.beforeConfigureGraph(spun);
+        check(again===JSON.stringify(spun),'and migrating twice changes nothing more');
+        const short = {nodes:[{type:'RayKnob',properties:{},outputs:[],widgets_values:[-100,100,0,true,5]}]};
+        for(const extension of app.extensions) extension.beforeConfigureGraph(short);
+        check(JSON.stringify(short.nodes[0].widgets_values)==='[-100,100,0,true,5]','A five-value save is untouched');
+    }
+    {
         // A saved Control with a spin_value input slot, wired on both sides of it.
         const graph={nodes:[
             {id:1,type:'Primitive',outputs:[{name:'out',links:[9,10]}]},
@@ -402,6 +418,160 @@ try {
             check(faders.element.dataset.style === id && faders.element.dataset.panel === THEMES[id].panel, `Fader Bank renders ${id}`);
         }
         bank.onRemoved(); faders.element.remove();
+    }
+    // ---- response curves --------------------------------------------------------------------------
+    {
+        // the maths
+        for (const preset of PRESETS) {
+            const c = compile(preset.points);
+            let monotone = true, last = -1, worstRound = 0;
+            for (let i = 0; i <= 400; i++) {
+                const x = i / 400, y = c.forward(x);
+                if (y < last - 1e-12) monotone = false;
+                last = y;
+                worstRound = Math.max(worstRound, Math.abs(c.forward(c.inverse(y)) - y));
+            }
+            check(c.forward(0) === 0 && c.forward(1) === 1 && c.inverse(0) === 0 && c.inverse(1) === 1, `${preset.name}: the ends stay at 0 and 1`);
+            check(monotone && worstRound < 2e-3, `${preset.name}: monotone, and the inverse maps back (${worstRound.toExponential(1)})`);
+        }
+        const audio = compile(PRESETS.find(pr => pr.name === 'Audio (log)').points);
+        check(audio.forward(.5) > .05 && audio.forward(.5) < .15 && audio.forward(.25) < audio.forward(.5) / 2, 'The audio taper is about 9% of the range at mid-dial and falls away below it');
+        const rev = compile(PRESETS.find(pr => pr.name === 'Reverse audio').points), low = compile(PRESETS.find(pr => pr.name === 'Fine low end').points);
+        check(rev.forward(.5) > .85 && low.forward(.5) < .15 && Math.abs(compile(PRESETS.find(pr => pr.name === 'S-curve').points).forward(.5) - .5) < .01, 'Reverse audio, fine-low-end and S-curve have their shapes');
+        check(IDENTITY.linear && IDENTITY.forward(.3) === .3 && IDENTITY.inverse(.3) === .3 && IDENTITY.forward(5) === 1 && IDENTITY.forward(-1) === 0, 'The straight line is the identity and clamps');
+
+        const messy = normalizePoints([[.9, .2], [.3, .8], [.31, .5], [NaN, 1], 'x', [.5, .1], [-4, 3], [2, -1]]);
+        check(JSON.stringify(messy[0]) === '[0,0]' && JSON.stringify(messy.at(-1)) === '[1,1]' && messy.every((pt, i) => i === 0 || (pt[0] - messy[i - 1][0] >= .01 && pt[1] >= messy[i - 1][1])),
+            'Messy points are sorted, pinned at both ends and never go back down');
+        check(normalizePoints('nope') === null && normalizePoints([]).length === 2, 'Anything that is not a list is rejected and an empty list is a line');
+        check(normalizePoints(Array.from({ length: 60 }, (_, i) => [(i + 1) / 62, (i + 1) / 62])).length === POINT_LIMIT, 'The number of points is capped');
+        check(compile([[.5, .5]]).forward(.25) > .2 && compile(undefined).forward(.5) === .5, 'A single point or no points still makes a valid curve');
+        check(PRESETS.slice(1).every(pr => presetName(pr.points) === pr.name) && presetName([[.5, .9]]) === 'Custom', 'Presets are recognised by their points');
+
+        // a control's response
+        const node = make('knob'), face = node._rayAnalog; document.body.append(face.element);
+        const value = widget(node, 'knob_value'), host = face.host;
+        widget(node, 'min_value').value = 0; widget(node, 'max_value').value = 100; value.value = 0;
+        const key = (k, init = {}) => host.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init }));
+        const angle = () => { const m = /rotate\(([-\d.]+)\)/.exec(host.querySelector('[data-rotate]').getAttribute('transform')); return m ? Number(m[1]) : NaN; };
+        check(node.properties.response === 'linear' && responseOf(node) === IDENTITY, 'A new control responds linearly');
+        key('ArrowUp'); const linearStep = value.value;
+        check(Math.abs(linearStep - .5) < 1e-9, 'Linear: one arrow-key step is 0.5% of the range');
+        value.value = 0;
+
+        node.properties.response = 'curve'; node.properties.curve = DEFAULT_CURVE; face.render();
+        const shape = responseOf(node);
+        check(!shape.linear && /CURVE/.test(face.hint.textContent), 'Curve: the hint line says so');
+        key('ArrowUp');
+        check(Math.abs(value.value - shape.forward(.005) * 100) < 1e-6 && value.value < linearStep / 5, `Curve: the same step is much finer at the low end (${value.value.toFixed(4)})`);
+        value.value = 50; face.render();
+        check(Math.abs(angle() - (-135 + shape.inverse(.5) * 270)) < .01 && value.value === 50 && host.getAttribute('aria-valuenow') === '50',
+            'Curve: the stored value is unchanged; only where the dial points moves');
+        check(angle() > 0, 'Curve: half the range sits well past mid-dial on an audio taper');
+        value.value = 0; face.render();
+        key('End'); check(value.value === 100, 'Curve: End still reaches the maximum');
+        key('Home'); check(value.value === 0, 'Curve: Home still reaches the minimum');
+        setWheelOn(true);
+        value.value = 0; face.render();
+        face.element.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true }));
+        check(Math.abs(value.value - shape.forward(.02) * 100) < 1e-6, 'Curve: a wheel notch moves 2% of the dial, not of the range');
+        setWheelOn(false);
+        const input = face.readout.querySelector('input');
+        input.value = '37.5'; input.dispatchEvent(new Event('change', { bubbles: true }));
+        check(value.value === 37.5, 'Curve: typing an exact value still sets exactly that value');
+        key('End'); key('Home', { shiftKey: true });
+        check(value.value === 0, 'Curve: Home with Shift still reaches the minimum');
+        node.properties.response = 'linear'; face.render(); value.value = 0; key('ArrowUp');
+        check(Math.abs(value.value - .5) < 1e-9 && !/CURVE/.test(face.hint.textContent) && Array.isArray(node.properties.curve), 'Back to linear: normal steps return and the curve is kept');
+        node.properties.response = 'curve'; node.properties.curve = 'garbage'; face.render();
+        check(JSON.stringify(curvePoints(node)) === JSON.stringify(DEFAULT_CURVE) && !responseOf(node).linear, 'A broken saved curve falls back to the default curve');
+        node.properties.curve = DEFAULT_CURVE;
+
+        // slider faces use the curve too
+        node.properties.style = 'channel_fader'; face.render();
+        value.value = 50; face.render();
+        const cap = host.querySelector('[data-slide]').getAttribute('transform');
+        const across = Number(/translate\(0,\s*([-\d.]+)\)/.exec(cap)[1]);
+        check(Math.abs(across - (-(-43 + shape.inverse(.5) * 86))) < .01, 'Curve: a slider cap sits where the curve puts the value');
+        node.onRemoved(); face.element.remove();
+
+        // the fader bank shares the same curve
+        const bank = make('fader'), faders = bank._rayAnalog; document.body.append(faders.element);
+        const first = [...faders.element.querySelectorAll('.ray-fader-strip')][0];
+        bank.properties.response = 'curve'; bank.properties.curve = DEFAULT_CURVE; faders.render();
+        check(Math.abs(Number(first.style.getPropertyValue('--v')) - shape.inverse(.5)) < 1e-9 && widget(bank, 'fader_1').value === .5, 'Fader bank: the cap sits at the curve position and the value is untouched');
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+        check(Math.abs(widget(bank, 'fader_1').value - shape.forward(shape.inverse(.5) + .01)) < 1e-3 && widget(bank, 'fader_1').value > .51, 'Fader bank: a key step moves along the track, which is a bigger step in value here');
+        check(/CURVE/.test(faders.element.querySelector('.ray-analog-hint').textContent), 'Fader bank: the hint line says so');
+        bank.onRemoved(); faders.element.remove();
+
+        // the editor
+        const target = make('knob'), ui = target._rayAnalog; document.body.append(ui.element);
+        const menu = []; target.getExtraMenuOptions({}, menu);
+        const names = menu.map(o => o.content);
+        check(names.includes('● Linear response') && names.includes('Curve response…'), 'The menu offers Linear response (marked) and Curve response…');
+        const menuOf = n => { const o = []; n.getExtraMenuOptions({}, o); return o.map(x => x.content); };
+        check(!menuOf(make('switch')).some(c => /response/i.test(c)) && !menuOf(make('deck')).some(c => /response/i.test(c)), 'Switches and decks have no response setting');
+        const grab = Element.prototype.setPointerCapture, release = Element.prototype.releasePointerCapture;
+        Element.prototype.setPointerCapture = () => {}; Element.prototype.releasePointerCapture = () => {};
+        menu.find(o => o.content === 'Curve response…').callback();
+        await new Promise(r => setTimeout(r, 30));
+        const editor = document.querySelector('.ray-curve-editor');
+        check(!!editor && editor.getBoundingClientRect().right <= innerWidth && editor.getBoundingClientRect().bottom <= innerHeight, 'The curve editor opens inside the window');
+        const modes = [...editor.querySelectorAll('.ray-curve-mode button')], preset = editor.querySelector('select'), canvas = editor.querySelector('canvas');
+        check(modes[0].getAttribute('aria-pressed') === 'true' && preset.disabled, 'It opens in linear mode with the presets off');
+        modes[1].click();
+        check(target.properties.response === 'curve' && presetName(target.properties.curve) === 'Audio (log)' && !preset.disabled && preset.value === 'Audio (log)', 'Curve mode starts from the audio taper');
+        preset.value = 'S-curve'; preset.dispatchEvent(new Event('change'));
+        check(presetName(target.properties.curve) === 'S-curve' && target.properties.response === 'curve', 'Choosing a preset applies it');
+        check(Math.abs(responseOf(target).forward(.5) - .5) < .01, 'and the control follows it at once');
+
+        const rect = canvas.getBoundingClientRect();
+        const at = (x, y) => [rect.left + (18 + x * 208) * rect.width / 244, rect.top + (226 - y * 208) * rect.height / 244];
+        const fire = (type, x, y, init = {}) => { const [cx, cy] = at(x, y); canvas.dispatchEvent(new PointerEvent(type, { pointerId: 3, button: 0, clientX: cx, clientY: cy, bubbles: true, cancelable: true, isPrimary: true, ...init })); };
+        const before = target.properties.curve.length;
+        fire('pointerdown', .56, .2); fire('pointerup', .56, .2);
+        const added = target.properties.curve;
+        check(added.length === before + 1 && added.some(([x]) => Math.abs(x - .56) < .01) && presetName(added) === 'Custom' && preset.value === 'Custom', 'Clicking empty space adds a point and the preset becomes Custom');
+        const index = added.findIndex(([x]) => Math.abs(x - .56) < .01), start = added[index];
+        fire('pointerdown', start[0], start[1]); fire('pointermove', .58, .55); fire('pointermove', .6, .6); fire('pointerup', .6, .6);
+        const moved = target.properties.curve[index];
+        check(Math.abs(moved[0] - .6) < .015 && Math.abs(moved[1] - .6) < .015, 'Dragging a point moves it');
+        fire('pointerdown', moved[0], moved[1]); fire('pointermove', .99, 0); fire('pointerup', .99, 0);
+        const clamped = target.properties.curve, next = clamped[index + 1], prev = clamped[index - 1];
+        check(clamped[index][0] <= next[0] - .0099 && clamped[index][1] >= prev[1] && clamped[index][1] <= next[1] && clamped.every((pt, i) => i === 0 || (pt[1] >= clamped[i - 1][1] && pt[0] > clamped[i - 1][0])),
+            'A dragged point cannot cross its neighbours or send the curve downhill');
+        fire('pointerdown', 0, 0); fire('pointermove', .3, .3); fire('pointerup', .3, .3);
+        check(JSON.stringify(target.properties.curve[0]) === '[0,0]' && JSON.stringify(target.properties.curve.at(-1)) === '[1,1]', 'The two end points cannot be moved');
+        const count = target.properties.curve.length, victim = target.properties.curve[index];
+        const [vx, vy] = at(victim[0], victim[1]);
+        canvas.dispatchEvent(new MouseEvent('dblclick', { clientX: vx, clientY: vy, bubbles: true }));
+        check(target.properties.curve.length === count - 1, 'Double-clicking a point removes it');
+        canvas.dispatchEvent(new KeyboardEvent('keydown', { key: ']', bubbles: true, cancelable: true }));
+        const keyed = target.properties.curve.map(pt => [...pt]);
+        canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+        check(target.properties.curve[1][1] > keyed[1][1] || target.properties.curve[1][1] === keyed[2][1], '] selects the first inner point and the arrow keys move it');
+        canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }));
+        check(target.properties.curve.length === keyed.length - 1, 'Delete removes the selected point');
+        check(target.graph.before === target.graph.after && target.graph.before > 0, 'Every edit is a balanced undo step');
+        for (let i = 0; i < 30; i++) { fire('pointerdown', .02 + i * .032, .01 + i * .03); fire('pointerup', .02, .01); }
+        check(target.properties.curve.length <= POINT_LIMIT, 'Adding points stops at the limit');
+        const info = editor.querySelector('.ray-curve-info');
+        fire('pointermove', .5, .5);
+        check(/Dial 50%/.test(info.textContent) && /%/.test(info.textContent), 'Hovering shows what that dial position gives');
+        modes[0].click();
+        check(target.properties.response === 'linear' && Array.isArray(target.properties.curve) && preset.disabled, 'Linear switches the response off and keeps the curve');
+        editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        check(!document.querySelector('.ray-curve-editor') && !!target.properties.curve, 'Escape closes the editor');
+        menu.find(o => o.content === 'Curve response…').callback(); await new Promise(r => setTimeout(r, 30));
+        check(!!document.querySelector('.ray-curve-editor'), 'It opens again');
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 2, clientY: 2 }));
+        check(!document.querySelector('.ray-curve-editor'), 'A click outside closes it');
+        menu.find(o => o.content === 'Curve response…').callback(); await new Promise(r => setTimeout(r, 30));
+        target.onRemoved();
+        check(!document.querySelector('.ray-curve-editor'), 'Removing the node closes its editor');
+        Element.prototype.setPointerCapture = grab; Element.prototype.releasePointerCapture = release;
+        ui.element.remove();
     }
     // ---- mouse wheel ------------------------------------------------------------------------------
     {

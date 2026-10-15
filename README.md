@@ -13,7 +13,7 @@ inference, prompt tooling and analog-console controls. Find them under the
 | | **Pixel Art** | Repair or convert images to true pixel art: palettes, selective dithering, outlines |
 | | **Film Stock** | Film response, grain and halation, with optional LUT/XMP assets |
 | | **VHS / Tape** | Analog tape degradation, tracking faults, dropouts and a VCR on-screen display |
-| **🎛️ Analog** | **Control** | Retro knobs and sliders with sound; outputs a float and an int |
+| **🎛️ Analog** | **Control** | Retro knobs and sliders with sound and optional pot-taper response curves; outputs a float and an int |
 | | **Switch** | Retro toggles and rockers with sound; outputs a boolean |
 | | **Button Deck** | A bank of push buttons that replaces a dropdown; outputs the pressed button's text |
 | | **Fader Bank** | Two to ten vertical faders, each a 0 to 1 float, plus the whole bank as a list |

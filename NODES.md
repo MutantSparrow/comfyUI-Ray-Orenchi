@@ -124,6 +124,31 @@ Each style keeps the hand-drawn face it was designed with on the control it was 
 
 ---
 
+## 🎛️ Ray's Analog: Response curves (Control and Fader Bank)
+
+The Control and the Fader Bank can map the dial or fader position to the value through a curve instead of a straight line, like the taper of a potentiometer. A log taper makes the low end fine and the top coarse; an S-curve makes both ends fine; a reversed taper does the opposite. It is a setting on the control, so any Control or fader benefits, with no change to the value it stores or outputs.
+
+**Switching it on.** Right-click → **Linear response** (the default) or **Curve response…**, which switches the response to a curve and opens the editor. The `response` property in the node's properties panel holds the same choice. The hint line under the control says **CURVE** while a curve is active. Switches and the Button Deck are not continuous, so they have no response setting.
+
+**What it changes.** Everything that moves along the dial: dragging, clicking a slider track, the arrow keys, the mouse wheel and the position of the cap or pointer. Typing an exact value in the readout still sets exactly that value, Home and End still jump to the limits, and a value always sits where the curve says. The Python nodes, the saved value and the API prompt carry the real value, never a position, so turning a curve on or off does not move or reinterpret any value.
+
+**The editor.** A small floating panel with a **Linear / Curve** switch, a preset list, and a plot of the curve (dial position along the bottom, value up the side, the dashed diagonal is a straight line). Click empty space to add a point, drag a point to shape the curve, double-click it or press Delete to remove it. `[` and `]` pick the previous or next point and the arrow keys move it (Shift for finer). The two end points are fixed at 0 and 1, points cannot cross each other, and the curve never goes downhill, so every value is reachable and means one dial position. Up to 16 points. Hovering shows what a dial position gives, in the control's own units. Every edit is an undo step. Escape, **Done** or a click outside closes it.
+
+**Presets.**
+
+| Preset | Shape | Use it for |
+|--------|-------|------------|
+| Audio (log) | About 9% of the range at mid-dial | A volume-style taper, fine control near zero |
+| Reverse audio | The mirror of audio | Fine control near the maximum |
+| Fine low end | Cubic | Gentler start than a straight line |
+| Fine high end | Reversed cubic | Gentler finish |
+| S-curve | Slow at both ends | Fine control near both limits |
+| Fine centre | Slow around the middle | Fine control around a mid value |
+
+The curve is saved with the workflow (the `response` and `curve` properties) and is shared by all faders of a Fader Bank.
+
+---
+
 ## 🎛️ Ray's Analog: Control (`RayKnob`)
 
 **Purpose.** Analog-style float control, either a rotary knob or a slider, themed after studio hardware. Drag rotates a knob face or moves a slider cap; outputs both an `INT` (quantized by `clamp`) and a raw `FLOAT` so it plugs into either side without a converter. The node keeps its original `RayKnob` ID, so existing workflows load unchanged.
@@ -148,7 +173,7 @@ Each style keeps the hand-drawn face it was designed with on the control it was 
 
 **Sound.** Knobs click through detents that match their printed scale, sliders scrape and tick as they move and thud at the end stops, and the pan slider taps at its centre. Switches voice each face: a thump and clack for the rack rocker, a ringing strike and spring for the steel lever, a push-and-latch for the illuminated key, a clunk for the bakelite flip, a tick-tack for the paddle, a scrape and detent for the brass slider, a soft tap for the pill and a hollow thock for the dome. The sounds are synthesized with Web Audio in `web/analog_audio.js`; there are no audio files. **Mute sound** in the right-click menu (on both the Control and the Switch) silences every analog control and is remembered per browser.
 
-**Right-click menu.** **Control Style…** opens a floating picker (the 31 styles grouped by family, sliders tagged; arrow keys, Enter and Escape work) rather than a nested submenu, so it stays on screen in both the legacy canvas and Nodes 2.0. **Mute sound** is next to it. **Compact mode** hides only unlinked setup controls while preserving real slots and workflow data. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Drag around a rotary control or along a slider, use Shift for fine movement, or use Arrow/Home/End keys. Exact values can be entered in the readout. Style, compact flag, and label text persist with the workflow.
+**Right-click menu.** **Linear response** and **Curve response…** (see Response curves above). **Control Style…** opens a floating picker (the 31 styles grouped by family, sliders tagged; arrow keys, Enter and Escape work) rather than a nested submenu, so it stays on screen in both the legacy canvas and Nodes 2.0. **Mute sound** is next to it. **Compact mode** hides only unlinked setup controls while preserving real slots and workflow data. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Drag around a rotary control or along a slider, use Shift for fine movement, or use Arrow/Home/End keys. Exact values can be entered in the readout. Style, compact flag, and label text persist with the workflow.
 
 **Mouse wheel.** **Mouse wheel control** in the right-click menu (off by default, remembered per browser, shared by every analog node) lets the scroll wheel drive the control while the pointer is anywhere over the node: 2% of the range per notch, a tenth of that with Shift, with the same detent and slider sounds as dragging. The canvas does not zoom while the pointer is over a node that takes the wheel; Ctrl / Cmd + wheel still zooms, and a control driven by a link lets the wheel through. A burst of wheel steps is one undo step.
 
@@ -222,7 +247,7 @@ Pressing a button plays its latch sound, followed by a softer release as the pre
 
 **Styles.** All 31 shared styles. Three are hand-drawn for the bank: Console · Black Faders (grey caps on a charcoal panel), Mastering · Silver Faders (black caps on brushed aluminium) and Broadcast · Cream Faders (cream caps with a red line on an olive panel); every other style supplies its materials and accent colour for the caps. Faders scrape and tick like the slider faces of the Control, and thud at the end stops.
 
-**Right-click menu.** **Fader Style…**, **Mouse wheel control**, **Compact mode** (hides the `faders` widget), **Edit label…** and **Mute sound**. Style, compact flag, label and fader positions persist with the workflow.
+**Right-click menu.** **Fader Style…**, **Linear response** / **Curve response…** (one curve for the whole bank), **Mouse wheel control**, **Compact mode** (hides the `faders` widget), **Edit label…** and **Mute sound**. Style, compact flag, label and fader positions persist with the workflow.
 
 ---
 
