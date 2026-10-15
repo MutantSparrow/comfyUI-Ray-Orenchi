@@ -8,9 +8,9 @@ four bucket sub-categories:
 - `👑 Ray/🔧 Tools` — prompt scraper, metadata inspector, TXT folder, Save Image.
 - `👑 Ray/💬 LLM` — local vision-language inference and folder captioning.
 
-Every node has a black body and a header colored by its bucket. The mode-tinted
-Prompt Scraper (`RayPromptFetcher`) hue-shifts its
-header color per mode rather than pick a bespoke one.
+Every node is black, body and title bar alike, so it reads the same under any
+ComfyUI theme. Workflows saved with the old colored title bars turn black when
+they load; a color you set on a node yourself is kept.
 
 ---
 
@@ -267,7 +267,7 @@ Pressing a button plays its latch sound, followed by a softer release as the pre
 
 **Refresh button.** In `PromptDexter` mode the node shows **🔄 refresh sitemap**, which re-reads PromptDexter's sitemap and updates the category list (a status line reports the prompt and category counts). In `CivitAI` mode it shows **🔄 clear cache**, which makes the next run page the gallery again; the status line also notes when no `civitai.secret` file is present and only public access is available. Local Folder mode hides both.
 
-Node tint hue-shifts by active mode.
+Switching CivitAI to **Red (NSFW)** shows a small warning the first time; dismiss it and it does not come back in this browser.
 
 ### Mode details
 
