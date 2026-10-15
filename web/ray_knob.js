@@ -263,7 +263,7 @@ registerAnalog(app, {
     styles: KNOB_STYLES, defaultStyle: DEFAULT_STYLE, valueName: "knob_value",
     configNames: ["min_value", "max_value", "clamp", "allow_negative"],
     outputs: [["int", "INT"], ["float", "FLOAT"]], build: buildKnob, migrate: removeSpinValue, curve: true,
-    panel: () => ({ skip: ["knob_value"], sections: [{ fields: [
+    panel: () => ({ skip: ["knob_value"], sections: [{ title: "Range", fields: [
         { name: "min_value", label: "Min" }, { name: "max_value", label: "Max" },
         { name: "clamp", label: "INT step" }, { name: "allow_negative", label: "Allow negative" },
     ] }] }),
