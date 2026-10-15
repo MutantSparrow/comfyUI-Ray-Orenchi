@@ -58,14 +58,16 @@ export const RAY_HELP_DEFS = {
     },
 
     RayVHS: {
-        summary: "Degrades an image like analog videotape, modeled as a signal chain: soft luma with sharpening halos, smeared and lagging colour, rainbows, line wobble, a torn head-switch band, tape noise and dropouts, with an optional VCR on-screen display.",
+        summary: "Degrades an image like analog videotape, modeled as a signal chain: soft luma with sharpening halos, smeared and lagging colour, rainbows, line wobble, a torn head-switch band, tape noise and dropouts, with an optional VCR on-screen display that goes through the tape with the picture.",
         sections: [{
             heading: "Notes",
             bullets: [
                 "The preset is a tape and deck: it sets softness, halos, colour and levels, and the starting value of every slider. Worn EP is the default; Chewed tape is the extreme.",
                 "Effect sliders default to `-1`, which uses the preset value; `0`–`1` overrides that one effect. All sliders at `0` leaves only the preset's softness, colour and levels.",
                 "Effects scale with the image, so a preset looks the same at any size. A fixed `seed` always gives the same tape.",
-                "The OSD (PLAY, REC, date, time) is drawn in a built-in pixel font. Leave `osd_date` blank to stamp today's date.",
+                "`effect_fade` blends the result back toward the source: `0` is the full effect (the default), `1` is the untouched picture. The OSD stays readable at any fade.",
+                "The OSD has a status line (PLAY, REC, PAUSE, STOP) and a date / time stamp, each with its own corner, so REC and a date can show together. Lines sharing a corner stack. Pick White, Yellow or Green.",
+                "The OSD is burned in before the tape, so it softens, bleeds colour, wobbles and picks up noise and dropouts with the picture, and it gets a smeared shadow and a little line jitter of its own. Leave `osd_date` blank to stamp today's date.",
             ],
         }],
     },
