@@ -11,6 +11,7 @@ Bundles:
   • RayKnob                  — Ray's Analog: Control (Knob / Slider)
   • RaySwitch                — Ray's Analog: Switch
   • RayButtonDeck            — Ray's Analog: Button Deck
+  • RayFaderBank             — Ray's Analog: Fader Bank
   💬 LLM
   • RayVLMFolder             — Ray's LLM: Folder Captioner
   • RayFastQwen3VL           — Ray's LLM: Fast Qwen3-VL Infer
@@ -36,6 +37,7 @@ _NODE_MODULES = {
     "RayKnob":             "ray_knob",
     "RaySwitch":           "ray_switch",
     "RayButtonDeck":       "ray_button_deck",
+    "RayFaderBank":        "ray_fader_bank",
     "RayTextFolder":       "ray_txt_folder",
     "RayVLMFolder":        "ray_vlm_folder",
     "RayFastQwen3VL":      "ray_fast_vlm",
@@ -92,6 +94,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayKnob":             "🎛️ Ray's Analog: Control (Knob / Slider)",
     "RaySwitch":           "🎛️ Ray's Analog: Switch",
     "RayButtonDeck":       "🎛️ Ray's Analog: Button Deck",
+    "RayFaderBank":        "🎛️ Ray's Analog: Fader Bank",
     # 👑 Ray/💬 LLM
     "RayVLMFolder":        "💬 Ray's LLM: Folder Captioner",
     "RayFastQwen3VL":      "💬 Ray's LLM: Fast Qwen3-VL Infer",

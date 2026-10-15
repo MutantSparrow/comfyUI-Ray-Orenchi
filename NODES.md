@@ -4,7 +4,7 @@ All nodes live under `👑 Ray/` in the ComfyUI add-node menu, split across
 four bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
-- `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck).
+- `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck, Fader Bank), all sharing one list of 31 styles.
 - `👑 Ray/🔧 Tools` — prompt scraper, metadata inspector, TXT folder, Save Image.
 - `👑 Ray/💬 LLM` — local vision-language inference and folder captioning.
 
@@ -82,6 +82,48 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 
 ---
 
+## 🎛️ Ray's Analog: Styles (shared by every analog node)
+
+Every analog node (Control, Switch, Button Deck and Fader Bank) offers the same 31 styles, grouped by family in the **Style…** picker: Console, Broadcast, Mastering and Rack. A style is a look (its materials, panel, accent and lamp colours, and the sound it makes), so picking "Broadcast · Bakelite Flip" on a knob gives a bakelite knob with a brass-lit ring, and on a fader bank bakelite caps.
+
+Each style keeps the hand-drawn face it was designed with on the control it was drawn for. On the other controls the face is built from the style's description, using the same materials, scale marks and lamp behaviour, so it moves and lights up like the hand-drawn ones. On the Control, styles drawn as faders appear as sliders (tagged **slider** in the picker) and the rest as knobs. Style IDs are unchanged, so saved workflows load as before.
+
+| Style | Panel | Hand-drawn for |
+|-------|-------|----------------|
+| Console · Amber Keys | charcoal | Button Deck |
+| Console · Black Faders | charcoal | Fader Bank |
+| Console · Blue Grey | charcoal | Control (knob) |
+| Console · Channel Fader | silver | Control (slider) |
+| Console · Dome Button | charcoal | Switch |
+| Console · Illuminated Key | charcoal | Switch |
+| Console · Lamp Domes | charcoal | Button Deck |
+| Console · LED Ring | charcoal | Control (knob) |
+| Console · Linear Fader | charcoal | Control (slider) |
+| Console · Minimal Flat | charcoal | Control (knob) |
+| Console · Minimal Pill | charcoal | Switch |
+| Broadcast · Bakelite Chickenhead | olive | Control (knob) |
+| Broadcast · Bakelite Flip | olive | Switch |
+| Broadcast · Bakelite Pushbuttons | olive | Button Deck |
+| Broadcast · Brass Slide | olive | Switch |
+| Broadcast · Cream Faders | olive | Fader Bank |
+| Broadcast · Ivory | olive | Control (knob) |
+| Broadcast · Knurled Brass | olive | Control (knob) |
+| Broadcast · Pan Slider | olive | Control (slider) |
+| Broadcast · Steel Lever | olive | Switch |
+| Mastering · Aluminium | silver | Control (knob) |
+| Mastering · Chrome Notched | silver | Control (knob) |
+| Mastering · Chrome Squares | silver | Button Deck |
+| Mastering · Silver Faders | silver | Fader Bank |
+| Mastering · Silver Paddle | silver | Switch |
+| Mastering · Silver Skirted | silver | Control (knob) |
+| Rack · Amber Slide | charcoal | Control (slider) |
+| Rack · Chrome Rocker | silver | Switch |
+| Rack · LED Ladder | charcoal | Control (slider) |
+| Rack · Power Rocker | charcoal | Switch |
+| Rack · Tape Deck Keys | olive | Button Deck |
+
+---
+
 ## 🎛️ Ray's Analog: Control (`RayKnob`)
 
 **Purpose.** Analog-style float control, either a rotary knob or a slider, themed after studio hardware. Drag rotates a knob face or moves a slider cap; outputs both an `INT` (quantized by `clamp`) and a raw `FLOAT` so it plugs into either side without a converter. The node keeps its original `RayKnob` ID, so existing workflows load unchanged.
@@ -98,7 +140,7 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | **Output** `int` | INT | Quantized via `clamp`. |
 | **Output** `float` | FLOAT | Raw clamped float in `[min, max]`. |
 
-**Faces.** Nine knobs and five sliders, all drawn from one material set with the same 0–10 scale and 270° sweep. Knobs: console blue grey, broadcast ivory, mastering aluminium, mastering chrome notched, console LED ring, broadcast bakelite chickenhead, mastering silver skirted, broadcast knurled brass and console minimal flat. Sliders: console linear fader, console channel fader with a dB scale, rack LED ladder, broadcast pan slider and rack amber slide. The pan slider and amber slide are horizontal; the others are vertical.
+**Faces.** All 31 shared styles (see Styles above). Fourteen are hand-drawn for the Control: nine knobs and five sliders, all drawn from one material set with the same 0–10 scale and 270° sweep, and the other seventeen are generated to match. Knobs: console blue grey, broadcast ivory, mastering aluminium, mastering chrome notched, console LED ring, broadcast bakelite chickenhead, mastering silver skirted, broadcast knurled brass and console minimal flat. Sliders: console linear fader, console channel fader with a dB scale, rack LED ladder, broadcast pan slider and rack amber slide. The pan slider and amber slide are horizontal; the others are vertical.
 
 **Dragging.** Every knob sweeps 270° from `min_value` to `max_value`, and the dial follows the pointer around its centre, so a 0–1 range is as controllable as 0–1000. Hold **Shift** for 20× finer movement. Arrow keys step 1/200 of the range (Shift: 1/2000), PageUp/PageDown step ten times that, and Home/End jump to the limits. Older workflows that saved a `spin_value` setting are migrated on load; that setting no longer exists.
 
@@ -106,13 +148,15 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 
 **Sound.** Knobs click through detents that match their printed scale, sliders scrape and tick as they move and thud at the end stops, and the pan slider taps at its centre. Switches voice each face: a thump and clack for the rack rocker, a ringing strike and spring for the steel lever, a push-and-latch for the illuminated key, a clunk for the bakelite flip, a tick-tack for the paddle, a scrape and detent for the brass slider, a soft tap for the pill and a hollow thock for the dome. The sounds are synthesized with Web Audio in `web/analog_audio.js`; there are no audio files. **Mute sound** in the right-click menu (on both the Control and the Switch) silences every analog control and is remembered per browser.
 
-**Right-click menu.** **Control Style…** opens a floating picker (knobs and sliders under separate headings; arrow keys, Enter and Escape work) rather than a nested submenu, so it stays on screen in both the legacy canvas and Nodes 2.0. **Mute sound** is next to it. **Compact mode** hides only unlinked setup controls while preserving real slots and workflow data. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Drag around a rotary control or along a slider, use Shift for fine movement, or use Arrow/Home/End keys. Exact values can be entered in the readout. Style, compact flag, and label text persist with the workflow.
+**Right-click menu.** **Control Style…** opens a floating picker (the 31 styles grouped by family, sliders tagged; arrow keys, Enter and Escape work) rather than a nested submenu, so it stays on screen in both the legacy canvas and Nodes 2.0. **Mute sound** is next to it. **Compact mode** hides only unlinked setup controls while preserving real slots and workflow data. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Drag around a rotary control or along a slider, use Shift for fine movement, or use Arrow/Home/End keys. Exact values can be entered in the readout. Style, compact flag, and label text persist with the workflow.
+
+**Mouse wheel.** **Mouse wheel control** in the right-click menu (off by default, remembered per browser, shared by every analog node) lets the scroll wheel drive the control while the pointer is anywhere over the node: 2% of the range per notch, a tenth of that with Shift, with the same detent and slider sounds as dragging. The canvas does not zoom while the pointer is over a node that takes the wheel; Ctrl / Cmd + wheel still zooms, and a control driven by a link lets the wheel through. A burst of wheel steps is one undo step.
 
 ---
 
 ## 🎛️ Ray's Analog: Switch (`RaySwitch`)
 
-**Purpose.** Boolean toggle widget with nine studio-hardware themes. Rockers and illuminated keys show their active state; lever handles point up for ON, and horizontal paddles/sliders move toward the ON label.
+**Purpose.** Boolean toggle widget in any of the 31 shared styles, nine of them hand-drawn for it. Rockers and illuminated keys show their active state; lever handles point up for ON, and horizontal paddles/sliders move toward the ON label.
 
 **Category:** `👑 Ray/🎛️ Analog`
 
@@ -121,7 +165,7 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | **Control** `state` | bool | Toggle. |
 | **Output** `bool` | BOOLEAN | Mirror of `state`. |
 
-**Right-click menu.** **Switch Style…** opens a picker with nine faces: rack power rocker, broadcast steel lever, console illuminated key, rack chrome rocker, console dome button, broadcast bakelite flip, mastering silver paddle, broadcast brass slide and console minimal pill. **Mute sound** is shared with the Control. Every face has its own click, clack or thunk. **Compact mode** hides only unlinked setup controls and keeps the real output slot available. Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
+**Right-click menu.** **Switch Style…** opens the shared picker. The hand-drawn faces are: rack power rocker, broadcast steel lever, console illuminated key, rack chrome rocker, console dome button, broadcast bakelite flip, mastering silver paddle, broadcast brass slide and console minimal pill. **Mute sound** is shared with the Control. Every face has its own click, clack or thunk. With **Mouse wheel control** on, wheel up switches on and wheel down switches off. **Compact mode** hides only unlinked setup controls and keeps the real output slot available. Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
 
 ---
 
@@ -143,7 +187,7 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 
 **Edit entries…** opens a popout with a text box (one value per line) and a live count of buttons and grid size. **Apply** (or Ctrl+Enter) saves the normalized list; **Cancel** (or Escape) discards the changes.
 
-**Styles.** Five faces; each has its own sound and either prints the text inside the button or puts it on a Dymo sticker below:
+**Styles.** All 31 shared styles. Five are hand-drawn for the deck, each with its own sound, and either print the text inside the button or put it on a Dymo sticker below; every other style gets a matching generated button that prints its text in a lit window or on a sticker:
 
 | Style | Look | Text | Sound |
 |-------|------|------|-------|
@@ -153,9 +197,32 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 | Mastering · Chrome Squares | Brushed-aluminium keys with a green LED | Dymo sticker | Bright double tick |
 | Rack · Tape Deck Keys | Tall rubber keys that sink and light a slot | Dymo sticker | Heavy ka-chunk |
 
-Pressing a button plays its latch sound, followed by a softer release as the previously pressed button pops out. **Mute sound** in the right-click menu silences every analog control.
+Pressing a button plays its latch sound, followed by a softer release as the previously pressed button pops out. **Mute sound** in the right-click menu silences every analog control. With **Mouse wheel control** on, wheel down presses the next button and wheel up the previous one, stopping at the ends.
 
 **Right-click menu.** **Deck Style…** (the picker used by the other analog nodes), **Edit entries…**, **Compact mode**, **Edit label…** (the Dymo tape above the deck) and **Mute sound**. Style, compact flag and label persist with the workflow.
+
+---
+
+## 🎛️ Ray's Analog: Fader Bank (`RayFaderBank`)
+
+**Purpose.** A bank of two to ten vertical faders, like a small mixing desk. Each fader outputs a float from 0 to 1, and the whole bank comes out as a list too. Good for blend weights, strengths and anything else you want to balance by eye.
+
+**Category:** `👑 Ray/🎛️ Analog`
+
+| Pin | Type | Notes |
+|-----|------|-------|
+| **Control** `faders` | int 2–10 | How many faders the bank has. The node shows that many outputs and hides the rest. |
+| **Control** `fader_1` … `fader_10` | float 0–1 | Fader positions, driven by the bank. The raw widgets are hidden; the faders are the control. |
+| **Output** `values` | FLOAT (list) | Every active fader, in order, as a list. Downstream nodes run once per value, like the other list outputs in the pack. |
+| **Output** `fader_1` … `fader_N` | FLOAT | One output per active fader. |
+
+**Optional outputs.** The outputs follow `faders`: raising it adds faders and their outputs on the right, and lowering it removes the last ones, together with any links attached to them. The outputs that stay keep their slot numbers, so existing links are never rewired. `values` is always the first output.
+
+**Using it.** Drag a cap, or click the track to jump it to the pointer. Shift slows a drag to a twentieth. Focus a fader to use Arrow keys (0.01; Shift for 0.001), PageUp/PageDown (0.1), Home (0) and End (1). With **Mouse wheel control** on, scrolling over a fader moves that fader only: 2% per notch, a tenth of that with Shift. The readout under the faders shows the last one touched. A fader fed by a link is locked and the hint line says so. The node widens as you add faders.
+
+**Styles.** All 31 shared styles. Three are hand-drawn for the bank: Console · Black Faders (grey caps on a charcoal panel), Mastering · Silver Faders (black caps on brushed aluminium) and Broadcast · Cream Faders (cream caps with a red line on an olive panel); every other style supplies its materials and accent colour for the caps. Faders scrape and tick like the slider faces of the Control, and thud at the end stops.
+
+**Right-click menu.** **Fader Style…**, **Mouse wheel control**, **Compact mode** (hides the `faders` widget), **Edit label…** and **Mute sound**. Style, compact flag, label and fader positions persist with the workflow.
 
 ---
 
