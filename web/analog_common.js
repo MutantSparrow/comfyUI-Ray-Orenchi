@@ -171,7 +171,7 @@ function injectStyles() {
     background:#1b1c1f; color:#e6e6e6; border:1px solid #4a4c52; border-radius:8px;
     box-shadow:0 10px 30px #000a; font:13px/1.3 system-ui,sans-serif;
 }
-.ray-style-heading { margin:6px 8px 3px; font:600 10px system-ui; letter-spacing:.08em; text-transform:uppercase; color:#8d9096; }
+.ray-style-heading { margin:6px 8px 3px; font:600 10px system-ui; letter-spacing:.08em; text-transform:uppercase; color:#d43aa8; }
 .ray-style-item {
     display:flex; align-items:center; gap:8px; width:100%; padding:6px 8px; border:0; border-radius:5px;
     background:transparent; color:inherit; font:inherit; text-align:left; white-space:nowrap; cursor:pointer;
