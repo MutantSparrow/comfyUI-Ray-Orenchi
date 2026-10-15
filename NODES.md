@@ -433,8 +433,9 @@ Read/decode failures stop execution before any prompt list is emitted.
 Connect `prompt` to RayKrea2Sampler's text input and `filename_prefix` to
 Save Image's filename_prefix input. Connect the sampler image to Save Image.
 ComfyUI maps the paired lists automatically; no extra loop is needed.
-Keep the sampler batch size at 1 for one image per file. Save Image adds its
-normal counter suffix. Use limit 3 for a small test, then -1 for the folder.
+Keep the sampler batch size at 1 for one image per file. Save Image saves
+each file under exactly that name (it adds `-2`, `-3`, … only if the name is
+taken). Use limit 3 for a small test, then -1 for the folder.
 
 ## 💬 Ray's LLM: Folder Captioner (`RayVLMFolder`)
 
@@ -484,8 +485,8 @@ the inference device must be a GPU. The checkpoint must fit the available resour
 | `image_1` | Required IMAGE batch. |
 | `image_2` | Optional IMAGE batch; enables comparison. |
 | `save_image` | `none`, `1` (default), `2`, or `both`; presented as compact segmented buttons. |
-| `directory` | Blank for ComfyUI output, relative to output, or an absolute destination. Browse lists folders on the ComfyUI host. |
-| `filename_prefix` | Filename-only prefix; input number, batch index, and a unique ID are appended. |
+| `directory` | Blank for ComfyUI output, relative to output, or an absolute destination. **Browse…** opens your system's folder dialog. |
+| `filename_prefix` | The file's name without the extension, built from text and tokens such as `{date}` and `{counter}`. See Filename builder below. |
 | `save_without_metadata` | Right-click toggle; removes prompt/workflow PNG text metadata. Defaults to false. |
 
 Saving happens on execution. Selecting 2 without image_2 gives an actionable
@@ -495,6 +496,30 @@ comparison fits each image without stretching; a singleton repeats across the
 other batch, and unequal non-singleton batches show unpaired trailing images.
 Drag the divider or focus it and use Left/Right/Home/End. Folder history holds
 three successful destinations per browser, independently of workflow values.
+
+### Filename builder
+
+Files are saved as exactly **`<filename_prefix>.png`**: the prefix is the whole name. Click **🏷 Build filename…** under `filename_prefix` for a small panel (drag its title bar to move it) where chips insert tokens at the cursor, a live preview shows the result, and a widget picker lists every widget of every node in the workflow. You can also type tokens yourself. A new Save Image starts with `Ray_{date}_{counter}`, which saves `Ray_2026-10-16_0001.png`, `Ray_2026-10-16_0002.png`, and so on.
+
+| Token | Gives | Example |
+|-------|-------|---------|
+| `{date}` | ISO date | `2026-10-16` |
+| `{time}` | Time, with hyphens because filenames cannot hold colons | `14-32-05` |
+| `{datetime}` | Both, ISO style | `2026-10-16T14-32-05` |
+| `{timestamp}` | Seconds since 1970 | `1792162325` |
+| `{counter}` or `{counter:N}` | The next unused number in the folder, padded to N digits (default 4, up to 12). Counts files that share the rest of the name. Use it once | `0007` |
+| `{index}` or `{index:N}` | Position of the image in its batch, from 1 | `3` |
+| `{input}` | Which image input the file came from, 1 or 2 | `2` |
+| `{hash}` or `{hash:N}` | N random hex characters (default 8, from 4 to 32), so two names can never clash | `a1b2c3d4` |
+| `{widget:ID.NAME}` | The value of widget NAME on the node with that id. Add `\|N` to keep at most N characters (default 60) | `{widget:12.seed}` → `42` |
+
+**Made safe automatically.** Characters Windows, macOS and Linux reject (`< > : " / \ | ? *` and control characters) and spaces become `_`, so a prefix can never choose a folder. Widget values are also trimmed, cut to length and have repeated underscores collapsed, and braces in them are dropped so a value such as `{hash}` cannot be mistaken for a token. Leading and trailing dots and spaces are removed, Windows device names such as `CON` and `NUL` get a `_` in front, and the name is cut at 180 characters. A blank prefix uses the default.
+
+**Nothing is overwritten.** Files are created exclusively. With `{counter}` the number moves on to the next free one (even when two runs save at once); without it a taken name gets `-2`, `-3`, and so on (`shot.png`, `shot-2.png`). A prefix without tokens therefore always saves under that name, adding a suffix only when the name exists.
+
+**Widget values** are read from the workflow at the moment you queue it, so they are the values on screen, including widgets fed by a link, hidden widgets such as a Control's value, and values changed since the last run. The saved workflow keeps the template you wrote. When the server is used without the web page (an API call), a `{widget:...}` token is read from the queued graph, and skipped if that input comes from another node's output. A misspelt token is reported with the list of valid ones instead of saving a wrongly named file.
+
+Workflows saved with the old prefix model (for example a plain `Ray`) now save `Ray.png`, `Ray-2.png`, … instead of `Ray_1_0001_<id>.png`; add `{counter}` or `{index}` for numbered names.
 
 Right-click **Ray's Tools: Save Image → Open image location in Explorer** to
 open the folder from its latest successful save. The option becomes available
