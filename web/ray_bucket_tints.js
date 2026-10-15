@@ -18,9 +18,6 @@ const RAY_BUCKET = {
     RayVHS: "VFX",
     // Analog is black by convention; the knob/switch JS already sets that.
     // Tools
-    RayLocalScraper: "Tools",
-    RayPromptDexter: "Tools",
-    RayCivitAI: "Tools",
     RayPromptFetcher: "Tools",
     RayMetaInspect: "Tools",
     // LLM
