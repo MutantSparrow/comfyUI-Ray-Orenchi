@@ -162,42 +162,6 @@ export const RAY_HELP_DEFS = {
         }],
     },
 
-    RayPromptDexter: {
-        summary: "Fetches a random prompt and its image from promptdexter.com, optionally limited to one category.",
-        sections: [{
-            heading: "Notes",
-            bullets: [
-                "Picks come from the site's sitemap, so they reach deep content. The refresh button reloads the category list.",
-                "`seed` -1 picks a new prompt each run; any value ≥ 0 always returns the same pick.",
-            ],
-        }],
-    },
-
-    RayCivitAI: {
-        summary: "Fetches a random prompt and gallery image from civitai.com through its API, filtered by content level, base model, period, sort and uploader.",
-        sections: [{
-            heading: "Notes",
-            bullets: [
-                "Blue (SFW) requests PG and PG-13 content; Red includes all levels. The node color follows the mode.",
-                "Only items with an extractable prompt are used. Setting `username` forces period to AllTime.",
-                "Put an API token in `civitai.secret` next to the node code for authenticated access.",
-            ],
-        }],
-    },
-
-    RayLocalScraper: {
-        summary: "Picks an image from a local folder and extracts the generation prompt stored in its metadata.",
-        sections: [{
-            heading: "Notes",
-            bullets: [
-                "Reads A1111/Forge `parameters`, ComfyUI `prompt` / `workflow` graphs, other prompt-like PNG keys, EXIF comments and `<image>.txt` sidecars.",
-                "When an image holds several prompts, each is emitted as a separate list entry.",
-                "Only positive prompts are returned: in ComfyUI graphs, text encoders that feed only a sampler's negative input are skipped. Graphs without a sampler's positive/negative wiring keep every encoder.",
-                "`seed` -1 picks randomly; any value ≥ 0 always picks the same image. Skipping and repeat avoidance only apply with `seed` -1.",
-            ],
-        }],
-    },
-
     RayPromptFetcher: {
         summary: "One node for three prompt sources: a local image folder, PromptDexter or CivitAI. `scraper_mode` picks the source and only that source's widgets are shown.",
         sections: [{
@@ -205,6 +169,9 @@ export const RAY_HELP_DEFS = {
             bullets: [
                 "Widgets are prefixed by source: `local__`, `dexter__` and `civitai__`. Hidden widgets keep their values.",
                 "Every mode produces the same four outputs; `image_path` is empty for the web sources.",
+                "Local Folder mode reads A1111/Forge `parameters`, ComfyUI `prompt` / `workflow` graphs, other prompt-like PNG keys, EXIF comments and `<image>.txt` sidecars. When an image holds several prompts, each is emitted as a separate list entry.",
+                "A seed of `-1` picks randomly and avoids recent repeats; any value ≥ 0 reproduces the same image or page every run.",
+                "CivitAI can use an optional `civitai.secret` token file in the node pack folder for more content; without it only public images are reachable.",
                 "PromptDexter mode has a **refresh sitemap** button and CivitAI mode a **clear cache** button; the status line under them also notes when no `civitai.secret` is present.",
                 "Local Folder mode returns positive prompts only; text encoders that feed only a sampler's negative input are skipped.",
             ],

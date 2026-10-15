@@ -1,6 +1,6 @@
 # comfyUI-Ray-Orenchi
 
-17 ComfyUI custom nodes for retro image effects, pixel art, local vision-language
+14 ComfyUI custom nodes for retro image effects, pixel art, local vision-language
 inference, prompt tooling and analog-console controls. Find them under the
 **👑 Ray** category in the add-node menu.
 
@@ -21,10 +21,7 @@ inference, prompt tooling and analog-console controls. Find them under the
 | **🔧 Tools** | **Save Image** | Save PNGs or preview them, with a two-image comparison slider and folder picker |
 | | **TXT Folder** | Read text files as prompts, with matching save prefixes |
 | | **Metadata Inspector** | Read generation metadata from an image, or embed it into one |
-| | **Folder Image Scraper** | Pick a local image and extract its generation prompt |
-| | **PromptDexter Scraper** | Fetch a random prompt and image from PromptDexter |
-| | **CivitAI Gallery Scraper** | Fetch prompts and images from the CivitAI API, SFW or NSFW |
-| | **Prompt Scraper** | Local, PromptDexter and CivitAI prompt sources in one node |
+| | **Prompt Scraper** | One node for prompts from a local image folder, PromptDexter or CivitAI |
 
 Nodes are named *Ray's &lt;Group&gt;: &lt;Node&gt;* in the menu. Select any Ray node and click the
 **?** in its selection toolbar for built-in help: what it does, every input and output,
@@ -47,7 +44,7 @@ the browser. After updating the pack, restart again so new and changed nodes loa
   ComfyUI's `CLIPLoader` (type `qwen_image`, or `krea2`). Connect its `CLIP`, an image and
   a prompt. Details and measurements are in [FAST_VLM.md](FAST_VLM.md).
 - **Folder Captioner** needs a GPU and the same kind of full Qwen3-VL `CLIP` from `CLIPLoader` as Fast Qwen3-VL.
-- **PromptDexter**, **CivitAI** and the matching **Prompt Scraper** modes need network
+- **Prompt Scraper**'s PromptDexter and CivitAI modes need network
   access. CivitAI can read an optional local `civitai.secret` file; it is ignored by Git.
 - Works in both the classic canvas and Nodes 2.0. Node IDs are stable, so saved workflows
   keep loading.
