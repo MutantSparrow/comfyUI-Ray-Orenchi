@@ -63,7 +63,7 @@ export const PANEL_CSS = `
 .rp[hidden], .rp-row[hidden], .rp-section[hidden] {display:none !important}
 .rp-section {display:flex;flex-direction:column;gap:6px;min-width:0}
 .rp-section + .rp-section {border-top:1px solid #2b2b2b;padding-top:8px}
-.rp-title {font:600 10px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#7c7c7c}
+.rp-title {font:600 10px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#d43aa8}
 .rp-row {display:grid;grid-template-columns:minmax(64px,34%) minmax(0,1fr);gap:8px;align-items:center;min-height:28px;border-radius:5px;position:relative}
 .rp-row.rp-full {grid-template-columns:minmax(0,1fr);gap:4px}
 .rp-row.rp-bool {grid-template-columns:minmax(0,1fr) auto}

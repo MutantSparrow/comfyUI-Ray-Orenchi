@@ -213,23 +213,23 @@ function scraperPanel(node) {
     const mode = () => getWidget(node, "scraper_mode")?.value;
     const refresh = title => [{ icon: "refresh", title, onClick: () => refreshSource(node) }];
     return { sections: [
-        { fields: [
+        { title: "Scraper", fields: [
             { name: "scraper_mode", label: "Source", kind: "segment", labels: { [MODE_LOCAL]: "Local", [MODE_DEXTER]: "PromptDexter", [MODE_CIVITAI]: "CivitAI" } },
             "seed",
         ] },
-        { fields: [
+        { title: "Local folder", fields: [
             { name: "local__folder", label: "Folder of images", browse: { kind: "folder", title: "Choose a folder of images" } },
             { name: "local__recurse_subfolders", label: "Include subfolders" },
             { name: "local__skip_no_prompt", label: "Skip images without prompts" },
             { name: "local__prompt_best_try", label: "One prompt per image" },
             { name: "local__refresh_listing", label: "Re-scan the folder" },
         ] },
-        { fields: [
+        { title: "PromptDexter", fields: [
             { name: "dexter__category", label: "Category", actions: refresh("Refresh the PromptDexter sitemap") },
             { name: "dexter__clear_cache", label: "Forget recent picks" },
             { name: "dexter__timeout", label: "Timeout (s)" },
         ] },
-        { fields: [
+        { title: "CivitAI", fields: [
             { name: "civitai__mode", label: "Rating", kind: "segment", labels: { "Blue (SFW)": "Blue · SFW", "Red (NSFW)": "Red · NSFW" } },
             { name: "civitai__base_model", label: "Base model", actions: refresh("Clear the CivitAI cache so the next run fetches again") },
             { name: "civitai__period", label: "Period" },

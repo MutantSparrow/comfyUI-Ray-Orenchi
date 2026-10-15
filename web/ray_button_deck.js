@@ -245,6 +245,6 @@ registerAnalog(app, {
             summary.textContent = `${count} button${count === 1 ? "" : "s"}`;
             edit.disabled = isLinked(node, "entries") || isLinked(node, "selected");
         };
-        return { skip: ["entries", "selected"], sections: [{ fields: [{ custom: () => row, update, when: n => !n.properties?.compact }] }] };
+        return { skip: ["entries", "selected"], sections: [{ title: "Buttons", fields: [{ custom: () => row, update, when: n => !n.properties?.compact }] }] };
     },
 });

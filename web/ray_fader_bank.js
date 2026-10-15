@@ -203,7 +203,7 @@ registerAnalog(app, {
     kind: "fader", name: "RayFaderBank", title: "🎛️ Ray's Analog: Fader Bank",
     extensionName: "Ray.FaderBank", menuName: "Fader",
     styles: FADER_STYLES, defaultStyle: DEFAULT_FADER_STYLE, valueName: "fader_1", configNames: ["faders"],
-    panel: () => ({ skip: Array.from({ length: MAX_FADERS }, (_, i) => `fader_${i + 1}`), sections: [{ fields: [{ name: "faders", label: "Faders" }] }] }),
+    panel: () => ({ skip: Array.from({ length: MAX_FADERS }, (_, i) => `fader_${i + 1}`), sections: [{ title: "Bank", fields: [{ name: "faders", label: "Faders" }] }] }),
     outputs: [["values", "FLOAT"], ...Array.from({ length: MAX_FADERS }, (_, i) => [`fader_${i + 1}`, "FLOAT"])],
     build: buildFaders, curve: true,
     heights: () => ({ min: 250, max: undefined }),

@@ -194,7 +194,7 @@ function injectStyles() {
 .ray-name-widgets { margin:6px 0; border:1px solid #33363c; border-radius:5px; background:#15171a; }
 .ray-name-widgets input[type=text] { border:0; border-bottom:1px solid #33363c; border-radius:5px 5px 0 0; }
 .ray-name-list { max-height:190px; overflow-y:auto; padding:2px; }
-.ray-name-list h4 { margin:6px 6px 2px; font:600 10px system-ui; letter-spacing:.06em; text-transform:uppercase; color:#8d9096; }
+.ray-name-list h4 { margin:6px 6px 2px; font:600 10px system-ui; letter-spacing:.06em; text-transform:uppercase; color:#d43aa8; }
 .ray-name-list button { display:flex; width:100%; gap:8px; justify-content:space-between; border:0; background:transparent; text-align:left; padding:4px 6px; }
 .ray-name-list button span:last-child { color:#8d9096; font-family:ui-monospace,monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:55%; }
 .ray-name-empty { padding:10px; color:#8d9096; }
