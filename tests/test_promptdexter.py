@@ -264,14 +264,23 @@ def test_two_instances_same_seed_same_url():
     assert cache_a == cache_b
 
 
-def test_same_seed_skips_to_next_candidate():
+def test_same_seed_repeats_the_same_url():
+    # A frozen seed is meant to reproduce the same page on every run (see _select_url).
     rpd._RECENT_BY_NODE.clear()
     _stub_node(7, "node_X")
-    first = list(rpd._RECENT_BY_NODE["node_X"])
     _stub_node(7, "node_X")
-    after_two = list(rpd._RECENT_BY_NODE["node_X"])
-    assert len(after_two) == 2
-    assert after_two[0] != after_two[1]
+    picked = list(rpd._RECENT_BY_NODE["node_X"])
+    assert len(picked) == 2
+    assert picked[0] == picked[1]
+
+
+def test_random_seed_does_not_repeat_the_previous_url():
+    # Only seed -1 (random) avoids consecutive repeats.
+    rpd._RECENT_BY_NODE.clear()
+    for _ in range(8):
+        _stub_node(-1, "node_Y")
+    picked = list(rpd._RECENT_BY_NODE["node_Y"])
+    assert all(a != b for a, b in zip(picked, picked[1:])), picked
 
 
 # --- category filtering through process() ----------------------------------
