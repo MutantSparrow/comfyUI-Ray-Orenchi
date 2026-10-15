@@ -227,7 +227,7 @@ export function openStylePicker(node, kind, styles) {
     const picker = document.createElement("div");
     picker.className = "ray-style-picker";
     picker.setAttribute("role", "menu");
-    picker.setAttribute("aria-label", `${kind === "knob" ? "Control" : kind === "deck" ? "Button deck" : "Switch"} style`);
+    picker.setAttribute("aria-label", `${{ knob: "Control", deck: "Button deck", fader: "Fader" }[kind] || "Switch"} style`);
     // Knob faces first, then sliders, each under a heading.
     const entries = Object.entries(styles).sort(([, a], [, b]) => (a.kind === "slider") - (b.kind === "slider"));
     const items = [];
@@ -302,7 +302,7 @@ export function createPanel(node, kind, css) {
     element.appendChild(dymo.root);
     const host = document.createElement(kind === "switch" ? "button" : "div");
     if (kind === "switch") host.type = "button";
-    host.className = `ray-analog-face ${kind === "knob" ? "rk-host" : kind === "deck" ? "ray-deck-host" : "rs-host"}`;
+    host.className = `ray-analog-face ${{ knob: "rk-host", deck: "ray-deck-host", fader: "ray-fader-host" }[kind] || "rs-host"}`;
     host.tabIndex = 0;
     element.appendChild(host);
     const readout = document.createElement("div");

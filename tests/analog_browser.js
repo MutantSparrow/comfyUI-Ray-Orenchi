@@ -2,6 +2,7 @@ import { app, nodeClass } from '/scripts/app.js';
 import '/extensions/ray/ray_knob.js';
 import '/extensions/ray/ray_switch.js';
 import '/extensions/ray/ray_button_deck.js';
+import '/extensions/ray/ray_fader_bank.js';
 import { DECK_STYLES, gridShape } from '/extensions/ray/deck_styles.js';
 import { parseEntries } from '/extensions/ray/ray_button_deck.js';
 import { migrateClipInput } from '/extensions/ray/ray_vlm_folder.js';
@@ -10,6 +11,8 @@ import { SWITCH_STYLES } from '/extensions/ray/switch_styles.js';
 import { quantizeInt, boundValue } from '/extensions/ray/ray_knob.js';
 import { isMuted, setMuted, createBank, VOICE_TABLES } from '/extensions/ray/analog_audio.js';
 import { isWheelOn, setWheelOn, wheelUnits } from '/extensions/ray/analog_common.js';
+import { clampCount, clampLevel, syncOutputs } from '/extensions/ray/ray_fader_bank.js';
+import { FADER_STYLES } from '/extensions/ray/fader_styles.js';
 
 const messages = [];
 let passes = 0;
@@ -20,8 +23,8 @@ function check(condition, message) {
 const widget = (node,name) => node.widgets.find(w => w.name === name);
 const make = (kind,accessor=false,dom=true) => {
     const Type = nodeClass(kind,accessor,dom);
-    const extension = app.extensions.find(e => e.name === {knob:'Ray.Knob',switch:'Ray.Switch',deck:'Ray.ButtonDeck'}[kind]);
-    extension.beforeRegisterNodeDef(Type,{name:{knob:'RayKnob',switch:'RaySwitch',deck:'RayButtonDeck'}[kind]});
+    const extension = app.extensions.find(e => e.name === {knob:'Ray.Knob',switch:'Ray.Switch',deck:'Ray.ButtonDeck',fader:'Ray.FaderBank'}[kind]);
+    extension.beforeRegisterNodeDef(Type,{name:{knob:'RayKnob',switch:'RaySwitch',deck:'RayButtonDeck',fader:'RayFaderBank'}[kind]});
     const node = new Type(); node.onNodeCreated(); return node;
 };
 try {
@@ -409,6 +412,109 @@ try {
         elsewhere.remove();
         setWheelOn(false);
         check(!isWheelOn() && localStorage.getItem('ray.analog.wheel.v1') === '0', 'The preference turns off again');
+    }
+    // ---- fader bank -------------------------------------------------------------------------------
+    {
+        check(clampCount(0) === 2 && clampCount(99) === 10 && clampCount('x') === 4 && clampCount(5.9) === 5, 'Fader count clamps to 2..10');
+        check(clampLevel(-1) === 0 && clampLevel(3) === 1 && clampLevel(NaN) === .5 && clampLevel('.25') === .25, 'Fader levels clamp to 0..1');
+        const bank = make('fader'), ui = bank._rayAnalog;
+        document.body.append(ui.element);
+        const strips = () => [...ui.element.querySelectorAll('.ray-fader-strip')];
+        const level = i => widget(bank, `fader_${i}`).value;
+        const names = () => bank.outputs.map(o => o.name).join(',');
+        check(strips().length === 4 && names() === 'values,fader_1,fader_2,fader_3,fader_4', 'A new bank has four faders and only their outputs');
+        check(bank.size[0] >= 28 + 4 * 38, 'The node is wide enough for its faders');
+        check(widget(bank, 'fader_1').hidden && widget(bank, 'fader_10').hidden && !widget(bank, 'faders').hidden, 'The raw fader widgets are hidden and the count stays editable');
+        check(strips().every(el => el.getAttribute('role') === 'slider' && el.getAttribute('aria-valuenow') === '0.5'), 'Each fader is a slider at the middle');
+
+        widget(bank, 'faders').value = 7; widget(bank, 'faders').callback();
+        check(strips().length === 7 && names() === 'values,fader_1,fader_2,fader_3,fader_4,fader_5,fader_6,fader_7', 'Raising the count adds faders and their outputs');
+        check(bank.size[0] >= 28 + 7 * 38, 'and widens the node to fit');
+        widget(bank, 'faders').value = 2; widget(bank, 'faders').callback();
+        check(strips().length === 2 && names() === 'values,fader_1,fader_2', 'Lowering the count removes the extra faders and outputs');
+        widget(bank, 'faders').value = 10; widget(bank, 'faders').callback();
+        check(strips().length === 10 && bank.outputs.length === 11, 'Ten faders show every output');
+        widget(bank, 'faders').value = 99; widget(bank, 'faders').callback();
+        check(strips().length === 10, 'A count above ten is held at ten');
+        widget(bank, 'faders').value = 3; widget(bank, 'faders').callback();
+        check(strips().length === 3 && bank.outputs.length === 4, 'Back down to three');
+
+        const first = strips()[0];
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+        check(Math.abs(level(1) - .51) < 1e-9 && first.getAttribute('aria-valuenow') === '0.51', 'ArrowUp raises a fader by 0.01');
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true, cancelable: true }));
+        check(Math.abs(level(1) - .509) < 1e-9, 'Shift makes keyboard steps ten times finer');
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
+        check(level(1) === 1, 'End sends a fader to 1');
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }));
+        check(level(1) === 0 && level(2) === .5, 'Home sends it to 0 and leaves the others alone');
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', bubbles: true, cancelable: true }));
+        check(Math.abs(level(1) - .1) < 1e-9, 'PageUp moves a tenth');
+        check(ui.element.querySelector('.ray-analog-readout').textContent === 'F1  0.10', 'The readout shows the last fader touched');
+
+        // Drag, with pointer capture stubbed because the events are synthetic.
+        const capture = Element.prototype.setPointerCapture, release = Element.prototype.releasePointerCapture;
+        Element.prototype.setPointerCapture = () => {}; Element.prototype.releasePointerCapture = () => {};
+        const second = strips()[1], track = second.querySelector('.ray-fader-track');
+        const rect = track.getBoundingClientRect(), travel = rect.height - 18;
+        const at = fraction => rect.bottom - 9 - fraction * travel;
+        const pointer = (el, type, y, init = {}) => el.dispatchEvent(new PointerEvent(type, { pointerId: 7, button: 0, clientX: rect.left + 5, clientY: y, bubbles: true, cancelable: true, isPrimary: true, ...init }));
+        check(rect.height > 80 && travel > 50, 'The fader track has room to travel');
+        pointer(second, 'pointerdown', at(.8));
+        check(Math.abs(level(2) - .8) < .01, 'Clicking the track jumps the cap to the pointer');
+        pointer(second, 'pointermove', at(.8) - travel * .1);
+        check(Math.abs(level(2) - .9) < .01, 'Dragging up raises the fader by the distance moved');
+        pointer(second, 'pointermove', at(.8) - travel * .1 + travel * .1, { shiftKey: true });
+        check(Math.abs(level(2) - .895) < .01, 'Shift slows the drag twenty times');
+        pointer(second, 'pointermove', at(2));
+        check(level(2) === 1, 'Dragging past the top stops at 1');
+        pointer(second, 'pointerup', at(2));
+        pointer(second, 'pointermove', at(0));
+        check(level(2) === 1, 'Moving after release changes nothing');
+        check(bank.graph.before === bank.graph.after && bank.graph.before > 0, 'A drag is one balanced undo step');
+        pointer(second, 'pointerdown', at(.5));
+        const cap = second.querySelector('.ray-fader-cap').getBoundingClientRect();
+        pointer(second, 'pointerup', at(.5));
+        pointer(second, 'pointerdown', cap.top + cap.height / 2);
+        check(Math.abs(level(2) - .5) < .01, 'Grabbing the cap itself does not make it jump');
+        pointer(second, 'pointerup', at(.5));
+        Element.prototype.setPointerCapture = capture; Element.prototype.releasePointerCapture = release;
+
+        bank.inputs = [{ name: 'fader_3', link: 8 }]; bank.onConnectionsChange();
+        const third = strips()[2], held = level(3);
+        third.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
+        check(level(3) === held && third.getAttribute('aria-disabled') === 'true' && /EXTERNAL/.test(ui.element.querySelector('.ray-analog-hint').textContent), 'A linked fader ignores local edits and says so');
+        bank.inputs = []; bank.onConnectionsChange();
+
+        // Mouse wheel works on the fader under the pointer only.
+        const spin = (el, deltaY, init = {}) => { const e = new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true, ...init }); el.dispatchEvent(e); return e; };
+        const idle = () => new Promise(resolve => setTimeout(resolve, 450));
+        const before = [level(1), level(2), level(3)];
+        check(!spin(strips()[0], -100).defaultPrevented && level(1) === before[0], 'The wheel does nothing to a fader while the preference is off');
+        setWheelOn(true);
+        const event = spin(strips()[0].querySelector('.ray-fader-track'), -100);
+        check(event.defaultPrevented && Math.abs(level(1) - (before[0] + .02)) < 1e-9 && level(2) === before[1], 'A notch up raises only the fader under the pointer by 2%');
+        spin(strips()[1], 100, { shiftKey: true });
+        check(Math.abs(level(2) - (before[1] - .002)) < 1e-9, 'Shift makes the wheel ten times finer');
+        check(!spin(ui.element.querySelector('.ray-analog-readout'), -100).defaultPrevented, 'The wheel over the readout is left to the canvas');
+        for (let i = 0; i < 80; i++) spin(strips()[0], -100);
+        check(level(1) === 1, 'The wheel stops at 1');
+        await idle();
+        check(bank.graph.before === bank.graph.after, 'Wheel bursts are balanced undo steps');
+        setWheelOn(false);
+
+        const labels = Object.values(FADER_STYLES);
+        check(labels.length === 3 && labels.every(style => style.label && style.panel), 'Three fader styles are defined');
+        for (const key of Object.keys(FADER_STYLES)) {
+            bank.properties.style = key; ui.render();
+            check(ui.element.dataset.style === key && ui.element.dataset.panel === FADER_STYLES[key].panel, `Fader style ${key} applies`);
+        }
+        bank.properties.style = 'nonsense'; ui.render();
+        check(ui.element.dataset.style === 'console_black', 'An unknown style falls back to the default');
+
+        const plain = make('fader', false, false);
+        check(plain._rayAnalog === undefined && plain.outputs.length === 11, 'Without DOM widgets the native widgets and every output stay');
+        bank.onRemoved(); ui.element.remove();
     }
     document.querySelector('#results').textContent=`${passes} checks passed\n`+messages.join('\n');
     document.querySelector('summary').textContent=`Regression results — ${passes} checks passed`;
