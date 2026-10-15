@@ -52,6 +52,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
+                "**📂 Browse for a folder…** under `assets_folder` opens your system's folder dialog; the asset list refreshes from the folder you pick.",
                 "Point `assets_folder` at `.cube` / `.3dl` LUTs and `.xmp` develop files; `asset_file` refreshes live with what it finds.",
             ],
         }],
@@ -136,6 +137,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
+                "**📂 Browse for a folder…** under `folder` opens your system's folder dialog and fills in the path. You can still type or paste one.",
                 "Connect a full generative VLM `CLIP` (such as Qwen3-VL from `CLIPLoader`, type `qwen_image`) to `clip`; text-only encoders cannot caption.",
                 "Files are sorted by relative path. Use `start_index` and `limit` to process large folders in chunks; output images are held in RAM.",
                 "Supports JPEG, PNG, WebP, BMP, TIFF and GIF (first frame). Requires a GPU.",
@@ -160,12 +162,14 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
+                "The folder button next to **Directory** opens your system's folder dialog and pastes the path. A blank directory saves to ComfyUI's output folder; the ▾ in the field recalls the last three save folders.",
                 "The Save Image buttons choose None, 1, 2 or Both; saving happens when the workflow runs. None only previews.",
                 "With two images connected, drag the ‹ › handle to compare them. The preview is otherwise click-through, so right-click, middle-drag and the wheel still reach the canvas.",
                 "The picture fills the node: resize the node to enlarge it. Image sizes and the save status sit on the picture, and with several images the arrows at the bottom right step through the pairs.",
-                "Browse… picks a folder on the ComfyUI host; the arrow recalls the last three save folders.",
+                "The **{ }** button next to **Filename prefix** opens a panel to build the name from tokens: `{date}`, `{time}`, `{counter}`, `{index}`, `{input}`, `{hash}` and `{widget:ID.NAME}` (the value of any widget in the workflow). The file is saved as exactly `<name>.png`.",
+                "Spaces and characters a filename cannot hold are replaced with `_`, and nothing is ever overwritten: `{counter}` moves on to the next free number, otherwise `-2`, `-3`… is added.",
                 "Right-click → Save without metadata omits workflow data; Open image location in Explorer opens the last save folder (Windows host).",
-                "Files are 8-bit PNGs at input resolution, alpha included, with unique names.",
+                "Files are 8-bit PNGs at input resolution, alpha included.",
             ],
         }],
     },
@@ -175,6 +179,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
+                "**📂 Browse for a folder…** under `directory` opens your system's folder dialog and fills in the path. You can still type or paste one.",
                 "Connect `prompt` to the text encoder and `filename_prefix` to Save Image; lists are paired automatically. Keep image batch size at 1.",
                 "`start_index` is zero-based; `limit` -1 reads all remaining files. Empty files count toward the range but are skipped.",
             ],
@@ -186,6 +191,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
+                "In Local Folder mode, **📂 Browse for a folder…** under `local__folder` opens your system's folder dialog and fills in the path.",
                 "Widgets are prefixed by source: `local__`, `dexter__` and `civitai__`. Hidden widgets keep their values.",
                 "Every mode produces the same four outputs; `image_path` is empty for the web sources.",
                 "Local Folder mode reads A1111/Forge `parameters`, ComfyUI `prompt` / `workflow` graphs, other prompt-like PNG keys, EXIF comments and `<image>.txt` sidecars. When an image holds several prompts, each is emitted as a separate list entry.",
@@ -202,6 +208,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
+                "**📂 Browse for a file…** under `path` opens your system's file dialog, filtered to images. You can still paste a path.",
                 "Inspect parses A1111 `parameters`, ComfyUI graphs, EXIF comments and sidecar text.",
                 "Embed writes the connected image with `metadata_json` to `path`, then re-reads the file to verify it.",
                 "In Inspect, connect a Load Image node to `image` and it reads that file's metadata (a connected image wins over `path`). Generated images have no file, so use `path` for those.",

@@ -52,6 +52,7 @@ _ROUTE_MODULES = (
     "promptdexter_routes",
     "civitai_routes",
     "film_stock_routes",
+    "browse_routes",
 )
 
 # Tolerate standalone import (e.g. pytest collection) where relative imports
