@@ -11,7 +11,13 @@ signal takes:
   5. Time base: smooth per-line wobble, flagging at the top, tracking bands and the head-switch tear
   6. Tape noise: streaky luma noise and colour noise, snow in tracking bands and head-switch lines
   7. Dropouts: short bright streaks with soft tails
-  8. YUV -> RGB, then an optional VCR on-screen display in a built-in pixel font
+  8. YUV -> RGB, then an optional blend back toward the source (effect_fade)
+
+The on-screen display (a status line and a date / time line, in a built-in pixel font) is not laid over the
+finished picture. It is burned in before stage 1, so it goes through the same tape: it softens, its colour
+bleeds and lags, it wobbles with the picture and the noise and dropouts land on it too. On top of that it
+gets what a character generator adds on the way to the screen: a smeared shadow, a little independent line
+jitter and a shimmer along its edges.
 
 Output preserves BHWC float32 [0,1] shape. Every random draw comes from a seeded generator, so a fixed
 seed always gives the same tape, and changing one control never reshuffles another effect's noise.
@@ -29,7 +35,6 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
-from PIL import Image, ImageDraw
 
 try:
     from ._common import normalize_image, rgb_to_yuv, yuv_to_rgb
@@ -130,8 +135,15 @@ PRESETS = {
 }
 PRESET_NAMES = list(PRESETS.keys())
 
-OSD_MODES = ["Off", "▶ PLAY", "● REC", "Date", "Date+Time"]
+OSD_STATUS = ["Off", "▶ PLAY", "● REC", "❚❚ PAUSE", "■ STOP"]
+OSD_STAMP = ["Off", "Date", "Time", "Date+Time"]
 OSD_CORNERS = ["TL", "TR", "BL", "BR"]
+# The phosphor colours of VCR and camcorder character generators.
+OSD_COLORS = {
+    "White": (0.96, 0.96, 0.92),
+    "Yellow": (1.00, 0.86, 0.04),
+    "Green": (0.18, 1.00, 0.32),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -422,40 +434,52 @@ _OSD_GLYPHS = {
     ")": ".X...|..X..|...X.|...X.|...X.|..X..|.X...",
     "%": "XX..X|XX..X|...X.|..X..|.X...|X..XX|X..XX",
 }
-# The PLAY triangle and REC dot, on the same 5 x 7 grid.
+# Status symbols on the same 5 x 7 grid.
 _OSD_ICONS = {
     "play": "X....|XX...|XXX..|XXXX.|XXX..|XX...|X....",
     "rec": ".....|.XXX.|XXXXX|XXXXX|XXXXX|.XXX.|.....",
+    "pause": "XX.XX|XX.XX|XX.XX|XX.XX|XX.XX|XX.XX|XX.XX",
+    "stop": ".....|XXXXX|XXXXX|XXXXX|XXXXX|XXXXX|.....",
 }
 _OSD_ADVANCE = 6      # cells per character (5 wide plus a 1 cell gap)
 _OSD_SPACE = 4        # cells a space advances
 _OSD_ICON_GAP = 2     # cells between an icon and the text
+_OSD_LINE_GAP = 3     # cells between lines stacked in one corner
 
 
 def _osd_icon(mode: str):
     """Symbol drawn before the OSD text, as part of the pixel font."""
-    return {"▶ PLAY": "play", "● REC": "rec"}.get(mode)
+    return {"▶ PLAY": "play", "● REC": "rec", "❚❚ PAUSE": "pause", "■ STOP": "stop"}.get(mode)
 
 
-def _osd_text(mode: str, custom_date: str) -> str:
-    if mode == "▶ PLAY":
-        return "PLAY"
-    if mode == "● REC":
-        return "REC"
-    if mode in ("Date", "Date+Time"):
+def _osd_text(mode: str, custom_date: str = "") -> str:
+    fixed = {"▶ PLAY": "PLAY", "● REC": "REC", "❚❚ PAUSE": "PAUSE", "■ STOP": "STOP"}
+    if mode in fixed:
+        return fixed[mode]
+    if mode in ("Date", "Time", "Date+Time"):
         try:
-            if custom_date.strip():
-                base = custom_date.strip()
-            else:
-                now = datetime.datetime.now()
-                base = now.strftime("%Y %m %d")
-            if mode == "Date+Time":
-                now = datetime.datetime.now()
-                base += "  " + now.strftime("%H:%M")
-            return base
+            now = datetime.datetime.now()
+            parts = []
+            if mode in ("Date", "Date+Time"):
+                parts.append((custom_date or "").strip() or now.strftime("%Y %m %d"))
+            if mode in ("Time", "Date+Time"):
+                parts.append(now.strftime("%H:%M"))
+            return "  ".join(parts)
         except Exception:
             return ""
     return ""
+
+
+def osd_lines(status: str = "Off", status_corner: str = "TL", stamp: str = "Off",
+              stamp_corner: str = "BR", custom_date: str = ""):
+    """(text, icon, corner) for each OSD line that is switched on, status first."""
+    lines = []
+    for mode, corner in ((status, status_corner), (stamp, stamp_corner)):
+        if mode and mode != "Off":
+            text = _osd_text(mode, custom_date)
+            if text:
+                lines.append((text, _osd_icon(mode), corner))
+    return lines
 
 
 def _osd_glyph(char: str):
@@ -484,48 +508,68 @@ def _osd_cells(text: str, icon=None):
     return cells, max(0, col - (_OSD_ADVANCE - 5))
 
 
-def _draw_osd(
-    rgb_bhwc: torch.Tensor,
-    text: str,
-    corner: str,
-    icon: str = None,
-) -> torch.Tensor:
-    """Composite a VCR-style OSD line into the chosen corner: chunky 5 x 7 pixel characters in
-    cream with a black outline and drop shadow, like a tape deck's character generator."""
-    text = str(text or "").strip()
-    if not text:
-        return rgb_bhwc
+def _osd_scale(H: int) -> int:
+    """Pixels per font cell; the text is about 4% of the picture height."""
+    return max(1, int(round(H * 0.0057)))
+
+
+def _osd_fill(H: int, W: int, lines) -> torch.Tensor:
+    """(1, 1, H, W) 0/1 mask of the lit pixels. Lines sharing a corner stack in the order given; lines in
+    the right-hand corners are right-aligned. The margins keep text inside the safe area and clear of the
+    head-switch band."""
+    fill = np.zeros((H, W), dtype=np.float32)
+    scale = _osd_scale(H)
+    pad_x, pad_y = max(4, int(W * 0.045)), max(4, int(H * 0.07))
+    by_corner = {}
+    for text, icon, corner in lines:
+        text = str(text or "").strip()
+        if text:
+            by_corner.setdefault(corner if corner in OSD_CORNERS else "BL", []).append(_osd_cells(text, icon))
+    for corner, rows in by_corner.items():
+        block = (len(rows) * 7 + (len(rows) - 1) * _OSD_LINE_GAP) * scale
+        y = pad_y if corner[0] == "T" else H - block - pad_y
+        for cells, cols in rows:
+            x0 = pad_x if corner[1] == "L" else W - cols * scale - pad_x
+            for cx, cy in cells:
+                px, py = x0 + cx * scale, y + cy * scale
+                if px >= 0 and py >= 0:
+                    fill[py:py + scale, px:px + scale] = 1.0
+            y += (7 + _OSD_LINE_GAP) * scale
+    return torch.from_numpy(fill).view(1, 1, H, W)
+
+
+def _burn_in_osd(rgb_bhwc: torch.Tensor, lines, color: str, amount: float, seed: int) -> torch.Tensor:
+    """Composite the OSD into the picture the way a character generator does: coloured text on a black
+    outline and a smeared drop shadow. `amount` (0..1) scales the analog imperfections (independent line
+    jitter and shimmering edges); the tape chain that follows does the softening and colour bleed."""
     B, H, W, _ = rgb_bhwc.shape
-    cells, cols = _osd_cells(text, icon)
-    scale = max(1, int(round(H * 0.0057)))        # pixels per cell; the text is about 4% of the height
-    edge = max(1, scale // 3)                     # outline thickness
-    shadow = max(1, scale // 4)                   # drop-shadow offset
-    tw, th = cols * scale, 7 * scale
-    pad = max(4, int(H * 0.01)) + edge
-    if corner == "TL":
-        x0, y0 = pad, pad
-    elif corner == "TR":
-        x0, y0 = W - tw - pad, pad
-    elif corner == "BR":
-        x0, y0 = W - tw - pad, H - th - pad
-    else:
-        x0, y0 = pad, H - th - pad
-    out_list = []
-    for b in range(B):
-        arr = (rgb_bhwc[b].cpu().numpy().clip(0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
-        pil = Image.fromarray(arr, mode="RGB")
-        draw = ImageDraw.Draw(pil)
-        for cx, cy in cells:                      # outline and shadow first, so they never cover a neighbour
-            x, y = x0 + cx * scale, y0 + cy * scale
-            draw.rectangle([x - edge + shadow, y - edge + shadow, x + scale - 1 + edge + shadow, y + scale - 1 + edge + shadow],
-                           fill=(0, 0, 0))
-            draw.rectangle([x - edge, y - edge, x + scale - 1 + edge, y + scale - 1 + edge], fill=(0, 0, 0))
-        for cx, cy in cells:
-            x, y = x0 + cx * scale, y0 + cy * scale
-            draw.rectangle([x, y, x + scale - 1, y + scale - 1], fill=(255, 255, 240))
-        out_arr = np.asarray(pil, dtype=np.float32) / 255.0
-        out_list.append(torch.from_numpy(out_arr))
-    return torch.stack(out_list, dim=0).to(rgb_bhwc.device).contiguous()
+    fill = _osd_fill(H, W, lines)
+    if float(fill.max()) <= 0:
+        return rgb_bhwc
+    scale = _osd_scale(H)
+    u = W / 320.0
+    edge = max(1, scale // 3)
+    shadow = max(1, scale // 2)
+    outline = F.max_pool2d(fill, 2 * edge + 1, 1, edge)
+    drop = F.pad(outline, (shadow, 0, shadow, 0))[..., :H, :W]
+    drop = _blur(_trail(drop, 1.4 * scale), 0.5 * scale, 0.4 * scale).clamp(0, 1)
+
+    gen = _stage_generator(seed, 8)
+    if amount > 0:
+        # The character generator is not locked perfectly to the picture: its lines drift a little.
+        sway = (_smooth1d(H, 0.9, gen) * (0.25 * amount * u)).view(1, H)
+        layers = _displace_rows(torch.cat([fill, outline, drop], dim=1), sway)
+        fill, outline, drop = layers[:, 0:1], layers[:, 1:2], layers[:, 2:3]
+        # Shimmer along the glyph edges, soft along the line like the rest of the signal noise.
+        rim = F.max_pool2d(fill, 3, 1, 1) + F.max_pool2d(-fill, 3, 1, 1)
+        shimmer = _blur(torch.randn(fill.shape, generator=gen), 0.7, 0.0)
+        fill = (fill + rim * shimmer * (0.30 * amount)).clamp(0, 1)
+
+    fill, outline, drop = (t.to(rgb_bhwc.device).permute(0, 2, 3, 1) for t in (fill, outline, drop))
+    colour = torch.tensor(OSD_COLORS.get(color, OSD_COLORS["White"]), device=rgb_bhwc.device, dtype=rgb_bhwc.dtype)
+    out = rgb_bhwc * (1.0 - 0.7 * drop)
+    out = out * (1.0 - outline)
+    return out * (1.0 - fill) + colour * fill
 
 
 # ---------------------------------------------------------------------------
@@ -537,16 +581,24 @@ def apply_vhs(
     image: torch.Tensor,
     preset: VHSParams,
     overrides: Optional[VHSParams] = None,
-    osd_mode: str = "Off",
-    osd_corner: str = "BL",
-    osd_date: str = "",
+    osd=None,
+    osd_color: str = "White",
+    effect_fade: float = 0.0,
     seed: Optional[int] = None,
 ) -> torch.Tensor:
+    """`osd` is a list of (text, icon, corner) from `osd_lines`; `effect_fade` (0..1) blends the result back
+    toward the source, which keeps its OSD."""
     image = normalize_image(image)
     device, dtype = image.device, image.dtype
 
     p = overrides or preset
     base = int(seed) if seed is not None and seed >= 0 else secrets.randbelow(2**31)
+    fade = min(1.0, max(0.0, float(effect_fade)))
+
+    # The OSD is part of the picture the tape sees, not something drawn over the result.
+    if osd:
+        image = _burn_in_osd(image, osd, osd_color, 1.0 - fade, base)
+    source = image
 
     x = rgb_to_yuv(image).permute(0, 3, 1, 2).contiguous().float()
     B, _, H, W = x.shape
@@ -600,13 +652,11 @@ def apply_vhs(
             uv[b] = uv[b] * (1.0 - 0.9 * mask)
 
     yuv = torch.cat([y.clamp(-0.1, 1.25), uv.clamp(-0.6, 0.6)], dim=1).permute(0, 2, 3, 1).contiguous()
-    rgb = yuv_to_rgb(yuv)
+    rgb = yuv_to_rgb(yuv).clamp(0.0, 1.0)
+    if fade > 0:
+        rgb = rgb * (1.0 - fade) + source.clamp(0.0, 1.0) * fade
 
-    if osd_mode and osd_mode != "Off":
-        text = _osd_text(osd_mode, osd_date)
-        rgb = _draw_osd(rgb, text, osd_corner, _osd_icon(osd_mode))
-
-    return rgb.clamp(0.0, 1.0).to(dtype=dtype, device=device)
+    return rgb.to(dtype=dtype, device=device)
 
 
 # ---------------------------------------------------------------------------
@@ -624,8 +674,11 @@ class RayVHS:
         "and dropouts. Effects scale with the picture, so presets look the same at any size.\n\n"
         "The preset sets the tape and deck character (softness, halos, colour, levels). Each "
         "slider defaults to -1 (use the preset value) and 0..1 overrides that one effect.\n\n"
-        "OSD overlay simulates the classic VCR readout in a built-in pixel font: PLAY / REC / "
-        "Date / Date+Time in any corner. Leave osd_date blank to stamp today's date."
+        "effect_fade blends the result back toward the source: 0 is the full effect, 1 is the "
+        "untouched picture.\n\n"
+        "The on-screen display has a status line (PLAY / REC / PAUSE / STOP) and a date / time line, "
+        "each in its own corner, in white, yellow or green. It is burned into the picture before the "
+        "tape, so it softens, bleeds and wobbles with it. Leave osd_date blank to stamp today's date."
     )
 
     @classmethod
@@ -662,18 +715,34 @@ class RayVHS:
                     "default": -1.0, "min": -1.0, "max": 1.0, "step": 0.05,
                     "tooltip": f"Cross-colour rainbows and dot crawl around fine detail. {_override}",
                 }),
-                "osd_mode": (OSD_MODES, {
-                    "default": "Off",
-                    "tooltip": "On-screen display overlay: Off / ▶ PLAY / ● REC / Date / Date+Time.",
+                "effect_fade": ("FLOAT", {
+                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "Blend the result back toward the source image. 0 = full effect, 1 = untouched picture.",
                 }),
-                "osd_corner": (OSD_CORNERS, {
-                    "default": "BL",
-                    "tooltip": "Corner for the OSD (TL=top-left, TR=top-right, BL=bottom-left, BR=bottom-right).",
+                "osd_status": (OSD_STATUS, {
+                    "default": "Off",
+                    "tooltip": "Deck status readout: Off / ▶ PLAY / ● REC / ❚❚ PAUSE / ■ STOP.",
+                }),
+                "osd_status_corner": (OSD_CORNERS, {
+                    "default": "TL",
+                    "tooltip": "Corner for the status readout (TL=top-left, TR=top-right, BL=bottom-left, BR=bottom-right).",
+                }),
+                "osd_stamp": (OSD_STAMP, {
+                    "default": "Off",
+                    "tooltip": "Date and time stamp: Off / Date / Time / Date+Time. Shown together with the status readout.",
+                }),
+                "osd_stamp_corner": (OSD_CORNERS, {
+                    "default": "BR",
+                    "tooltip": "Corner for the date / time stamp. Lines sharing a corner stack, status above stamp.",
                 }),
                 "osd_date": ("STRING", {
                     "default": "",
                     "placeholder": "YYYY MM DD (blank = today)",
-                    "tooltip": "OSD date. Leave blank to use today's date.",
+                    "tooltip": "Date text for the stamp. Leave blank to use today's date.",
+                }),
+                "osd_color": (list(OSD_COLORS), {
+                    "default": "White",
+                    "tooltip": "OSD colour: White, Yellow or Green.",
                 }),
                 "seed": ("INT", {
                     "default": -1, "min": -1, "max": 2**31 - 1,
@@ -684,7 +753,7 @@ class RayVHS:
 
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("image",)
-    OUTPUT_TOOLTIPS = ("Tape-degraded image with the OSD overlay applied.",)
+    OUTPUT_TOOLTIPS = ("Tape-degraded image with the OSD burned in.",)
     FUNCTION = "process"
     CATEGORY = "👑 Ray/✨ VFX"
 
@@ -698,9 +767,13 @@ class RayVHS:
         dropout_rate,
         hiss,
         yc_separation,
-        osd_mode,
-        osd_corner,
+        effect_fade,
+        osd_status,
+        osd_status_corner,
+        osd_stamp,
+        osd_stamp_corner,
         osd_date,
+        osd_color,
         seed,
     ):
         base = PRESETS.get(preset)
@@ -725,9 +798,9 @@ class RayVHS:
             image=image,
             preset=base,
             overrides=overrides,
-            osd_mode=osd_mode,
-            osd_corner=osd_corner,
-            osd_date=osd_date or "",
+            osd=osd_lines(osd_status, osd_status_corner, osd_stamp, osd_stamp_corner, osd_date or ""),
+            osd_color=osd_color,
+            effect_fade=effect_fade,
             seed=int(seed),
         )
         return (out,)

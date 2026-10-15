@@ -331,7 +331,11 @@ In `Inspect`, connect a **Load Image** node to `image` and the node reads the me
 
 ## ✨ Ray's VFX: VHS / Tape (`RayVHS`)
 
-**Purpose.** Videotape degradation modeled as a signal chain in YUV space, plus an OSD overlay that mimics a classic VCR readout. The stages follow the path a tape signal takes: soft luma with deck sharpening halos, low-bandwidth colour that smears and lags behind the picture, cross-colour rainbows around fine detail, smooth line-level time-base wobble with tracking bands and a bent top edge, the torn head-switching band at the bottom, streaky tape noise, and dropouts.
+**Purpose.** Videotape degradation modeled as a signal chain in YUV space, plus a VCR or camcorder on-screen display (OSD) that is burned into the picture rather than laid over it. The stages follow the path a tape signal takes: soft luma with deck sharpening halos, low-bandwidth colour that smears and lags behind the picture, cross-colour rainbows around fine detail, smooth line-level time-base wobble with tracking bands and a bent top edge, the torn head-switching band at the bottom, streaky tape noise, and dropouts.
+
+**OSD.** The status readout (PLAY / REC / PAUSE / STOP) and the date / time stamp can be shown together, each in its own corner, in white, yellow or green. Lines that share a corner stack, status above stamp. The text is composited before the tape stages, so it goes through the same luma softening, colour bleed and lag, line wobble, noise and dropouts as the picture, the way a camcorder's burned-in stamp behaves. On top of that the character generator adds a dark outline with a smeared drop shadow, a little line jitter of its own and a faint shimmer along the glyph edges. The margins keep it inside the safe area and clear of the head-switch band.
+
+**Fade.** `effect_fade` alpha-blends the result with the source: `0` is the full effect, `1` is the untouched picture. At any fade the OSD keeps its text, with its analog imperfections fading out along with everything else.
 
 Every effect is sized relative to the picture, not in pixels, so a preset looks the same on a small frame and on a 4K one. A fixed `seed` always gives the same tape, and changing one slider never reshuffles another effect's noise.
 
@@ -364,11 +368,15 @@ Each slider defaults to `-1.0` (meaning "use the preset value") and `0..1` overr
 | **Control** `dropout_rate` | float ±1 | Dropout streaks, short bright or dark lines with a soft tail. |
 | **Control** `hiss` | float ±1 | Tape noise in brightness and colour, streaky along the scanline. |
 | **Control** `yc_separation` | float ±1 | Cross-colour rainbows and dot crawl around fine detail. |
-| **Control** `osd_mode` | enum | `Off` / `▶ PLAY` / `● REC` / `Date` / `Date+Time`, drawn in a built-in VCR pixel font. |
-| **Control** `osd_corner` | enum | `TL` / `TR` / `BL` / `BR`. |
+| **Control** `effect_fade` | float 0..1 | Blend back toward the source. `0` (default) is the full effect, `1` the untouched picture. |
+| **Control** `osd_status` | enum | `Off` / `▶ PLAY` / `● REC` / `❚❚ PAUSE` / `■ STOP`, drawn in a built-in VCR pixel font. |
+| **Control** `osd_status_corner` | enum | `TL` / `TR` / `BL` / `BR` (default `TL`). |
+| **Control** `osd_stamp` | enum | `Off` / `Date` / `Time` / `Date+Time`; shows together with the status line. |
+| **Control** `osd_stamp_corner` | enum | `TL` / `TR` / `BL` / `BR` (default `BR`). Shares a corner with the status line by stacking. |
 | **Control** `osd_date` | string | `YYYY MM DD`; blank stamps today's date. |
+| **Control** `osd_color` | enum | `White` / `Yellow` / `Green`. |
 | **Control** `seed` | int | `-1` for random; any `≥0` value is reproducible. |
-| **Output** `image` | IMAGE | Tape-degraded image with the OSD overlay applied. |
+| **Output** `image` | IMAGE | Tape-degraded image with the OSD burned in. |
 
 ---
 
