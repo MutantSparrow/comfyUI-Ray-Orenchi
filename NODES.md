@@ -270,6 +270,8 @@ Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.
 | **Output** `image` | IMAGE (list) | Result image. |
 | **Output** `image_path` | STRING (list) | Absolute path for Local mode; empty for web modes. |
 
+**Refresh button.** In `PromptDexter` mode the node shows **🔄 refresh sitemap**, which re-reads PromptDexter's sitemap and updates the category list (a status line reports the prompt and category counts). In `CivitAI` mode it shows **🔄 clear cache**, which makes the next run page the gallery again; the status line also notes when no `civitai.secret` file is present and only public access is available. Local Folder mode hides both.
+
 Node tint hue-shifts by active mode.
 
 ---
