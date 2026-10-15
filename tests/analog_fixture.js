@@ -13,7 +13,8 @@ export function nodeClass(kind, accessor = false, dom = true) {
             this.widgets = Object.entries(kind === 'knob' ? {
                 min_value:-100,max_value:100,clamp:0,allow_negative:true,knob_value:0,
             } : kind === 'deck' ? {entries:"Alpha\nBeta\nGamma",selected:""} : kind === 'fader' ? {
-                faders:4,...Object.fromEntries(Array.from({length:10},(_,i)=>[`fader_${i+1}`,.5])),
+                faders:4,...Object.fromEntries(Array.from({length:10},(_,i)=>[`fader_${i+1}`,.5])),rows:1,
+                ...Object.fromEntries(Array.from({length:30},(_,i)=>[`fader_${i+11}`,.5])),
             } : {state:false}).map(([name,value]) => {
                 const data = { name, value, type:typeof value === 'boolean' ? 'toggle' : typeof value === 'string' ? 'text' : 'number', options:{},
                     callback: () => { this.callbacks++; } };
@@ -22,7 +23,7 @@ export function nodeClass(kind, accessor = false, dom = true) {
             this.callbacks = 0;
             this.inputs = [];
             this.outputs = (kind === 'knob' ? [['int','INT'],['float','FLOAT']] : kind === 'deck' ? [['value','STRING']]
-                : kind === 'fader' ? [['values','FLOAT'],...Array.from({length:10},(_,i)=>[`fader_${i+1}`,'FLOAT'])] : [['bool','BOOLEAN']])
+                : kind === 'fader' ? [['values','FLOAT'],...Array.from({length:40},(_,i)=>[`fader_${i+1}`,'FLOAT'])] : [['bool','BOOLEAN']])
                 .map(([name,type]) => ({name,type,links:null}));
             this.size = [230,260]; this.flags = {}; this.properties = {};
             this.graph = { before:0, after:0, beforeChange(){this.before++;}, afterChange(){this.after++;}, change(){} };

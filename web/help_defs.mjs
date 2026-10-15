@@ -80,7 +80,7 @@ export const RAY_HELP_DEFS = {
             heading: "Notes",
             bullets: [
                 "Drag the face: the dial sweeps 270° from min to max and Shift slows it 20×. Use Arrow/Home/End keys, or type an exact value in the readout. On a slider, click the track to jump the cap there.",
-                "Right-click → Control Style picks from the 31 shared styles (nine knobs and five sliders are hand-drawn, the rest are generated to match); Compact mode hides unlinked setup widgets; Edit label… renames the tape label (or double-click it).",
+                "Right-click → Control Style picks from the 31 shared styles (nine knobs and five sliders are hand-drawn, the rest are generated to match); Compact mode shows the faceplate alone (no title, dots or panel): drag it by its frame, right-click it for the menu; Edit label… renames the tape label (or double-click it).",
                 "Knobs, sliders and switches make hardware sounds, voiced to each style. Right-click → Mute sound turns them off for every analog control; the choice is remembered in this browser.",
                 "Right-click → Mouse wheel control lets the scroll wheel drive the dial or slider while the pointer is over the node: 2% of the dial per notch, a tenth of that with Shift. Ctrl + wheel still zooms. It is off by default and shared by every analog control.",
                 "Right-click → Curve response… bends how the dial maps to the value, like a pot taper: pick a preset (audio, reverse audio, fine low or high end, S-curve, fine centre) or drag points to draw your own. The value you set and the output stay real values; only where the dial points changes. Linear response turns it off and keeps the curve.",
@@ -95,7 +95,8 @@ export const RAY_HELP_DEFS = {
             heading: "Notes",
             bullets: [
                 "Click the pencil next to **Entries** (or right-click → Edit entries…) and type one value per line. Apply with the button or Ctrl+Enter.",
-                "The buttons form a near-square grid: 2 entries make 2×1, 3 or 4 make 2×2, 5 or 6 make 3×2, and so on. Exactly one button is pressed and lit.",
+                "Size the node however you like: the buttons take the grid that makes them biggest, a row in a wide node (1×4 becomes 4 across), 2×2 in a square one, a column in a tall one. Exactly one button is pressed and lit.",
+                "Right-click → Compact mode shows the faceplate alone (no title, dots or panel); drag it by its frame and right-click it to switch back.",
                 "Arrow keys, Home and End move the selection. Blank and repeated lines are ignored, and the selection follows its value if you reorder the list.",
                 "Right-click → Deck Style… picks from the 31 shared styles. Some print the text inside the button, others use a Dymo sticker below it; each has its own sound. Mute sound silences all analog controls.",
                 "With Mouse wheel control on (right-click), scrolling over the node presses the next button (wheel down) or the previous one (wheel up), stopping at the ends.",
@@ -104,16 +105,16 @@ export const RAY_HELP_DEFS = {
     },
 
     RayFaderBank: {
-        summary: "A bank of 2 to 10 analog faders. Each fader is a vertical slider that outputs a float from 0 to 1.",
+        summary: "A bank of analog faders, 2 to 10 in a row and up to 4 rows. Each fader is a vertical slider that outputs a float from 0 to 1.",
         sections: [{
             heading: "Notes",
             bullets: [
-                "Set `faders` (2–10). The node shows one output per fader (`fader_1`…) and hides the rest; `values` is every active fader as a list, in order.",
+                "Set `faders` (Per row, 2–10) and `rows` (1–4): 6 per row and 2 rows make 12. The node shows one output per fader (`fader_1`…, numbered row by row) and hides the rest; `values` is every active fader as a list, in order.",
                 "Drag a fader, click its track to jump the cap there, or focus one and use Arrow keys (0.01, Shift for 0.001), PageUp/PageDown (0.1), Home and End. Shift slows a drag 20×.",
                 "With Mouse wheel control on (right-click), scrolling over a fader moves just that one: 2% per notch, a tenth of that with Shift.",
-                "Lowering `faders` removes the extra outputs and any links on them. A fader fed by a link is locked and says so.",
+                "Lowering `faders` or `rows` removes the extra outputs and any links on them. A fader fed by a link is locked and says so.",
                 "Right-click → Curve response… gives every fader the same response curve (a pot taper such as audio log, or one you draw), so the low end can be finer than the top. The outputs stay real 0–1 values.",
-                "Right-click → Fader Style… picks from the 31 shared styles; Compact mode hides the `faders` widget; Edit label… renames the tape label; Mute sound silences all analog controls.",
+                "Right-click → Fader Style… picks from the 31 shared styles; Compact mode shows the faceplate alone (no title, dots or panel); Edit label… renames the tape label; Mute sound silences all analog controls.",
             ],
         }],
     },
@@ -124,7 +125,7 @@ export const RAY_HELP_DEFS = {
             heading: "Notes",
             bullets: [
                 "Click the face, or focus it and press Space/Enter.",
-                "Right-click → Switch Style picks from the 31 shared styles (rockers, levers, sliders and keys are hand-drawn, the rest are generated to match); Compact mode hides setup widgets; Edit label… renames the tape label.",
+                "Right-click → Switch Style picks from the 31 shared styles (rockers, levers, sliders and keys are hand-drawn, the rest are generated to match); Compact mode shows the faceplate alone (no title, dots or panel); Edit label… renames the tape label.",
                 "Each face clicks, clacks or thunks like its hardware. Right-click → Mute sound silences all analog controls.",
                 "With Mouse wheel control on (right-click), scrolling over the node switches it on (wheel up) or off (wheel down).",
             ],

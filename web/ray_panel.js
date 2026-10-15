@@ -645,11 +645,17 @@ export function installPanel(node, spec = {}) {
         const h = height();
         // node.size is a typed array, not an Array.
         const hasSize = node.size && node.size.length >= 2;
-        const narrow = hasSize && node.size[0] < minWidth;
+        const narrow = hasSize && h > 0 && node.size[0] < minWidth;
         if (Math.abs(h - lastHeight) < 1 && !narrow) return;
         lastHeight = h;
-        const size = node.computeSize?.();
-        if (size && hasSize) node.setSize?.([Math.max(node.size[0], size[0], minWidth), size[1]]);
+        // A panel mounted in a face the user sizes (the analog controls) never shrinks the node: it only makes
+        // sure the node is tall enough. The face takes whatever height the panel gives up.
+        if (spec.mount) {
+            if (hasSize) node.setSize?.([Math.max(node.size[0], h > 0 ? minWidth : 0), Math.max(node.size[1], node.computeSize?.()[1] || 0)]);
+        } else {
+            const size = node.computeSize?.();
+            if (size && hasSize) node.setSize?.([Math.max(node.size[0], size[0], minWidth), size[1]]);
+        }
         node.setDirtyCanvas?.(true, true);
     }
     // Values also change from outside (control after generate, other extensions, a loaded workflow).

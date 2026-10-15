@@ -215,6 +215,35 @@ function injectStyles() {
 @media (prefers-reduced-motion:reduce) {
     .ray-analog-panel [data-toggle] { transition:none; }
 }
+/* Only the working parts take the pointer: the plate around them lets it through to the node, so a node is
+   selected, dragged, resized and right-clicked by its faceplate (the canvas in legacy mode, the node in Nodes 2.0). */
+.dom-widget:has(> .ray-analog-host), .dom-widget:has(> .ray-analog-panel) { pointer-events:none !important; }
+.ray-analog-host, .ray-analog-panel, .ray-analog-readout, .ray-analog-hint { pointer-events:none; }
+.ray-analog-host > .rp-host .rp, .ray-analog-panel .ray-analog-face, .ray-analog-panel .ray-dymo,
+.ray-analog-panel .ray-analog-readout input { pointer-events:auto; }
+.ray-analog-panel.ray-deck-wrap .ray-analog-face, .ray-analog-panel.ray-fader-wrap .ray-analog-face { pointer-events:none; }
+.ray-analog-panel .ray-deck-button, .ray-analog-panel .ray-fader-strip { pointer-events:auto; }
+.lg-node-widgets:has(.ray-analog-host, .ray-analog-panel), .lg-node-widget:has(.ray-analog-host, .ray-analog-panel),
+.lg-node-widget:has(.ray-analog-host, .ray-analog-panel) > * { pointer-events:none !important; }
+/* Compact mode in Nodes 2.0: the node is its faceplate and nothing else. The slot dots stay laid out, unseen, at
+   mid-height, because links are drawn to their measured height; Nodes 2.0 pins a link's x to the node's sides. */
+.lg-node:has(.ray-analog-bare) { min-width:0 !important; }
+.lg-node:has(.ray-analog-bare) [data-testid^="node-header"] { display:none !important; }
+.lg-node:has(.ray-analog-bare) [data-testid="node-inner-wrapper"] {
+    background:transparent !important; border-color:transparent !important; box-shadow:none !important; min-width:0 !important;
+}
+.lg-node:has(.ray-analog-bare) [data-testid^="node-body"] { position:relative; padding:0 !important; background:transparent !important; }
+.lg-node:has(.ray-analog-bare) [data-testid^="node-body"] > :not(.lg-node-widgets):not(:has(.lg-slot)) { display:none !important; }
+.lg-node:has(.ray-analog-bare) [data-testid^="node-body"] > :has(.lg-slot) { position:absolute; inset:0; opacity:0; pointer-events:none; }
+.lg-node:has(.ray-analog-bare) .lg-slot { position:absolute; top:50%; }
+.lg-node:has(.ray-analog-bare) .lg-slot--input { left:30%; }
+.lg-node:has(.ray-analog-bare) .lg-slot--output { right:30%; }
+/* The plate fills the whole node box, the 30 px Nodes 2.0 keeps for the (hidden) header included. */
+.lg-node:has(.ray-analog-bare) .lg-node-widgets { display:flex; flex-direction:column; flex:1 1 auto; position:relative; padding:0 !important; }
+.lg-node:has(.ray-analog-bare) .lg-node-widget { display:flex; flex-direction:column; flex:1 1 auto; }
+.lg-node:has(.ray-analog-bare) .lg-node-widget > :has(.ray-analog-bare) { display:flex; flex-direction:column; flex:1 1 auto; max-height:none !important; }
+.lg-node:has(.ray-analog-bare) .lg-node-widget > :not(:has(.ray-analog-bare)) { display:none; }
+.lg-node .ray-analog-bare { flex:1 1 auto; max-height:none !important; }
 `;
     document.head.appendChild(style);
 }
@@ -348,12 +377,48 @@ export function repairAnalogWorkflow(data, name, title, outputs) {
     }
 }
 
+// Compact mode draws the faceplate alone: no title, slots, badges, setup panel or node background, in the
+// legacy canvas through these per-node overrides and in Nodes 2.0 through the `.ray-analog-bare` CSS above.
+// Links still meet the node: in the legacy canvas at points hidden under the face (inputs left of centre, outputs
+// right of it), in Nodes 2.0 at the sides of the plate, halfway down.
+const BARE_OVERRIDES = ["renderingBgColor", "widgets_start_y", "drawSlots", "drawBadges", "computeSize", "arrange"];
+const vueNodes = () => !!window.LiteGraph?.vueNodesMode;
+
+function clearSlotPositions(node) {
+    for (const slot of [...(node.inputs || []), ...(node.outputs || [])]) delete slot.pos;
+}
+
+function setBare(node, ui, element, bare, faceMin, minWidth) {
+    element.classList.toggle("ray-analog-bare", bare);
+    if (!bare) {
+        for (const key of BARE_OVERRIDES) delete node[key];
+        clearSlotPositions(node);
+        return;
+    }
+    const proto = Object.getPrototypeOf(node);
+    Object.defineProperty(node, "renderingBgColor", { configurable: true, get: () => "transparent" });
+    node.widgets_start_y = 0;
+    node.drawSlots = () => {};
+    node.drawBadges = () => {};
+    node.computeSize = () => [minWidth(), faceMin()];
+    node.arrange = function () {
+        const result = proto.arrange?.apply(this, arguments);
+        // Nodes 2.0 measures its own (hidden) slot dots; a fixed position would only get in its way.
+        if (vueNodes()) { clearSlotPositions(this); return result; }
+        const [w, h] = this.size, y = Math.round(h / 2);
+        for (const input of this.inputs || []) input.pos = [Math.round(w * .3), y];
+        for (const output of this.outputs || []) output.pos = [Math.round(w * .7), y];
+        return result;
+    };
+}
+
 // Options beyond the common ones: `extensionName` and `menuName` label the registration and the style
 // menu entry; `heights(ui)` returns {min, max?} when the face is not a fixed 232 px; `menuItems(node)`
-// adds menu entries after the common ones; `ui.compactWidgets()` lists extra widgets compact mode hides.
+// adds menu entries after the common ones; `ui.compactWidgets()` lists extra widgets compact mode hides;
+// `compactWidth` is the node width compact mode snaps to (null keeps the width the user gave it).
 export function registerAnalog(app, { kind, name, title, styles, defaultStyle, valueName, configNames = [], outputs, build, migrate,
     extensionName = `Ray.${kind === "knob" ? "Knob" : "Switch"}`, menuName = kind === "knob" ? "Control" : "Switch",
-    heights = () => ({ min: 232, max: 232 }), menuItems = () => [], curve = false, panel = null }) {
+    heights = () => ({ min: 232, max: 232 }), menuItems = () => [], curve = false, panel = null, compactWidth = null }) {
     wheelApp = app;
     app.registerExtension({
         name: extensionName,
@@ -398,14 +463,17 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                     onDraw: () => ui.render(),
                 });
                 const titleDescriptor = Object.getOwnPropertyDescriptor(this, "title_mode");
+                const faceMin = () => heights(ui).min;   // the legacy canvas adds the DOM widget's margins inside it
                 let compactApplied;
-                ui.applyCompact = () => {
+                // `resize` is off when a workflow loads: the saved size already fits the saved mode.
+                ui.applyCompact = ({ resize = true } = {}) => {
                     const compact = !!this.properties.compact;
                     if (compactApplied === compact) return;
                     compactApplied = compact;
+                    const faceNow = ui.element.offsetHeight || 0;
                     for (const key of configNames) {
                         const config = findWidget(this, key);
-                        if (config && !isLinked(this, key)) setWidgetHidden(this, config, compact);
+                        if (config) setWidgetHidden(this, config, compact);
                     }
                     for (const extra of ui.compactWidgets?.() || []) setWidgetHidden(this, extra, compact);
                     // Keep slots and the actual title intact for serialization and Nodes 2.0.
@@ -419,9 +487,14 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                         delete this.title_mode;
                     }
                     if (this.flags) delete this.flags.no_title;
+                    setBare(this, ui, element, compact, faceMin, () => ui.compactMinWidth?.() ?? compactWidth ?? 120);
                     this._rayPanel?.refresh();
-                    const size = this.computeSize?.();
-                    if (size) this.setSize?.([Math.max(this.size?.[0] || 0, size[0]), size[1]]);
+                    if (resize) {
+                        const size = this.computeSize?.();
+                        const extra = Math.max(0, faceNow + 8 - faceMin());   // keep a face the user made taller (8: the margins)
+                        if (size && compact) this.setSize?.([compactWidth ?? this.size?.[0] ?? size[0], size[1] + extra]);
+                        else if (size) this.setSize?.([Math.max(this.size?.[0] || 0, size[0]), size[1] + extra]);
+                    }
                     this.setDirtyCanvas?.(true, true);
                 };
                 for (const key of [valueName, ...configNames]) {
@@ -448,12 +521,26 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                 ui.render();
                 return result;
             };
+            // The legacy canvas hands a click on a widget's area to that widget instead of dragging the node. The
+            // face widget handles its own pointer, so a click that reaches the canvas (the plate) is a node click.
+            const widgetOnPos = proto.getWidgetOnPos;
+            proto.getWidgetOnPos = function () {
+                const found = widgetOnPos?.apply(this, arguments);
+                return found?.name === `${kind}_ui` ? undefined : found;
+            };
+            const configure = proto.configure;
+            proto.configure = function () {
+                this._rayConfiguring = true;
+                try { return configure?.apply(this, arguments); }
+                finally { this._rayConfiguring = false; }
+            };
             const configured = proto.onConfigure;
             proto.onConfigure = function () {
                 const result = configured?.apply(this, arguments);
                 if (!this.title && this.properties?.compact) this.title = title;
+                this._rayConfigured = true;
                 this._rayAnalog?.dymo.setText(this.properties?.ray_label || "");
-                this._rayAnalog?.applyCompact();
+                this._rayAnalog?.applyCompact({ resize: false });
                 this._rayAnalog?.render();
                 return result;
             };
@@ -468,7 +555,8 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                 const result = propertyChanged?.apply(this, arguments);
                 if (result === false) return result;
                 if (key === "style" && !Object.hasOwn(styles, value)) this.properties.style = defaultStyle;
-                if (key === "compact") this._rayAnalog?.applyCompact();
+                // A loading workflow sets its properties before its size: that size already fits the mode.
+                if (key === "compact") this._rayAnalog?.applyCompact({ resize: !this._rayConfiguring });
                 if (key === "ray_label") this._rayAnalog?.dymo.setText(value);
                 this._rayAnalog?.render();
                 return result;

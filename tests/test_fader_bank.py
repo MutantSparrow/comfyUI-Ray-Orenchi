@@ -8,37 +8,52 @@ spec.loader.exec_module(module)
 
 
 def levels(**changes):
-    values = {f"fader_{i}": 0.5 for i in range(1, 11)}
+    values = {f"fader_{i}": 0.5 for i in range(1, 41)}
     values.update(changes)
     return values
 
 
 class FaderBankTests(unittest.TestCase):
-    def test_declares_a_count_and_ten_float_faders(self):
+    def test_declares_a_count_rows_and_forty_float_faders(self):
         required = module.RayFaderBank.INPUT_TYPES()["required"]
         self.assertEqual(required["faders"][1]["min"], 2)
         self.assertEqual(required["faders"][1]["max"], 10)
-        for i in range(1, 11):
+        self.assertEqual((required["rows"][1]["min"], required["rows"][1]["max"], required["rows"][1]["default"]), (1, 4, 1))
+        for i in range(1, 41):
             kind, options = required[f"fader_{i}"]
             self.assertEqual(kind, "FLOAT")
             self.assertEqual((options["min"], options["max"]), (0.0, 1.0))
 
+    def test_widget_order_keeps_old_workflows_in_place(self):
+        names = list(module.RayFaderBank.INPUT_TYPES()["required"])
+        self.assertEqual(names[:11], ["faders"] + [f"fader_{i}" for i in range(1, 11)])
+        self.assertEqual(names[11], "rows")
+        self.assertEqual(names[12:], [f"fader_{i}" for i in range(11, 41)])
+
     def test_outputs_are_the_list_then_one_float_per_fader(self):
         node = module.RayFaderBank
-        self.assertEqual(node.RETURN_TYPES, ("FLOAT",) * 11)
+        self.assertEqual(node.RETURN_TYPES, ("FLOAT",) * 41)
         self.assertEqual(node.RETURN_NAMES[:3], ("values", "fader_1", "fader_2"))
-        self.assertEqual(node.OUTPUT_IS_LIST, (True,) + (False,) * 10)
-        self.assertEqual(len(node.OUTPUT_TOOLTIPS), 11)
+        self.assertEqual(node.RETURN_NAMES[-1], "fader_40")
+        self.assertEqual(node.OUTPUT_IS_LIST, (True,) + (False,) * 40)
+        self.assertEqual(len(node.OUTPUT_TOOLTIPS), 41)
 
     def test_values_lists_only_the_active_faders_in_order(self):
         out = module.RayFaderBank().process(3, **levels(fader_1=0.1, fader_2=0.2, fader_3=0.3, fader_4=0.9))
         self.assertEqual(out[0], [0.1, 0.2, 0.3])
         self.assertEqual(out[1:4], (0.1, 0.2, 0.3))
-        self.assertEqual(len(out), 11)
+        self.assertEqual(len(out), 41)
+
+    def test_rows_multiply_the_faders(self):
+        out = module.RayFaderBank().process(6, 2, **{f"fader_{i}": i / 100 for i in range(1, 41)})
+        self.assertEqual(out[0], [i / 100 for i in range(1, 13)])
+        self.assertEqual(len(module.RayFaderBank().process(10, 9, **levels())[0]), 40)
+        self.assertEqual(len(module.RayFaderBank().process(4, 0, **levels())[0]), 4)
+        self.assertEqual(len(module.RayFaderBank().process(4, "junk", **levels())[0]), 4)
 
     def test_every_fader_output_carries_its_own_position(self):
-        out = module.RayFaderBank().process(10, **{f"fader_{i}": i / 10 for i in range(1, 11)})
-        self.assertEqual(list(out[1:]), [i / 10 for i in range(1, 11)])
+        out = module.RayFaderBank().process(10, 4, **{f"fader_{i}": i / 40 for i in range(1, 41)})
+        self.assertEqual(list(out[1:]), [i / 40 for i in range(1, 41)])
         self.assertEqual(out[0], list(out[1:]))
 
     def test_the_count_is_kept_between_two_and_ten(self):
