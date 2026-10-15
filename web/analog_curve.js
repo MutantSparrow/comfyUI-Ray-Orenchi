@@ -381,7 +381,9 @@ export function openCurveEditor(node, { title = "Response curve", range = () => 
     const stop = new AbortController();
     function close() { endDrag(); stop.abort(); panel.remove(); }
     done.addEventListener("click", close);
-    panel.addEventListener("keydown", event => { event.stopPropagation(); if (event.key === "Escape") { event.preventDefault(); close(); } });
+    panel.addEventListener("keydown", event => event.stopPropagation());
+    // Escape closes it wherever the keyboard focus is (after dragging the title bar it is no longer inside).
+    window.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }, { capture: true, signal: stop.signal });
     window.addEventListener("pointerdown", event => { if (!panel.contains(event.target)) close(); }, { capture: true, signal: stop.signal });
     const margin = 8;
     const place = (x, y) => {

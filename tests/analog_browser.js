@@ -582,8 +582,8 @@ try {
         bar_('pointermove', 5, 5);
         const parked = editor.getBoundingClientRect();
         check(Math.abs(parked.left - (box2.left + 40)) < 1.5, 'and a move after the button is released does nothing');
-        editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-        check(!document.querySelector('.ray-curve-editor') && !!target.properties.curve, 'Escape closes the editor');
+        document.body.focus(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        check(!document.querySelector('.ray-curve-editor') && !!target.properties.curve, 'Escape closes the editor even when the focus is outside it');
         menu.find(o => o.content === 'Curve response…').callback(); await new Promise(r => setTimeout(r, 30));
         check(!!document.querySelector('.ray-curve-editor') && Math.abs(document.querySelector('.ray-curve-editor').getBoundingClientRect().left - parked.left) < 1.5, 'It opens again, where it was left');
         document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 2, clientY: 2 }));
