@@ -82,9 +82,15 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 
 ---
 
-## 📂 Browse buttons (folder and file paths)
+## The node panels
 
-Every node that takes a folder or file path has a **📂 Browse** button right under the path, and Save Image's folder button next to **Directory** works the same way: **Save Image** (save folder), **Folder Captioner** (`folder`), **TXT Folder** (`directory`), **Film Stock** (`assets_folder`), **Metadata Inspector** (`path`, an image file) and **Prompt Scraper** (`local__folder`, shown only in Local Folder mode). The button opens your operating system's own dialog, then writes the chosen path into the widget exactly as if you had typed it, so linked inputs, undo and the widget's own refresh behave the same. Typing or pasting a path still works, and a path driven by a link cannot be browsed.
+Every Ray node shows its settings in one black panel, laid out like Save Image: a small grey label on the left, the control on the right, related settings grouped under short headings, and only the settings that apply to the current mode. Numbers have − and + buttons (or drag sideways on the number; Shift is finer); bounded values have a slider with a value box; short choices are segmented buttons; on/off settings are switches; the seed has an icon that cycles what happens after each run (random, fixed, +1, −1).
+
+**Links.** Drag a link from another node onto any row of the panel to connect it to that setting; the row then shows `From <node> · <output>` with a button to unlink it. Saved workflows, queued prompts and links work exactly as with ComfyUI's own widgets.
+
+### Browse (folder and file paths)
+
+Every folder or file path has a folder or file icon at the right of its field: **Save Image** (Directory), **Folder Captioner** and **Prompt Scraper** (Folder of images, the scraper's only in Local Folder mode), **TXT Folder** (its folder), **Film Stock** (LUT / XMP folder) and **Metadata Inspector** (Image file, filtered to images). The icon opens your operating system's own dialog, then writes the chosen path into the field exactly as if you had typed it. Typing or pasting a path still works, and a linked path cannot be browsed.
 
 A browser never tells a page where a picked file lives on disk, so the ComfyUI server shows the dialog and sends the path back: Python's built-in Tk dialog, which is the standard system dialog on Windows and macOS (on Linux, install `python3-tk`). That means **ComfyUI must be running on the computer you are sitting at** (ComfyUI Desktop and local installs do); opened from another machine, Browse says so and you type the path. The dialog starts in the folder currently in the widget, or the nearest parent that exists.
 
@@ -212,7 +218,7 @@ The curve is saved with the workflow (the `response` and `curve` properties) and
 
 | Pin | Type | Notes |
 |-----|------|-------|
-| **Control** `entries` | multiline string | One value per line. Blank lines and repeated lines are ignored; up to 64 entries. Edited through the **✎ Edit entries…** popout, so the raw text box stays hidden. |
+| **Control** `entries` | multiline string | One value per line. Blank lines and repeated lines are ignored; up to 64 entries. Edited through the popout (the pencil next to **Entries**), so the raw text box stays hidden. |
 | **Control** `selected` | string | The pressed button's text, driven by the deck. If it isn't in the list the first entry is used. |
 | **Output** `value` | STRING | The pressed button's text, exactly as typed. |
 
@@ -220,7 +226,7 @@ The curve is saved with the workflow (the `response` and `curve` properties) and
 
 **Pressing.** The bank is interlocked like a radio-preset panel: exactly one button is pressed down and lit, and every other button stays raised and unlit. Pressing a button releases the previous one; pressing the lit one changes nothing. Arrow keys, Home and End move the selection, and Space or Enter presses the focused button. The selection follows the value, so reordering the entries keeps the same button pressed. If the pressed value is deleted, the first entry takes over (the same rule the node applies when it runs). A deck with no entries raises an error when it runs.
 
-**Edit entries…** opens a popout with a text box (one value per line) and a live count of buttons and grid size. **Apply** (or Ctrl+Enter) saves the normalized list; **Cancel** (or Escape) discards the changes.
+The pencil next to **Entries** (or right-click → **Edit entries…**) opens a popout with a text box (one value per line) and a live count of buttons and grid size. **Apply** (or Ctrl+Enter) saves the normalized list; **Cancel** (or Escape) discards the changes.
 
 **Styles.** All 31 shared styles. Five are hand-drawn for the deck, each with its own sound, and either print the text inside the button or put it on a Dymo sticker below; every other style gets a matching generated button that prints its text in a lit window or on a sticker:
 
@@ -290,7 +296,7 @@ Pressing a button plays its latch sound, followed by a softer release as the pre
 | **Output** `image` | IMAGE (list) | Result image. |
 | **Output** `image_path` | STRING (list) | Absolute path for Local mode; empty for web modes. |
 
-**Refresh button.** In `PromptDexter` mode the node shows **🔄 refresh sitemap**, which re-reads PromptDexter's sitemap and updates the category list (a status line reports the prompt and category counts). In `CivitAI` mode it shows **🔄 clear cache**, which makes the next run page the gallery again; the status line also notes when no `civitai.secret` file is present and only public access is available. Local Folder mode hides both.
+**Refresh.** In `PromptDexter` mode the refresh icon next to **Category** re-reads PromptDexter's sitemap and updates the category list; in `CivitAI` mode the icon next to **Base model** clears the cache so the next run fetches again. A status line under them reports the result, and in CivitAI mode notes when no `civitai.secret` file is present and only public access is available. Local Folder mode shows neither.
 
 Switching CivitAI to **Red (NSFW)** shows a small warning the first time; dismiss it and it does not come back in this browser.
 

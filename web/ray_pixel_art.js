@@ -6,7 +6,9 @@ function refresh(node) {
     const value = (name) => widget(name)?.value;
     const show = (name, visible) => {
         const w = widget(name);
-        if (w && Boolean(w.hidden) !== !visible) setWidgetHidden(node, w, !visible);
+        // A widget in a Ray panel is always hidden natively; its row follows rayLogicHidden.
+        const hidden = w?.rayPanel ? Boolean(w.rayLogicHidden) : Boolean(w?.hidden);
+        if (w && hidden !== !visible) setWidgetHidden(node, w, !visible);
     };
     const paletteConnected = node.inputs?.some((i) => i.name === "palette_image" && i.link != null);
     const grid = Boolean(value("color_grid"));

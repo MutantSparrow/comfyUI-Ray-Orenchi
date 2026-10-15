@@ -52,7 +52,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
-                "**📂 Browse for a folder…** under `assets_folder` opens your system's folder dialog; the asset list refreshes from the folder you pick.",
+                "The folder icon next to **LUT / XMP folder** opens your system's folder dialog; the file list refreshes from the folder you pick.",
                 "Point `assets_folder` at `.cube` / `.3dl` LUTs and `.xmp` develop files; `asset_file` refreshes live with what it finds.",
             ],
         }],
@@ -94,7 +94,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
-                "Click ✎ Edit entries… (or right-click → Edit entries…) and type one value per line. Apply with the button or Ctrl+Enter.",
+                "Click the pencil next to **Entries** (or right-click → Edit entries…) and type one value per line. Apply with the button or Ctrl+Enter.",
                 "The buttons form a near-square grid: 2 entries make 2×1, 3 or 4 make 2×2, 5 or 6 make 3×2, and so on. Exactly one button is pressed and lit.",
                 "Arrow keys, Home and End move the selection. Blank and repeated lines are ignored, and the selection follows its value if you reorder the list.",
                 "Right-click → Deck Style… picks from the 31 shared styles. Some print the text inside the button, others use a Dymo sticker below it; each has its own sound. Mute sound silences all analog controls.",
@@ -137,7 +137,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
-                "**📂 Browse for a folder…** under `folder` opens your system's folder dialog and fills in the path. You can still type or paste one.",
+                "The folder icon next to **Folder of images** opens your system's folder dialog and fills in the path. You can still type or paste one.",
                 "Connect a full generative VLM `CLIP` (such as Qwen3-VL from `CLIPLoader`, type `qwen_image`) to `clip`; text-only encoders cannot caption.",
                 "Files are sorted by relative path. Use `start_index` and `limit` to process large folders in chunks; output images are held in RAM.",
                 "Supports JPEG, PNG, WebP, BMP, TIFF and GIF (first frame). Requires a GPU.",
@@ -179,7 +179,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
-                "**📂 Browse for a folder…** under `directory` opens your system's folder dialog and fills in the path. You can still type or paste one.",
+                "The folder icon next to the folder field opens your system's folder dialog and fills in the path. You can still type or paste one.",
                 "Connect `prompt` to the text encoder and `filename_prefix` to Save Image; lists are paired automatically. Keep image batch size at 1.",
                 "`start_index` is zero-based; `limit` -1 reads all remaining files. Empty files count toward the range but are skipped.",
             ],
@@ -191,13 +191,13 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
-                "In Local Folder mode, **📂 Browse for a folder…** under `local__folder` opens your system's folder dialog and fills in the path.",
+                "In Local Folder mode, the folder icon next to **Folder of images** opens your system's folder dialog and fills in the path.",
                 "Widgets are prefixed by source: `local__`, `dexter__` and `civitai__`. Hidden widgets keep their values.",
                 "Every mode produces the same four outputs; `image_path` is empty for the web sources.",
                 "Local Folder mode reads A1111/Forge `parameters`, ComfyUI `prompt` / `workflow` graphs, other prompt-like PNG keys, EXIF comments and `<image>.txt` sidecars. When an image holds several prompts, each is emitted as a separate list entry.",
                 "A seed of `-1` picks randomly and avoids recent repeats; any value ≥ 0 reproduces the same image or page every run.",
                 "CivitAI can use an optional `civitai.secret` token file in the node pack folder for more content; without it only public images are reachable.",
-                "PromptDexter mode has a **refresh sitemap** button and CivitAI mode a **clear cache** button; the status line under them also notes when no `civitai.secret` is present.",
+                "In PromptDexter mode the refresh icon next to **Category** re-reads the sitemap; in CivitAI mode the one next to **Base model** clears the cache. A status line reports the result and notes when no `civitai.secret` is present.",
                 "Local Folder mode returns positive prompts only; text encoders that feed only a sampler's negative input are skipped.",
             ],
         }],
@@ -208,7 +208,7 @@ export const RAY_HELP_DEFS = {
         sections: [{
             heading: "Notes",
             bullets: [
-                "**📂 Browse for a file…** under `path` opens your system's file dialog, filtered to images. You can still paste a path.",
+                "The file icon next to **Image file** opens your system's file dialog, filtered to images. You can still paste a path.",
                 "Inspect parses A1111 `parameters`, ComfyUI graphs, EXIF comments and sidecar text.",
                 "Embed writes the connected image with `metadata_json` to `path`, then re-reads the file to verify it.",
                 "In Inspect, connect a Load Image node to `image` and it reads that file's metadata (a connected image wins over `path`). Generated images have no file, so use `path` for those.",

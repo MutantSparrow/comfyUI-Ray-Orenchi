@@ -3,6 +3,7 @@ import { getBrushedAluminumURL } from "./knob_styles.js";
 import { isMuted, setMuted } from "./analog_audio.js";
 import { FAMILIES, familyOf } from "./analog_themes.js";
 import { openCurveEditor } from "./analog_curve.js";
+import { installPanel } from "./ray_panel.js";
 
 let nextSvgId = 0;
 
@@ -132,6 +133,8 @@ function injectStyles() {
     const style = document.createElement("style");
     style.id = "ray-analog-panel";
     style.textContent = `
+.ray-analog-host { display:flex; flex-direction:column; gap:6px; width:100%; height:100%; min-height:0; }
+.ray-analog-host > .ray-analog-panel { flex:1 1 auto; height:auto; min-height:0; }
 .ray-analog-panel {
     width:100%; height:100%; min-width:0; box-sizing:border-box;
     display:flex; flex-direction:column; align-items:center; gap:4px;
@@ -350,7 +353,7 @@ export function repairAnalogWorkflow(data, name, title, outputs) {
 // adds menu entries after the common ones; `ui.compactWidgets()` lists extra widgets compact mode hides.
 export function registerAnalog(app, { kind, name, title, styles, defaultStyle, valueName, configNames = [], outputs, build, migrate,
     extensionName = `Ray.${kind === "knob" ? "Knob" : "Switch"}`, menuName = kind === "knob" ? "Control" : "Switch",
-    heights = () => ({ min: 232, max: 232 }), menuItems = () => [], curve = false }) {
+    heights = () => ({ min: 232, max: 232 }), menuItems = () => [], curve = false, panel = null }) {
     wheelApp = app;
     app.registerExtension({
         name: extensionName,
@@ -379,11 +382,19 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                 const ui = build(this, widget);
                 this._rayAnalog = ui;
                 setWidgetHidden(this, widget, true);
-                this.addDOMWidget(`${kind}_ui`, `RAY_${kind.toUpperCase()}`, ui.element, {
-                    serialize: false, hideOnZoom: false,
-                    getMinHeight: () => heights(ui).min,
-                    getMaxHeight: () => heights(ui).max,
-                    getHeight: () => heights(ui).min,
+                // With setup controls, the Ray panel and the face share one DOM widget, panel on top: Nodes 2.0
+                // shares a node's spare height between its DOM widgets, which would squeeze the face.
+                let element = ui.element, panelHeight = () => 0;
+                if (panel) {
+                    element = document.createElement("div");
+                    element.className = "ray-analog-host";
+                    element.append(ui.element);
+                }
+                this.addDOMWidget(`${kind}_ui`, `RAY_${kind.toUpperCase()}`, element, {
+                    serialize: false, hideOnZoom: false, margin: 4,
+                    getMinHeight: () => heights(ui).min + panelHeight(),
+                    getMaxHeight: () => { const max = heights(ui).max; return max === undefined ? undefined : max + panelHeight(); },
+                    getHeight: () => heights(ui).min + panelHeight(),
                     onDraw: () => ui.render(),
                 });
                 const titleDescriptor = Object.getOwnPropertyDescriptor(this, "title_mode");
@@ -408,6 +419,7 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                         delete this.title_mode;
                     }
                     if (this.flags) delete this.flags.no_title;
+                    this._rayPanel?.refresh();
                     const size = this.computeSize?.();
                     if (size) this.setSize?.([Math.max(this.size?.[0] || 0, size[0]), size[1]]);
                     this.setDirtyCanvas?.(true, true);
@@ -421,6 +433,16 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                         ui.render();
                         return result;
                     };
+                }
+                // The setup controls sit in a Ray panel above the face; compact mode hides it.
+                if (panel) {
+                    const spec = panel(this, ui);
+                    queueMicrotask(() => {
+                        const installed = installPanel(this, { ...spec, mount: element });
+                        panelHeight = () => { const h = installed.height(); return h ? h + 6 : 0; };
+                        ui.applyCompact();
+                        installed.refresh();
+                    });
                 }
                 ui.applyCompact();
                 ui.render();

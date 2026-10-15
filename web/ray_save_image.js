@@ -3,6 +3,7 @@ import { api } from "../../scripts/api.js";
 import { findWidget, setWidgetHidden } from "./_common.js";
 import { browsePath, notify } from "./browse_common.js";
 import { installNameBuilder, openNameBuilder, resolveOnQueue } from "./save_name.js";
+import { ensurePanelStyles, linkChip, registerLinkTargets } from "./ray_panel.js";
 
 const modes = ["none", "1", "2", "both"];
 const DEFAULT_PREFIX_HINT = "Ray_{date}_{counter}";
@@ -128,7 +129,9 @@ function build(node) {
     tokens.className = "ray-save-icon"; tokens.title = "Build the filename from tokens: date, counter, hash, widget values…";
     tokens.setAttribute("aria-label", "Build filename");
     const prefixRow = element("div", "ray-save-row ray-save-fixed");
-    prefixRow.append(prefix, tokens);
+    // A linked field shows where its value comes from, with a button to unlink it.
+    const prefixLink = linkChip(node, "filename_prefix", () => ui.sync());
+    prefixRow.append(prefix, tokens, prefixLink.element);
     // Save choice, then the directory: folder dialog, path, and the last three save folders in a drop-down.
     const stops = element("div", "ray-save-stops");
     stops.setAttribute("role", "group"); stops.setAttribute("aria-label", "Save Image");
@@ -152,7 +155,8 @@ function build(node) {
     const path = element("div", "ray-save-path");
     path.append(directory, recent, element("span", "ray-save-chevron", "▾"));
     const group = element("div", "ray-save-group");
-    group.append(dirLabel, browse, path);
+    const directoryLink = linkChip(node, "directory", () => ui.sync());
+    group.append(dirLabel, browse, path, directoryLink.element);
     const row = element("div", "ray-save-row");
     row.append(stops, group);
     head.append(prefixLabel, prefixRow, row);
@@ -245,15 +249,14 @@ function build(node) {
         sync() {
             const mode = findWidget(node, "save_image")?.value || "1";
             [...stops.children].forEach((b, i) => { b.disabled = linked(node, "save_image"); b.setAttribute("aria-pressed", String(mode === modes[i])); });
+            const prefixLinked = prefixLink.update(), directoryLinked = directoryLink.update();
+            prefix.style.display = tokens.style.display = prefixLinked ? "none" : "";
+            browse.style.display = path.style.display = directoryLinked ? "none" : "";
             for (const [input, name, hint] of [[prefix, "filename_prefix", DEFAULT_PREFIX_HINT], [directory, "directory", "/output"]]) {
-                const isLinked = linked(node, name);
-                input.disabled = isLinked;
-                input.placeholder = isLinked ? "Set by a link" : hint;
-                if (document.activeElement !== input) input.value = isLinked ? "" : String(findWidget(node, name)?.value ?? "");
+                input.placeholder = hint;
+                if (document.activeElement !== input) input.value = String(findWidget(node, name)?.value ?? "");
             }
-            tokens.disabled = linked(node, "filename_prefix");
-            browse.disabled = linked(node, "directory");
-            recent.disabled = browse.disabled || !history().length;
+            recent.disabled = !history().length;
         },
         executed(message) {
             arrays = [message.ray_images_1 || [], message.ray_images_2 || []]; index = 0;
@@ -262,8 +265,11 @@ function build(node) {
             if (message.ray_directory?.[0]) { remember(message.ray_directory[0]); recentOptions(); }
             show();
         },
-        destroy() { navigation.abort(); first.removeAttribute("src"); second.removeAttribute("src"); },
+        destroy() { navigation.abort(); unregister(); first.removeAttribute("src"); second.removeAttribute("src"); },
     };
+    // Drag a link onto the prefix or the directory to connect it.
+    ensurePanelStyles();
+    const unregister = registerLinkTargets(node, [{ name: "filename_prefix", element: prefixRow }, { name: "directory", element: group }], () => ui.sync());
     show(); ui.sync(); return ui;
 }
 
