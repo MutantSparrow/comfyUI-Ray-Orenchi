@@ -210,13 +210,30 @@ export function gridShape(count) {
     return { cols, rows: Math.ceil(n / cols) };
 }
 
+// The grid that gives n square buttons the most room in a width × height box, like a wrapping flex box: a
+// long landscape face lines them up (1 × 4), a square one stacks them (2 × 2). `gap` separates the cells
+// and `extra` is the height each cell spends under its button (a tape sticker). Ties keep fewer columns.
+export function fitGrid(count, width, height, gap = 6, extra = 0) {
+    const n = Math.max(1, count);
+    if (!(width > 0 && height > 0)) return { ...gridShape(n), size: 0 };
+    let best = null;
+    for (let cols = 1; cols <= n; cols++) {
+        const rows = Math.ceil(n / cols);
+        if (cols > 1 && Math.ceil(n / (cols - 1)) === rows) continue;   // same rows with an empty column
+        const size = Math.min((width - (cols - 1) * gap) / cols, (height - (rows - 1) * gap) / rows - extra);
+        if (!best || size > best.size + .01) best = { cols, rows, size };
+    }
+    return best;
+}
+
 export function getDeckStyleCSS() {
     return `
 .ray-deck-wrap .ray-analog-face {
     flex:1 1 0; width:100%; height:auto; max-width:none; min-height:0; padding:2px; border-radius:0;
     display:grid; gap:6px; cursor:default; touch-action:auto;
     grid-template-columns:repeat(var(--deck-cols,1),minmax(0,1fr));
-    grid-auto-rows:minmax(0,1fr);
+    grid-template-rows:repeat(var(--deck-rows,1),minmax(0,1fr));
+    overflow:hidden;
 }
 .ray-deck-cell { display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; min-height:0; }
 .ray-deck-button {

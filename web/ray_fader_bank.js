@@ -5,7 +5,9 @@ import { FADER_STYLES, DEFAULT_FADER_STYLE, getFaderStyleCSS } from "./fader_sty
 import { createKnobFeel } from "./analog_audio.js";
 import { responseOf } from "./analog_curve.js";
 
-const MIN_FADERS = 2, MAX_FADERS = 10, DEFAULT_FADERS = 4;
+const MIN_FADERS = 2, MAX_FADERS = 10, DEFAULT_FADERS = 4;   // in a row
+const MAX_ROWS = 4, TOTAL_FADERS = MAX_FADERS * MAX_ROWS;
+const ROW = 120;           // px of face height each row past the first adds
 const FINE = .05;          // Shift slows a drag to this fraction
 const CAP = 18;            // px: cap height; the cap travels the track minus this
 const STRIP = 38;          // px of node width per fader
@@ -13,6 +15,11 @@ const STRIP = 38;          // px of node width per fader
 export function clampCount(value) {
     const count = Math.trunc(Number(value));
     return Number.isFinite(count) ? Math.max(MIN_FADERS, Math.min(MAX_FADERS, count)) : DEFAULT_FADERS;
+}
+
+export function clampRows(value) {
+    const rows = Math.trunc(Number(value));
+    return Number.isFinite(rows) ? Math.max(1, Math.min(MAX_ROWS, rows)) : 1;
 }
 
 export function clampLevel(value) {
@@ -41,9 +48,9 @@ function buildFaders(node, firstWidget) {
     host.tabIndex = -1;
     host.setAttribute("role", "group");
     host.setAttribute("aria-label", "Fader bank");
-    const countWidget = findWidget(node, "faders");
+    const countWidget = findWidget(node, "faders"), rowsWidget = findWidget(node, "rows");
     const widgets = [firstWidget];
-    for (let i = 2; i <= MAX_FADERS; i++) {
+    for (let i = 2; i <= TOTAL_FADERS; i++) {
         const w = findWidget(node, `fader_${i}`);
         if (w) { widgets.push(w); setWidgetHidden(node, w, true); }
     }
@@ -51,8 +58,11 @@ function buildFaders(node, firstWidget) {
     readout.append(readoutText);
     const feel = createKnobFeel(() => node.properties.style, () => true);
 
-    let strips = [], built = 0, last = 0, drag = null;
-    const count = () => Math.min(clampCount(countWidget?.value), widgets.length);
+    let strips = [], built = "", last = 0, drag = null;
+    // Faders in a row, rows, and every fader: rows are filled in order, so fader 7 of a 6-wide bank opens row 2.
+    const perRow = () => clampCount(countWidget?.value);
+    const rows = () => clampRows(rowsWidget?.value);
+    const count = () => Math.min(perRow() * rows(), widgets.length);
     const level = i => clampLevel(widgets[i]?.value);
     // Where a fader's cap sits on its track, 0..1, through the bank's response curve; and a fader moved along
     // its track by `delta` of the travel, as a value.
@@ -90,10 +100,12 @@ function buildFaders(node, firstWidget) {
     function cancelDrag() { endDrag(); }
     ui.cancelDrag = cancelDrag;
 
-    function rebuild(n) {
+    function rebuild(n, width) {
         host.replaceChildren();
         strips = [];
+        let line = null;
         for (let i = 0; i < n; i++) {
+            if (i % width === 0) { line = element("div", "ray-fader-row"); host.append(line); }
             const el = element("div", "ray-fader-strip");
             el.tabIndex = 0;
             el.setAttribute("role", "slider");
@@ -144,20 +156,23 @@ function buildFaders(node, firstWidget) {
                 editNode(node, () => setLevel(i, value, event));
             });
             el.addEventListener("focus", () => { last = i; ui.render(); });
-            host.append(el);
+            line.append(el);
             strips.push(strip);
         }
-        built = n;
     }
 
     ui.render = () => {
-        const n = count();
-        if (n !== built) {
+        const n = count(), width = perRow(), shape = `${n}/${width}`;
+        if (shape !== built) {
+            const first = !built;
+            built = shape;
             cancelDrag();
-            rebuild(n);
+            rebuild(n, width);
             syncOutputs(node, n);
-            const need = 28 + n * STRIP;
-            if ((node.size?.[0] || 0) < need) node.setSize?.([need, node.size?.[1] || 250]);
+            // Grow the node to fit a wider row or an added row; never shrink what the user sized.
+            const size = node.computeSize?.(), need = 28 + width * STRIP;
+            const w = Math.max(node.size?.[0] || 0, need), h = Math.max(node.size?.[1] || 0, first ? 0 : size?.[1] || 0);
+            if (w !== node.size?.[0] || h !== node.size?.[1]) node.setSize?.([w, h || 250]);
         } else if (node.outputs && node.outputs.length !== n + 1) {
             syncOutputs(node, n);
         }
@@ -190,6 +205,9 @@ function buildFaders(node, firstWidget) {
         return true;
     };
 
+    ui.minHeight = () => 250 + (rows() - 1) * ROW;
+    ui.compactMinWidth = () => 28 + perRow() * 24;
+
     ui.curveInfo = () => ({
         title: `Response curve · ${node.properties.ray_label || "Fader Bank"}`,
         range: () => [0, 1], format: value => value.toFixed(3), changed: () => ui.render(),
@@ -202,9 +220,11 @@ function buildFaders(node, firstWidget) {
 registerAnalog(app, {
     kind: "fader", name: "RayFaderBank", title: "🎛️ Ray's Analog: Fader Bank",
     extensionName: "Ray.FaderBank", menuName: "Fader",
-    styles: FADER_STYLES, defaultStyle: DEFAULT_FADER_STYLE, valueName: "fader_1", configNames: ["faders"],
-    panel: () => ({ skip: Array.from({ length: MAX_FADERS }, (_, i) => `fader_${i + 1}`), sections: [{ title: "Bank", fields: [{ name: "faders", label: "Faders" }] }] }),
-    outputs: [["values", "FLOAT"], ...Array.from({ length: MAX_FADERS }, (_, i) => [`fader_${i + 1}`, "FLOAT"])],
+    styles: FADER_STYLES, defaultStyle: DEFAULT_FADER_STYLE, valueName: "fader_1", configNames: ["faders", "rows"],
+    panel: () => ({ skip: Array.from({ length: TOTAL_FADERS }, (_, i) => `fader_${i + 1}`), minWidth: 240, sections: [{ title: "Bank", fields: [
+        { name: "faders", label: "Per row" }, { name: "rows", label: "Rows" },
+    ] }] }),
+    outputs: [["values", "FLOAT"], ...Array.from({ length: TOTAL_FADERS }, (_, i) => [`fader_${i + 1}`, "FLOAT"])],
     build: buildFaders, curve: true,
-    heights: () => ({ min: 250, max: undefined }),
+    heights: ui => ({ min: ui.minHeight(), max: undefined }),
 });

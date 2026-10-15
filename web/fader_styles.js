@@ -31,9 +31,10 @@ export function getFaderStyleCSS() {
 }`).join("");
     return `${palettes}
 .ray-fader-wrap .ray-analog-face {
-    display:flex; flex:1 1 150px; width:100%; height:auto; max-width:none; min-height:110px; padding:2px 0;
-    gap:3px; justify-content:center; align-items:stretch; border-radius:0; cursor:default; touch-action:auto;
+    display:flex; flex-direction:column; flex:1 1 150px; width:100%; height:auto; max-width:none; min-height:110px; padding:2px 0;
+    gap:8px; border-radius:0; cursor:default; touch-action:auto;
 }
+.ray-fader-row { display:flex; flex:1 1 0; min-height:0; gap:3px; justify-content:center; align-items:stretch; }
 .ray-fader-strip {
     position:relative; flex:1 1 0; min-width:20px; max-width:46px; display:flex; flex-direction:column;
     align-items:center; outline:none; cursor:ns-resize; touch-action:none;

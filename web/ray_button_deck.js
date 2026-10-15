@@ -2,11 +2,11 @@ import { app } from "../../scripts/app.js";
 import { findWidget, setWidgetHidden } from "./_common.js";
 import { createPanel, changeValue, createWheelSteps, editNode, isLinked, mountControlSVG, registerAnalog } from "./analog_common.js";
 import { iconButton } from "./ray_panel.js";
-import { DECK_STYLES, DEFAULT_DECK_STYLE, getDeckStyleCSS, gridShape, layoutLegend } from "./deck_styles.js";
+import { DECK_STYLES, DEFAULT_DECK_STYLE, fitGrid, getDeckStyleCSS, layoutLegend } from "./deck_styles.js";
 import { playDeck } from "./analog_audio.js";
 
 const MAX_ENTRIES = 64;
-const CELL = 54, STICKER = 20, GAP = 6, CHROME = 96;   // px: button, Dymo sticker, grid gap, panel chrome
+const CELL = 54, MIN_CELL = 28, STICKER = 20, GAP = 6, CHROME = 96;   // px: button (new node), smallest button, Dymo sticker, grid gap, panel chrome
 
 // One entry per line: trimmed, blank lines dropped, repeats ignored, order kept. Matches the Python node.
 export function parseEntries(text) {
@@ -91,7 +91,6 @@ function buildDeck(node, widget) {
     function rebuild(key, list) {
         const style = DECK_STYLES[key];
         host.replaceChildren();
-        host.style.setProperty("--deck-cols", String(gridShape(list.length).cols));
         panel.dataset.panel = style.panel || "silver";
         cells = [];
         if (!list.length) host.append(element("div", "ray-deck-empty", "NO ENTRIES — USE EDIT ENTRIES…"));
@@ -121,7 +120,22 @@ function buildDeck(node, widget) {
             host.append(cell);
             cells.push(state);
         });
+        shape = "";
+        layout();
     }
+
+    // The grid follows the face's shape (see fitGrid), whatever size the user gives the node.
+    let shape = "";
+    function layout() {
+        const style = DECK_STYLES[styleKey()];
+        const { cols, rows } = fitGrid(cells.length, host.clientWidth - 4, host.clientHeight - 4, GAP, style.legend === "tape" ? STICKER : 0);
+        const next = `${cols}x${rows}`;
+        if (next === shape) return;
+        shape = next;
+        host.style.setProperty("--deck-cols", String(cols));
+        host.style.setProperty("--deck-rows", String(rows));
+    }
+    if (typeof ResizeObserver === "function") new ResizeObserver(layout).observe(host);
 
     ui.render = () => {
         const key = styleKey();
@@ -144,17 +158,10 @@ function buildDeck(node, widget) {
             : `${items.length} BUTTON${items.length === 1 ? "" : "S"}  /  CLICK · ARROWS`;
     };
 
-    // Panel chrome plus one row of button (and sticker) per grid row.
-    ui.minHeight = () => {
-        const style = DECK_STYLES[styleKey()], { rows } = gridShape(items.length);
-        return CHROME + rows * (CELL + (style.legend === "tape" ? STICKER : 0)) + (rows - 1) * GAP + 4;
-    };
-    ui.fitNode = () => {
-        const size = node.computeSize?.();
-        if (!size) return;
-        node.setSize?.([Math.max(node.size?.[0] || 0, size[0]), Math.max(node.size?.[1] || 0, size[1])]);
-        node.setDirtyCanvas?.(true, true);
-    };
+    // The user sizes the node freely: the face only needs room for one row of small buttons.
+    const sticker = () => DECK_STYLES[styleKey()].legend === "tape" ? STICKER : 0;
+    ui.minHeight = () => CHROME + MIN_CELL + sticker() + 4;
+    ui.compactMinWidth = () => 120;
 
     // ---- entries popout ---------------------------------------------------
     ui.openEditor = () => {
@@ -175,9 +182,8 @@ function buildDeck(node, widget) {
         const refresh = () => {
             const list = parseEntries(area.value);
             const lines = area.value.split(/\r\n|\r|\n/).filter(line => line.trim()).length;
-            const { cols, rows } = gridShape(list.length);
             info.textContent = list.length
-                ? `${list.length} button${list.length === 1 ? "" : "s"} · ${cols} × ${rows} grid${lines > list.length ? ` · ${lines - list.length} repeated or extra line${lines - list.length === 1 ? "" : "s"} ignored` : ""}`
+                ? `${list.length} button${list.length === 1 ? "" : "s"}${lines > list.length ? ` · ${lines - list.length} repeated or extra line${lines - list.length === 1 ? "" : "s"} ignored` : ""}`
                 : "Add at least one entry.";
             apply.disabled = !list.length;
         };
@@ -186,7 +192,6 @@ function buildDeck(node, widget) {
             if (!list.length) return;
             editNode(node, () => changeValue(node, entriesWidget, list.join("\n")));
             ui.render();
-            ui.fitNode();
             dismiss();
         };
         area.addEventListener("input", refresh);
@@ -215,8 +220,22 @@ function buildDeck(node, widget) {
     };
 
     ui.cancelDrag = () => { node._rayDeckEditor?.close(); node._rayDeckEditor?.remove(); node._rayDeckEditor = null; };
-    // Initial size: room for the rows this deck needs.
-    queueMicrotask(() => { ui.render(); ui.fitNode(); });
+    // A new deck starts with room for its buttons at a comfortable size, laid out square; a loaded one keeps the
+    // size it was saved with. Measured once the face is on screen, so the setup panel above it is counted.
+    queueMicrotask(() => {
+        ui.render();
+        if (node._rayConfigured || node.properties?.compact) return;
+        let tries = 0;
+        const grow = () => {
+            if (node._rayConfigured || node.properties?.compact || !node.graph) return;
+            if (!host.isConnected || !host.clientHeight) { if (++tries < 30) requestAnimationFrame(grow); return; }
+            const n = Math.max(1, items.length), cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols);
+            const want = rows * (CELL + sticker()) + (rows - 1) * GAP + 4;
+            const more = Math.ceil(want - host.clientHeight);
+            if (more > 0) { node.setSize?.([node.size[0], node.size[1] + more]); node.setDirtyCanvas?.(true, true); }
+        };
+        if (typeof requestAnimationFrame === "function") requestAnimationFrame(grow);
+    });
     return ui;
 }
 
@@ -245,6 +264,6 @@ registerAnalog(app, {
             summary.textContent = `${count} button${count === 1 ? "" : "s"}`;
             edit.disabled = isLinked(node, "entries") || isLinked(node, "selected");
         };
-        return { skip: ["entries", "selected"], sections: [{ title: "Buttons", fields: [{ custom: () => row, update, when: n => !n.properties?.compact }] }] };
+        return { skip: ["entries", "selected"], minWidth: 220, sections: [{ title: "Buttons", fields: [{ custom: () => row, update, when: n => !n.properties?.compact }] }] };
     },
 });

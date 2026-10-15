@@ -163,6 +163,16 @@ The Control and the Fader Bank can map the dial or fader position to the value t
 
 The curve is saved with the workflow (the `response` and `curve` properties) and is shared by all faders of a Fader Bank.
 
+### Compact mode (every analog node)
+
+Right-click → **Compact mode** turns the node into its faceplate and nothing else: no title bar, no input or output dots, no setup panel, no badges and no node background, in the legacy canvas and in Nodes 2.0 alike. The Control and the Switch shrink to the size of their face (180 px wide); the Button Deck and the Fader Bank keep the size you gave them.
+
+- **Links stay connected.** In the legacy canvas they run under the faceplate and meet the node out of sight (inputs left of centre, outputs right of it). Nodes 2.0 always attaches a link to the side of a node, so there they meet the left and right edges of the plate, halfway down.
+- **Moving and selecting.** Grab the plate anywhere that isn't a working part (its frame, the Dymo strip's surroundings, the readout box, the gaps between buttons) to select and drag the node. The plate's corners resize it, and right-clicking the plate opens the node menu, where **Compact mode** switches it back.
+- **Saved with the workflow.** The compact flag and the size are restored exactly on load. Turning compact mode off brings back the title, the dots and the setup panel.
+
+The plate passes the pointer through in normal mode too, so you can drag any analog node by its faceplate.
+
 ---
 
 ## 🎛️ Ray's Analog: Control (`RayKnob`)
@@ -189,7 +199,7 @@ The curve is saved with the workflow (the `response` and `curve` properties) and
 
 **Sound.** Knobs click through detents that match their printed scale, sliders scrape and tick as they move and thud at the end stops, and the pan slider taps at its centre. Switches voice each face: a thump and clack for the rack rocker, a ringing strike and spring for the steel lever, a push-and-latch for the illuminated key, a clunk for the bakelite flip, a tick-tack for the paddle, a scrape and detent for the brass slider, a soft tap for the pill and a hollow thock for the dome. The sounds are synthesized with Web Audio in `web/analog_audio.js`; there are no audio files. **Mute sound** in the right-click menu (on both the Control and the Switch) silences every analog control and is remembered per browser.
 
-**Right-click menu.** **Linear response** and **Curve response…** (see Response curves above). **Control Style…** opens a floating picker (the 31 styles grouped by family, sliders tagged; arrow keys, Enter and Escape work) rather than a nested submenu, so it stays on screen in both the legacy canvas and Nodes 2.0. **Mute sound** is next to it. **Compact mode** hides only unlinked setup controls while preserving real slots and workflow data. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Drag around a rotary control or along a slider, use Shift for fine movement, or use Arrow/Home/End keys. Exact values can be entered in the readout. Style, compact flag, and label text persist with the workflow.
+**Right-click menu.** **Linear response** and **Curve response…** (see Response curves above). **Control Style…** opens a floating picker (the 31 styles grouped by family, sliders tagged; arrow keys, Enter and Escape work) rather than a nested submenu, so it stays on screen in both the legacy canvas and Nodes 2.0. **Mute sound** is next to it. **Compact mode** shows only the faceplate (see Compact mode above). **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Drag around a rotary control or along a slider, use Shift for fine movement, or use Arrow/Home/End keys. Exact values can be entered in the readout. Style, compact flag, and label text persist with the workflow.
 
 **Mouse wheel.** **Mouse wheel control** in the right-click menu (off by default, remembered per browser, shared by every analog node) lets the scroll wheel drive the control while the pointer is anywhere over the node: 2% of the range per notch, a tenth of that with Shift, with the same detent and slider sounds as dragging. The canvas does not zoom while the pointer is over a node that takes the wheel; Ctrl / Cmd + wheel still zooms, and a control driven by a link lets the wheel through. A burst of wheel steps is one undo step.
 
@@ -206,7 +216,7 @@ The curve is saved with the workflow (the `response` and `curve` properties) and
 | **Control** `state` | bool | Toggle. |
 | **Output** `bool` | BOOLEAN | Mirror of `state`. |
 
-**Right-click menu.** **Switch Style…** opens the shared picker. The hand-drawn faces are: rack power rocker, broadcast steel lever, console illuminated key, rack chrome rocker, console dome button, broadcast bakelite flip, mastering silver paddle, broadcast brass slide and console minimal pill. **Mute sound** is shared with the Control. Every face has its own click, clack or thunk. With **Mouse wheel control** on, wheel up switches on and wheel down switches off. **Compact mode** hides only unlinked setup controls and keeps the real output slot available. Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
+**Right-click menu.** **Switch Style…** opens the shared picker. The hand-drawn faces are: rack power rocker, broadcast steel lever, console illuminated key, rack chrome rocker, console dome button, broadcast bakelite flip, mastering silver paddle, broadcast brass slide and console minimal pill. **Mute sound** is shared with the Control. Every face has its own click, clack or thunk. With **Mouse wheel control** on, wheel up switches on and wheel down switches off. **Compact mode** shows only the faceplate (see Compact mode above). Click the face, or focus it and press Space/Enter. **Edit label…** changes the Dymo tape above the face; double-click or Enter also edits it. Style, compact flag, and label text persist with the workflow. The controls remain usable in both Legacy and Nodes 2.0 frontends.
 
 ---
 
@@ -222,11 +232,11 @@ The curve is saved with the workflow (the `response` and `curve` properties) and
 | **Control** `selected` | string | The pressed button's text, driven by the deck. If it isn't in the list the first entry is used. |
 | **Output** `value` | STRING | The pressed button's text, exactly as typed. |
 
-**Layout.** The buttons form a near-square grid with `ceil(sqrt(n))` columns: 1 → 1×1, 2 → 2×1, 3 and 4 → 2×2, 5 and 6 → 3×2, 7 to 9 → 3×3, 10 to 12 → 4×3, and so on (columns × rows). The node grows to fit the rows it needs, and the buttons scale with the node.
+**Layout.** Size the node however you like: the deck lays its buttons out like a wrapping flex box, picking the grid that makes the buttons biggest in the space it has. A long landscape node lines four buttons up in one row (4×1), a square one stacks them 2×2, a tall narrow one puts them in a column. The buttons stay square and scale with the node. A new deck starts big enough for its buttons; after that the node keeps the size you give it, including when you edit the entries.
 
 **Pressing.** The bank is interlocked like a radio-preset panel: exactly one button is pressed down and lit, and every other button stays raised and unlit. Pressing a button releases the previous one; pressing the lit one changes nothing. Arrow keys, Home and End move the selection, and Space or Enter presses the focused button. The selection follows the value, so reordering the entries keeps the same button pressed. If the pressed value is deleted, the first entry takes over (the same rule the node applies when it runs). A deck with no entries raises an error when it runs.
 
-The pencil next to **Entries** (or right-click → **Edit entries…**) opens a popout with a text box (one value per line) and a live count of buttons and grid size. **Apply** (or Ctrl+Enter) saves the normalized list; **Cancel** (or Escape) discards the changes.
+The pencil next to **Entries** (or right-click → **Edit entries…**) opens a popout with a text box (one value per line) and a live count of buttons. **Apply** (or Ctrl+Enter) saves the normalized list; **Cancel** (or Escape) discards the changes.
 
 **Styles.** All 31 shared styles. Five are hand-drawn for the deck, each with its own sound, and either print the text inside the button or put it on a Dymo sticker below; every other style gets a matching generated button that prints its text in a lit window or on a sticker:
 
@@ -240,30 +250,33 @@ The pencil next to **Entries** (or right-click → **Edit entries…**) opens a 
 
 Pressing a button plays its latch sound, followed by a softer release as the previously pressed button pops out. **Mute sound** in the right-click menu silences every analog control. With **Mouse wheel control** on, wheel down presses the next button and wheel up the previous one, stopping at the ends.
 
-**Right-click menu.** **Deck Style…** (the picker used by the other analog nodes), **Edit entries…**, **Compact mode**, **Edit label…** (the Dymo tape above the deck) and **Mute sound**. Style, compact flag and label persist with the workflow.
+**Right-click menu.** **Deck Style…** (the picker used by the other analog nodes), **Edit entries…**, **Compact mode** (the faceplate alone, see Compact mode above), **Edit label…** (the Dymo tape above the deck) and **Mute sound**. Style, compact flag and label persist with the workflow.
 
 ---
 
 ## 🎛️ Ray's Analog: Fader Bank (`RayFaderBank`)
 
-**Purpose.** A bank of two to ten vertical faders, like a small mixing desk. Each fader outputs a float from 0 to 1, and the whole bank comes out as a list too. Good for blend weights, strengths and anything else you want to balance by eye.
+**Purpose.** A bank of vertical faders, like a small mixing desk: two to ten in a row, in up to four rows (forty faders). Each fader outputs a float from 0 to 1, and the whole bank comes out as a list too. Good for blend weights, strengths and anything else you want to balance by eye.
 
 **Category:** `👑 Ray/🎛️ Analog`
 
 | Pin | Type | Notes |
 |-----|------|-------|
-| **Control** `faders` | int 2–10 | How many faders the bank has. The node shows that many outputs and hides the rest. |
-| **Control** `fader_1` … `fader_10` | float 0–1 | Fader positions, driven by the bank. The raw widgets are hidden; the faders are the control. |
+| **Control** `faders` | int 2–10 | Faders in a row (**Per row** in the panel). |
+| **Control** `rows` | int 1–4 | Rows of faders. `faders` × `rows` faders in all: 6 per row and 2 rows make 12. |
+| **Control** `fader_1` … `fader_40` | float 0–1 | Fader positions, driven by the bank, numbered row by row. The raw widgets are hidden; the faders are the control. |
 | **Output** `values` | FLOAT (list) | Every active fader, in order, as a list. Downstream nodes run once per value, like the other list outputs in the pack. |
 | **Output** `fader_1` … `fader_N` | FLOAT | One output per active fader. |
 
-**Optional outputs.** The outputs follow `faders`: raising it adds faders and their outputs on the right, and lowering it removes the last ones, together with any links attached to them. The outputs that stay keep their slot numbers, so existing links are never rewired. `values` is always the first output.
+**Optional outputs.** The outputs follow `faders` × `rows`: raising either adds faders and their outputs at the end, and lowering it removes the last ones, together with any links attached to them. The outputs that stay keep their slot numbers, so existing links are never rewired. `values` is always the first output.
 
-**Using it.** Drag a cap, or click the track to jump it to the pointer. Shift slows a drag to a twentieth. Focus a fader to use Arrow keys (0.01; Shift for 0.001), PageUp/PageDown (0.1), Home (0) and End (1). With **Mouse wheel control** on, scrolling over a fader moves that fader only: 2% per notch, a tenth of that with Shift. The readout under the faders shows the last one touched. A fader fed by a link is locked and the hint line says so. The node widens as you add faders.
+**Using it.** Drag a cap, or click the track to jump it to the pointer. Shift slows a drag to a twentieth. Focus a fader to use Arrow keys (0.01; Shift for 0.001), PageUp/PageDown (0.1), Home (0) and End (1). With **Mouse wheel control** on, scrolling over a fader moves that fader only: 2% per notch, a tenth of that with Shift. The readout under the faders shows the last one touched. A fader fed by a link is locked and the hint line says so. The node widens as you add faders to a row and grows taller as you add rows; it never shrinks what you sized.
+
+**Rows.** Each row is a full strip of `faders` faders, stacked under the previous one. Numbering carries on from row to row (a bank of 6 per row has faders 7 to 12 on its second row), so `values` and the `fader_N` outputs read like a page. Workflows saved before rows existed load as one row, with every fader where it was.
 
 **Styles.** All 31 shared styles. Three are hand-drawn for the bank: Console · Black Faders (grey caps on a charcoal panel), Mastering · Silver Faders (black caps on brushed aluminium) and Broadcast · Cream Faders (cream caps with a red line on an olive panel); every other style supplies its materials and accent colour for the caps. Faders scrape and tick like the slider faces of the Control, and thud at the end stops.
 
-**Right-click menu.** **Fader Style…**, **Linear response** / **Curve response…** (one curve for the whole bank), **Mouse wheel control**, **Compact mode** (hides the `faders` widget), **Edit label…** and **Mute sound**. Style, compact flag, label and fader positions persist with the workflow.
+**Right-click menu.** **Fader Style…**, **Linear response** / **Curve response…** (one curve for the whole bank), **Mouse wheel control**, **Compact mode** (the faceplate alone, see Compact mode above), **Edit label…** and **Mute sound**. Style, compact flag, label and fader positions persist with the workflow.
 
 ---
 
