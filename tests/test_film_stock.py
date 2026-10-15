@@ -316,7 +316,9 @@ def test_xmp_saturation_pulls_chroma(tmp_path):
     )
     avg = desat.mean(dim=(0, 1, 2))
     spread = float(avg.max() - avg.min())
-    assert spread < 0.10
+    # XMP Saturation is intentionally capped at +/-50% of the stock's own saturation (full +/-100% made
+    # saturated stocks burn), so -100 halves the colour rather than removing it.
+    assert 0.10 < spread < 0.6 * 0.6, f"colour spread {spread:.3f} should drop from 0.6 to roughly half"
 
 
 def test_xmp_vignette_darkens_corners(tmp_path):
@@ -337,6 +339,27 @@ def test_xmp_vignette_darkens_corners(tmp_path):
     center = out[:, 28:36, 28:36].mean().item()
     corner = out[:, :8, :8].mean().item()
     assert corner < center - 0.05
+
+
+def test_xmp_positive_vignette_lightens_corners(tmp_path):
+    # Lightroom convention: negative amounts darken the edges, positive amounts lighten them.
+    img = _flat(64, 64, 0.4)
+    node = rfs.RayFilmStock()
+    xmp = tmp_path / "vig_up.xmp"
+    xmp.write_text(_xmp_doc(
+        PostCropVignetteAmount="80",
+        PostCropVignetteMidpoint="0",
+        PostCropVignetteFeather="0",
+    ))
+    (out,) = node.process(
+        image=img, preset="Custom",
+        intensity=1.0, grain_amount=0.0, halation_amount=0.0,
+        expose_stops=0.0, seed=0,
+        assets_folder=str(tmp_path), asset_file="vig_up.xmp",
+    )
+    center = out[:, 28:36, 28:36].mean().item()
+    corner = out[:, :8, :8].mean().item()
+    assert corner > center + 0.05
 
 
 def test_list_assets_lut_only_omits_tags(tmp_path):
