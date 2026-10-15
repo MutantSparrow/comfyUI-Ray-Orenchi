@@ -373,11 +373,13 @@ def inspect_file(path: pathlib.Path) -> dict:
 
     # ComfyUI prompt chunk
     cprompt = info.get("prompt")
+    plain_prompt = ""
     if cprompt:
         raw["prompt_chunk"] = cprompt if len(str(cprompt)) < 200000 else "<truncated>"
         if isinstance(cprompt, str) and not _looks_like_comfy_graph(cprompt):
-            if not result["prompt_positive"]:
-                result["prompt_positive"] = cprompt.strip()
+            # Not a graph: a plain prompt string. It competes with the other prompt-like keys below,
+            # so a richer `prompt_effective` is not hidden behind a shorter `prompt`.
+            plain_prompt = cprompt.strip()
         else:
             prompts = _extract_prompts_from_comfy_graph(cprompt)
             if prompts and not result["prompt_positive"]:
@@ -422,6 +424,8 @@ def inspect_file(path: pathlib.Path) -> dict:
 
     # Flat JustRayzist-style fields
     flats = _harvest_flat_prompt_keys(info)
+    if plain_prompt:
+        flats.append(("prompt", plain_prompt))
     if flats:
         raw["flat_prompts"] = {k: v[:200] for k, v in flats}
         if not result["prompt_positive"]:
