@@ -1,6 +1,6 @@
 # comfyUI-Ray-Orenchi
 
-15 ComfyUI custom nodes for retro image effects, pixel art, local vision-language
+16 ComfyUI custom nodes for retro image effects, pixel art, local vision-language
 inference, prompt tooling and analog-console controls. Find them under the
 **👑 Ray** category in the add-node menu.
 
@@ -19,7 +19,8 @@ inference, prompt tooling and analog-console controls. Find them under the
 | | **Fader Bank** | Two to ten vertical faders in a row, up to four rows, each a 0 to 1 float, plus the whole bank as a list |
 | **💬 LLM** | **Fast Qwen3-VL Infer** | Fast image-to-text through an already loaded Qwen3-VL CLIP, with no second model copy |
 | | **Folder Captioner** | Caption a range of images in a folder with a full VLM; aligned text, image and path lists |
-| **🔧 Tools** | **Save Image** | Save PNGs or preview them, with a two-image comparison slider and folder picker |
+| **🔧 Tools** | **Folders** | Browse and select local images, videos and audio; native media lists, prompts and paths |
+| | **Save Image** | Save PNGs or preview them, with a two-image comparison slider and folder picker |
 | | **TXT Folder** | Read text files as prompts, with matching save prefixes |
 | | **Metadata Inspector** | Read generation metadata from an image, or embed it into one |
 | | **Prompt Scraper** | One node for prompts from a local image folder, PromptDexter or CivitAI |
@@ -54,6 +55,8 @@ the browser. After updating the pack, restart again so new and changed nodes loa
 ## Documentation
 
 [NODES.md](NODES.md) is the node-by-node reference for inputs, outputs and behavior.
+
+[FOLDERS.md](FOLDERS.md) covers the media gallery, selection, filtering and outputs.
 
 ## License
 
