@@ -1,0 +1,5 @@
+<!doctype html><meta charset="utf-8"><title>Ray - Folders browser regression</title>
+<style>body{background:#171717;color:#ddd;font:13px system-ui;margin:24px}#gallery{width:540px;height:620px;border:1px solid #444;border-radius:8px}#results{white-space:pre-wrap}details{margin:12px 0}summary{cursor:pointer}</style>
+<h1>Ray - Folders</h1><details><summary id="summary">Running checks…</summary><pre id="results"></pre></details><div id="gallery"></div>
+<script>window.addEventListener('error',e=>{document.querySelector('#summary').textContent='Regression failed';document.querySelector('#results').textContent+=e.message+' '+e.filename+':'+e.lineno;document.querySelector('details').open=true;});</script>
+<script type="module" src="/tests/folders_browser.js"></script>
