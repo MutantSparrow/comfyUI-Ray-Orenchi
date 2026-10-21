@@ -158,6 +158,21 @@ export const RAY_HELP_DEFS = {
     },
 
     // ── 🔧 Tools ─────────────────────────────────────────────────────
+    RayFolders: {
+        summary: "Browse local images, videos and audio. Select files to output native media lists, prompts and paths. The listing refreshes every run, even without connected outputs.",
+        sections: [{heading: "Gallery", bullets: [
+            "Click selects one file; Ctrl/Cmd-click toggles additional selections. Media retains original dimensions and sample rates.",
+            "Folder and fuzzy filename filter accept STRING connections. The cog controls sorting, recursion, 2–7 columns, color/NSFW filters and prompt formatting.",
+            "Hover for metadata; hold Shift for the prompt. Double-click opens the viewer. Right-click copies an image, prompt or embedded workflow.",
+            "Drag an image to the canvas or an existing Load Image node. A copy is imported; the original stays in place.",
+            "The bottom note shows total media counts. Missing files are dropped from selection; deleted folders or disconnected drives show an unavailable state. Refresh after reconnecting.",
+        ]}, {heading: "List outputs", bullets: [
+            "images, videos and audio contain only their respective media type. prompt and paths cover the whole mixed selection in gallery order.",
+            "With nothing selected, media/prompt lists are empty and paths contains the folder path. All outputs may stay unconnected.",
+            "NSFW classification runs locally on images and video posters, not every video frame. Audio is not visually classified.",
+        ]}],
+    },
+
     RaySaveImage: {
         summary: "Saves one or both image inputs as PNGs, or just previews them, with a draggable left/right comparison when two images are connected.",
         sections: [{

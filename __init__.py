@@ -31,6 +31,7 @@ import importlib
 # existing workflows keep loading.
 _NODE_MODULES = {
     "RaySaveImage":        "ray_save_image",
+    "RayFolders":          "ray_folders",
     "RayCRT":              "ray_crt",
     "RayOffsetPrint":      "ray_offset_print",
     "RayPixelArtDetector": "ray_pixel_detector",
@@ -53,6 +54,7 @@ _ROUTE_MODULES = (
     "civitai_routes",
     "film_stock_routes",
     "browse_routes",
+    "folders_routes",
 )
 
 # Tolerate standalone import (e.g. pytest collection) where relative imports
@@ -104,6 +106,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayMetaInspect":      "🔧 Ray's Tools: Metadata Inspector",
     "RayTextFolder":       "🔧 Ray's Tools: TXT Folder",
     "RaySaveImage":        "🔧 Ray's Tools: Save Image",
+    "RayFolders":          "📁 Ray - Folders",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
