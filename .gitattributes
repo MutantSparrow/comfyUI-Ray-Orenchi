@@ -1,0 +1,3 @@
+# Preserve binary model weights and generated runtime strings on every platform.
+web/vendor/nsfw/model/group1-shard* binary
+web/vendor/nsfw/nsfw.mjs -text -whitespace
