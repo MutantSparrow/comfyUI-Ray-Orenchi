@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { setWidgetHidden } from "./_common.js";
+import { installLegacyLinkLayout } from "./legacy_panel_links.js";
 import { browsePath, notify } from "./browse_common.js";
 
 // The Ray panel: every Ray node draws its controls in one black, compact panel, in the style of Save Image
@@ -154,8 +155,9 @@ export function linkChip(node, name, changed) {
 // Lets an interface with its own layout take dropped links: `rows` are [{ name, element }].
 export function registerLinkTargets(node, rows, refresh) {
     const target = { node, rows: rows.map(r => ({ ...r, element: r.element })), refresh };
+    const restoreLayout = installLegacyLinkLayout(node, target.rows, () => app.canvas);
     livePanels.add(target);
-    return () => livePanels.delete(target);
+    return () => { restoreLayout(); livePanels.delete(target); };
 }
 
 function injectStyles() {
@@ -660,7 +662,7 @@ export function installPanel(node, spec = {}) {
     }
     // Values also change from outside (control after generate, other extensions, a loaded workflow).
     const timer = setInterval(() => { if (root.isConnected) refresh(); }, 400);
-    function destroy() { clearInterval(timer); livePanels.delete(panel); }
+    function destroy() { clearInterval(timer); unregister(); }
 
     root.addEventListener("pointerdown", e => { if (e.button === 0 && e.target !== root) e.stopPropagation(); });
     // The legacy canvas insets a DOM widget by its margin on each side; keep it small and count it.
@@ -681,7 +683,7 @@ export function installPanel(node, spec = {}) {
         list.splice(at < 0 ? list.length : at, 0, domWidget);
     }
     node._rayPanel = panel;
-    livePanels.add(panel);
+    const unregister = registerLinkTargets(node, rows, refresh);
     const removed = node.onRemoved;
     node.onRemoved = function () { destroy(); return removed?.apply(this, arguments); };
     refresh();
