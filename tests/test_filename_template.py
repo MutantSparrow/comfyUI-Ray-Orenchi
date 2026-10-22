@@ -2,6 +2,7 @@ import datetime
 import importlib.util
 import json
 import threading
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -131,8 +132,11 @@ def test_a_batch_gets_one_name_per_image_with_the_index_token(tmp_path):
     assert [make("pair_{input}", tmp_path, input=i) for i in (1, 2)] == ["pair_1.png", "pair_2.png"]
 
 
-def test_the_suffix_keeps_even_a_maximum_length_name_inside_the_limit(tmp_path):
-    first, second = make("x" * 400, tmp_path), make("x" * 400, tmp_path)
+def test_the_suffix_keeps_even_a_maximum_length_name_inside_the_limit():
+    # Keep the directory short on Windows without LongPathsEnabled. This test
+    # exercises the filename limit, independently of the OS full-path limit.
+    with tempfile.TemporaryDirectory(prefix="ray-") as directory:
+        first, second = make("x" * 400, Path(directory)), make("x" * 400, Path(directory))
     assert first != second and len(second) <= ft.MAX_STEM + len(".png")
 
 

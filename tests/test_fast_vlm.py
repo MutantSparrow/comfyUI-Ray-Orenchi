@@ -2,7 +2,7 @@
 import unittest
 import weakref
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import torch
 import ray_fast_vlm as fast
@@ -62,7 +62,8 @@ class FastVLMTests(unittest.TestCase):
         tokenizer = Krea2Tokenizer()
         clip = SimpleNamespace(tokenize=tokenizer.tokenize_with_weights)
         image = torch.zeros(2, 32, 32, 3)
-        tokens = fast.image_tokens(clip, image, 'Describe the picture.', False)
+        transformer = fast.Qwen3VL.__new__(fast.Qwen3VL)
+        tokens = fast.input_tokens(clip, transformer, image, 'Describe the picture.', False)
         flattened = [t[0] for batches in tokens.values() for batch in batches for t in batch]
         self.assertEqual(sum(isinstance(t, dict) for t in flattened), 2)
         ids = [t for t in flattened if isinstance(t, int)]
@@ -73,7 +74,7 @@ class FastVLMTests(unittest.TestCase):
     def test_missing_image_tokens_fail_before_generation(self):
         clip = SimpleNamespace(tokenize=lambda *a, **kw: {'qwen3vl_4b': [[(42, 1.0)]]})
         with self.assertRaisesRegex(ValueError, 'attached 0 of 1 images'):
-            fast.image_tokens(clip, torch.zeros(1,32,32,3), 'Describe.', False)
+            fast.input_tokens(clip, fast.Qwen3VL.__new__(fast.Qwen3VL), torch.zeros(1,32,32,3), 'Describe.', False)
 
     def call(self, transformer, **kwargs):
         with patch.object(fast.mm, 'should_use_bf16', return_value=False):
@@ -130,18 +131,18 @@ class FastVLMTests(unittest.TestCase):
         node = fast.RayFastQwen3VL()
         for options in ({'max_tokens':0}, {'sync_interval':0}):
             with self.assertRaises(ValueError):
-                node.infer(None, torch.zeros(1,32,32,3), 'test', **options)
+                node.infer(None, 'test', **options)
 
     def test_wrong_model_reports_detected_encoder(self):
         stage = SimpleNamespace(clip='qwen25_7b', qwen25_7b=SimpleNamespace(transformer=SimpleNamespace()))
         clip = SimpleNamespace(cond_stage_model=stage)
         for mode in ('fast', 'native'):
-            with self.assertRaisesRegex(ValueError, "encoder='qwen25_7b'.*qwen3vl_8b_fp8_scaled"):
-                fast.RayFastQwen3VL().infer(clip, torch.zeros(1,32,32,3), 'Describe.', mode=mode)
+            with self.assertRaisesRegex(ValueError, "Detected:.*encoder='qwen25_7b'"):
+                fast.RayFastQwen3VL().infer(clip, 'Describe.', mode=mode)
 
     def test_missing_encoder_reports_useful_error(self):
-        with self.assertRaisesRegex(ValueError, 'not a native Qwen3-VL'):
-            fast.qwen3vl_model(SimpleNamespace(cond_stage_model=SimpleNamespace()))
+        with self.assertRaisesRegex(ValueError, 'no transformer-bearing encoder'):
+            fast.qwen_model(SimpleNamespace(cond_stage_model=SimpleNamespace()))
 
     def test_native_qwen3vl_accepted_and_truncated_rejected(self):
         transformer = fast.Qwen3VL.__new__(fast.Qwen3VL)
@@ -150,10 +151,49 @@ class FastVLMTests(unittest.TestCase):
         clip = SimpleNamespace(cond_stage_model=stage)
         for model_type in ('qwen3vl_8b', 'qwen3vl_4b'):
             transformer.model_type = model_type
-            self.assertIs(fast.qwen3vl_model(clip)[1], transformer)
+            self.assertIs(fast.qwen_model(clip)[2], transformer)
         transformer.model_type = 'qwen3vl_32b'
         with self.assertRaisesRegex(ValueError, 'truncated for conditioning'):
-            fast.qwen3vl_model(clip)
+            fast.qwen_model(clip)
+
+    def native_clip(self):
+        transformer = fast.Qwen3VL.__new__(fast.Qwen3VL)
+        torch.nn.Module.__init__(transformer)
+        stage = SimpleNamespace(clip='qwen3vl_8b', qwen3vl_8b=SimpleNamespace(transformer=transformer))
+        return SimpleNamespace(cond_stage_model=stage, tokenize=Mock(return_value={}),
+                               generate=Mock(return_value=[1]), decode=lambda ids: 'native answer')
+
+    def test_neutral_defaults_and_explicit_anti_loop(self):
+        clip = self.native_clip()
+        for preset, expected in (('custom', 0.0), ('anti_loop', 1.5)):
+            fast.RayFastQwen3VL().infer(clip, 'Describe.', mode='native', generation_preset=preset)
+            self.assertEqual(clip.generate.call_args.kwargs['presence_penalty'], expected)
+            self.assertEqual(clip.generate.call_args.kwargs['repetition_penalty'], 1.0)
+        schema = fast.RayFastQwen3VL.INPUT_TYPES()['optional']
+        self.assertEqual(schema['presence_penalty'][1]['default'], 0.0)
+
+    def test_unknown_version_and_initialization_failure_use_native(self):
+        import comfyui_version
+        clip = self.native_clip()
+        with patch.object(comfyui_version, '__version__', '0.43.0'), patch.object(clip, 'clone', create=True) as clone:
+            self.assertEqual(fast.RayFastQwen3VL().infer(clip, 'Describe.'), ('native answer',))
+            clone.assert_not_called()
+        with patch.object(fast, 'prepare_qwen3vl_fast', side_effect=TypeError('patch interface changed')):
+            self.assertEqual(fast.RayFastQwen3VL().infer(clip, 'Describe.'), ('native answer',))
+        self.assertEqual(clip.generate.call_count, 2)
+
+    def test_initial_cache_failure_retries_native_but_cancellation_does_not(self):
+        t = FakeTransformer([])
+        t.model.fixed_kv = t.model.prefetch_dynamic_vbars = False
+        native = Mock(return_value=[7])
+        with patch.object(fast, '_generate_tokens', side_effect=fast.FastUnavailable('cache changed')):
+            self.assertEqual(fast.fast_generate(t, _native_generate=native, sync_interval=8), [7])
+        native.assert_called_once_with()
+        native.reset_mock()
+        with patch.object(fast, '_generate_tokens', side_effect=RuntimeError('interrupted')):
+            with self.assertRaisesRegex(RuntimeError, 'interrupted'):
+                fast.fast_generate(t, _native_generate=native)
+        native.assert_not_called()
 
     def test_buffers_live_until_graph_cleanup(self):
         t = FakeTransformer([])

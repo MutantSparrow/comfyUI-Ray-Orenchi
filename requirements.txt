@@ -1,11 +1,4 @@
-numpy
-torch
-scikit-learn
-Pillow
-aiohttp
-requests
-beautifulsoup4
-scipy
-opencv-python>=4.6
-Send2Trash>=2.1.0
-pywin32>=305; sys_platform == "win32"
+# Full feature install. ComfyUI owns Torch, CUDA and its model runtime.
+-r requirements-core.txt
+-r requirements-media.txt
+-r requirements-pixel.txt

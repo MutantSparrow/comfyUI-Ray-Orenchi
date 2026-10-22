@@ -1,0 +1,25 @@
+name: Optional Qwen CUDA integration
+on:
+  workflow_dispatch:
+    inputs:
+      checkpoint:
+        description: Existing absolute local Qwen3-VL checkpoint path on the dedicated runner (optional)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  qwen-cuda:
+    runs-on: [self-hosted, ray-comfy-cuda]
+    timeout-minutes: 30
+    env:
+      COMFYUI_ROOT: ${{ vars.COMFYUI_ROOT }}
+      RAY_TEST_CUDA: '1'
+      RAY_QWEN_CHECKPOINT: ${{ inputs.checkpoint }}
+      HF_HUB_OFFLINE: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Real allocator, cache and optional checkpoint tests
+        run: python scripts/run_tests.py --device cuda -q tests/integration

@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ray-orenchi"
+version = "1.0.0"
+description = "Ray's ComfyUI nodes for media folders, local VLM captioning, pixel art, retro effects and analog controls."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "ray_pixel_fixer/LICENSE", "ray_pixel_fixer/NOTICE.md", "web/vendor/LICENSE-FASTGALLERY", "web/vendor/nsfw/LICENSE-NSFWJS", "web/vendor/nsfw/LICENSE-TENSORFLOW", "web/vendor/nsfw/NOTICE.md"]
+requires-python = ">=3.11,<3.14"
+authors = [{name = "Ray"}]
+# Registry installs the complete feature set. Minimal clone installs can use
+# requirements-core.txt plus the media/pixel groups they need.
+dependencies = [
+    "numpy", "Pillow", "aiohttp", "requests", "beautifulsoup4",
+    "Send2Trash>=2.1.0", "pywin32>=305; sys_platform == 'win32'",
+    "av>=17.0.0", "scikit-learn", "threadpoolctl", "scipy", "opencv-python>=4.6",
+]
+classifiers = [
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "build", "packaging", "PyYAML"]
+
+[project.urls]
+Repository = "https://github.com/MutantSparrow/comfyUI-Ray-Orenchi"
+Documentation = "https://github.com/MutantSparrow/comfyUI-Ray-Orenchi/blob/main/README.md"
+Issues = "https://github.com/MutantSparrow/comfyUI-Ray-Orenchi/issues"
+
+[tool.comfy]
+PublisherId = "ray"
+DisplayName = "Ray's Orenchi"
+requires-comfyui = ">=0.42.0"
+
+[tool.setuptools]
+packages = ["ray_orenchi", "ray_orenchi.ray_pixel_fixer"]
+package-dir = {ray_orenchi = "."}
+include-package-data = false
+
+[tool.setuptools.package-data]
+ray_orenchi = ["web/**/*", "web/*"]
+"ray_orenchi.ray_pixel_fixer" = ["LICENSE*", "NOTICE.md"]

@@ -1,14 +1,52 @@
 """Generic Qwen text generation with a fast Qwen3-VL decode path."""
 import logging
+import importlib.util
+import inspect
 from functools import partial
 from types import MethodType
 
 import torch
 import comfy_kitchen
 import comfy.model_management as mm
-import comfy.model_prefetch as prefetch
+prefetch = (importlib.import_module("comfy.model_prefetch")
+            if importlib.util.find_spec("comfy.model_prefetch") is not None else None)
 from comfy.text_encoders.qwen3vl import Qwen3VL
 from comfy.utils import ProgressBar
+
+
+class FastUnavailable(RuntimeError):
+    """An accelerated interface is unsupported, before any decode has run."""
+
+
+def fast_compatibility(clip, transformer):
+    import comfyui_version
+    version = comfyui_version.__version__
+    # These private APIs are validated by the stable/current integration matrix.
+    # Future minor releases use native generation until explicitly validated.
+    if not version.startswith("0.42."):
+        raise FastUnavailable(f"ComfyUI {version}: accelerated support is validated for 0.42.x")
+    if prefetch is None:
+        raise FastUnavailable("ComfyUI model_prefetch is unavailable")
+    for name in ("make_prefetch_queue", "prefetch_queue_pop", "malloc_graph_enabled",
+                 "malloc_graph_begin", "malloc_graph_end", "cleanup_prefetch_queues"):
+        if not callable(getattr(prefetch, name, None)):
+            raise FastUnavailable(f"model_prefetch.{name} is unavailable")
+    model = transformer.model
+    for name in ("fixed_kv", "graph_dynamic_vbar_blocks", "prefetch_dynamic_vbars",
+                 "layers", "config", "norm"):
+        if not hasattr(model, name):
+            raise FastUnavailable(f"Qwen decoder lacks {name}")
+    try:
+        inspect.signature(transformer.init_kv_cache).bind(1, 8, clip.patcher.load_device, torch.float32)
+        inspect.signature(model.forward).bind(None, embeds=None, attention_mask=None,
+                                             past_key_values=None, position_ids=None)
+        inspect.signature(model.compute_freqs_cis).bind(None, clip.patcher.load_device)
+        inspect.signature(clip.patcher.add_object_patch).bind("generate", None)
+        inspect.signature(prefetch.make_prefetch_queue).bind([], clip.patcher.load_device, {"prefetch_dynamic_vbars": True})
+        inspect.signature(prefetch.prefetch_queue_pop).bind(None, clip.patcher.load_device, None,
+                                                            torch.float32, core=None, enable_graph=True, malloc_scope="block")
+    except (AttributeError, TypeError, ValueError) as error:
+        raise FastUnavailable(f"Qwen accelerated interface changed: {error}") from error
 
 
 def repeated_tail_start(tokens):
@@ -143,10 +181,28 @@ def decode_step(model, embeds, position_ids, cache, state):
 
 
 
-def fast_generate(self, *args, **kwargs):
+def fast_generate(self, *args, _native_generate=None, **kwargs):
     request_buffers = []
     try:
-        return _generate_tokens(self, *args, _request_buffers=request_buffers, **kwargs)
+        try:
+            return _generate_tokens(self, *args, _request_buffers=request_buffers, **kwargs)
+        except FastUnavailable as error:
+            if _native_generate is None:
+                raise
+            # Only initialization incompatibility may retry. Interruptions, OOMs
+            # and failures after decode starts keep their original traceback.
+            prefetch.cleanup_prefetch_queues()
+            request_buffers.clear()
+            logging.warning("[FastQwen] %s; using native generation", error)
+            native_kwargs = {key: value for key, value in kwargs.items()
+                             if key not in ("sync_interval", "repeat_guard")}
+            fixed, graphs, dynamic = (self.model.fixed_kv, self.model.graph_dynamic_vbar_blocks,
+                                      self.model.prefetch_dynamic_vbars)
+            self.model.fixed_kv = self.model.graph_dynamic_vbar_blocks = self.model.prefetch_dynamic_vbars = False
+            try:
+                return _native_generate(*args, **native_kwargs)
+            finally:
+                self.model.fixed_kv, self.model.graph_dynamic_vbar_blocks, self.model.prefetch_dynamic_vbars = fixed, graphs, dynamic
     finally:
         # Graphs reference request-local KV and activation buffers. Release them
         # before another call or another CLIP consumer can reuse this model.
@@ -177,6 +233,11 @@ def _generate_tokens(self, embeds=None, do_sample=True, max_length=256,
     next_position = (position_ids[:, -1].max() + 1).reshape(1, 1) if position_ids is not None else None
     compiled = self.model.graph_dynamic_vbar_blocks and prefetch.malloc_graph_enabled(device)
     if compiled:
+        if (len(cache) != len(self.model.layers) or not cache
+                or any(type(kv).__name__ != "FixedKV" or
+                       not all(hasattr(kv, attr) for attr in ("position", "seqlen", "prepare", "advance", "index"))
+                       for kv in cache)):
+            raise FastUnavailable("Qwen fixed KV cache layout changed")
         if next_position is None:
             next_position = torch.full((1, 1), embeds.shape[1], device=device, dtype=torch.long)
         state = (
@@ -329,8 +390,13 @@ def prepare_qwen3vl_fast(clip, name, transformer, sync_interval=8, repeat_guard=
     if not isinstance(transformer, Qwen3VL):
         return clip
 
+    fast_compatibility(clip, transformer)
+
     device = clip.patcher.load_device
-    fixed = device.type == "cuda" and comfy_kitchen.flash_attention_decode_is_available(device)
+    fixed = (device.type == "cuda" and mm.should_use_bf16(device)
+             and comfy_kitchen.flash_attention_decode_is_available(device))
+    if fixed and transformer.model.config.head_dim not in (128, 256):
+        raise FastUnavailable("Kitchen decode requires head dimensions 128 or 256")
     patched = clip.clone()
     prefix = name + ".transformer."
     patched.patcher.add_object_patch(prefix + "model.fixed_kv", fixed)
@@ -361,6 +427,7 @@ def prepare_qwen3vl_fast(clip, name, transformer, sync_interval=8, repeat_guard=
                 fast_generate,
                 sync_interval=sync_interval,
                 repeat_guard=repeat_guard,
+                _native_generate=Qwen3VL.generate.__get__(transformer),
             ),
             transformer,
         ),
@@ -511,7 +578,7 @@ class RayFastQwen3VL:
                 "presence_penalty": (
                     "FLOAT",
                     {
-                        "default": 1.5,
+                        "default": 0.0,
                         "min": 0.0,
                         "max": 2.0,
                         "step": 0.1,
@@ -528,6 +595,10 @@ class RayFastQwen3VL:
                         ),
                     },
                 ),
+                "generation_preset": (
+                    ["custom", "anti_loop"],
+                    {"default": "custom", "tooltip": "custom uses the penalty controls (neutral defaults). anti_loop explicitly selects repetition 1.0 and presence 1.5; changes model behavior."},
+                ),
             },
         }
 
@@ -540,9 +611,13 @@ class RayFastQwen3VL:
     def infer(self, clip, prompt, max_tokens=256, temperature=0.0,
               top_p=0.9, top_k=40, seed=42, image=None, mode="fast",
               sync_interval=8, thinking=False, repetition_penalty=1.0,
-              presence_penalty=1.5, repeat_guard=True):
+              presence_penalty=0.0, repeat_guard=True, generation_preset="custom"):
         if not 1 <= sync_interval <= 32 or not 1 <= max_tokens <= 8192:
             raise ValueError("Use sync_interval 1–32 and max_tokens 1–8192.")
+        if generation_preset not in ("custom", "anti_loop"):
+            raise ValueError("Choose custom or anti_loop generation_preset.")
+        if generation_preset == "anti_loop":
+            repetition_penalty, presence_penalty = 1.0, 1.5
 
         name, encoder, transformer = qwen_model(clip)
         is_qwen3vl = isinstance(transformer, Qwen3VL)
@@ -562,10 +637,15 @@ class RayFastQwen3VL:
         # Only Qwen3-VL currently uses Ray's manual decode loop. Other Qwen
         # families retain their architecture-specific native cache/decode code.
         use_ray_fast = mode == "fast" and is_qwen3vl
+        native = clip
         if use_ray_fast:
-            native = prepare_qwen3vl_fast(
-                clip, name, transformer, sync_interval, repeat_guard
-            )
+            try:
+                native = prepare_qwen3vl_fast(
+                    clip, name, transformer, sync_interval, repeat_guard
+                )
+            except (FastUnavailable, AttributeError, TypeError) as error:
+                logging.warning("[FastQwen] Cannot initialize acceleration: %s; using native generation", error)
+                use_ray_fast = False
         else:
             native = clip
             if mode == "fast":

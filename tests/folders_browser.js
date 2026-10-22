@@ -163,7 +163,7 @@ try{
     check(document.querySelector('.rf-tooltip').textContent.includes('180 × 120'),'Releasing Shift restores dimensions and metadata');
     cat().dispatchEvent(new PointerEvent('pointerleave'));
     cat().dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));
-    check(Math.abs(document.querySelector('.rf-viewer').getBoundingClientRect().width-window.innerWidth*.75)<2,'Viewer is centered at 75% viewport width');
+    check(Math.abs(document.querySelector('.rf-viewer').getBoundingClientRect().width-window.innerWidth*.75)<=2,'Viewer is centered at 75% viewport width (including its two border pixels)');
     document.querySelector('.rf-viewer').click();check(!document.querySelector('.rf-viewer'),'Clicking the image viewer closes it');
     cat().dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:200,clientY:200}));
     await until(()=>document.querySelector('.rf-menu button:nth-child(2)')?.disabled===false);

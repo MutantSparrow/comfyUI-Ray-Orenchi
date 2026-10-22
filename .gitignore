@@ -36,3 +36,9 @@ PIXEL_ART.md
 FAST_VLM_RELIABILITY.md
 UI.md
 benchmarks/pixel_art/*.md
+!benchmarks/pixel_art/README.md
+node_modules/
+playwright-report/
+test-results/
+build/
+dist/

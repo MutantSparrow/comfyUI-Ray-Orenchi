@@ -35,14 +35,14 @@ export const RAY_HELP_DEFS = {
     },
 
     RayPixelArtDetector: {
-        summary: "Repairs enlarged or damaged pixel art, or abstracts an illustration or photo into pixel art, keeping the exact source aspect ratio.",
+        summary: "Repairs enlarged or damaged pixel art on its exact grid, or converts illustrations/photos at a requested size with rounded aspect preservation.",
         sections: [{
             heading: "Notes",
             bullets: [
                 "Use `repair_pixel_art` for existing pixel grids and `illustration_photo` for region abstraction.",
                 "`palette_strategy` builds the palette; `palette_mapping` assigns pixels to it. A connected `palette_image` overrides generated palettes (up to 256 exact colors).",
                 "Dithering is limited to smooth ramps; flat fills, texture and strong edges are protected. Start with `none`.",
-                "Exact aspect ratio can limit feasible sizes (for example 1001×667 cannot shrink exactly).",
+                "Repair preserves the exact aspect lattice, which can limit resizing. Illustration/photo fixes the long edge to the target and rounds the other dimension (1001×667 becomes 128×85 at target 128).",
             ],
         }],
     },
@@ -134,13 +134,14 @@ export const RAY_HELP_DEFS = {
 
     // ── 💬 LLM ─────────────────────────────────────────────────────────
     RayVLMFolder: {
-        summary: "Captions every image in a folder range with a local vision-language model on the GPU, returning aligned lists of captions, images and source paths.",
+        summary: "Captions every image in a folder range with a local vision-language model on the GPU, returning captions and paths with optional original-size images.",
         sections: [{
             heading: "Notes",
             bullets: [
                 "The folder icon next to **Folder of images** opens your system's folder dialog and fills in the path. You can still type or paste one.",
                 "Connect a full generative VLM `CLIP` (such as Qwen3-VL from `CLIPLoader`, type `qwen_image`) to `clip`; text-only encoders cannot caption.",
-                "Files are sorted by relative path. Use `start_index` and `limit` to process large folders in chunks; output images are held in RAM.",
+                "Files are sorted by relative path and captioned one at a time. `return_images` is off by default; enable it to decode the image output after all captioning finishes. Returned images still occupy RAM, so use `start_index` and `limit` to bound that output.",
+                "`cleanup_every` releases transient objects and unused ComfyUI VRAM caches every N captions (default 16). Low-memory cleanup also runs when available CPU RAM or VRAM falls below 512 MiB.",
                 "Supports JPEG, PNG, WebP, BMP, TIFF and GIF (first frame). Requires a GPU.",
             ],
         }],
@@ -152,6 +153,8 @@ export const RAY_HELP_DEFS = {
             heading: "Notes",
             bullets: [
                 "Load a full Qwen3-VL 4B or 8B checkpoint with CLIPLoader (type `qwen_image`, or `krea2`). The same CLIP can also feed image conditioning.",
+                "Penalty defaults are neutral: repetition 1.0, presence 0.0. Select the explicit anti_loop preset for presence 1.5, or set custom penalties. Saved custom penalty values remain effective.",
+                "Fast Qwen3-VL initialization is validated for ComfyUI 0.42.x; incompatible private APIs use native generation. Other Qwen families also use their native generator.",
                 "See FAST_VLM.md for measurements and constraints.",
             ],
         }],

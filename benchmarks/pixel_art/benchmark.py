@@ -1,4 +1,7 @@
-"""Local comparison harness. No private images or network requests."""
+"""Reconstruction benchmark for already-pixelized sources; not an artistic-quality score.
+
+Local comparison harness. No private images or network requests.
+"""
 import json, sys, time, subprocess
 from pathlib import Path
 import numpy as np

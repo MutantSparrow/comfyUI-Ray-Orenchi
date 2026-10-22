@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import torch
 import torch.nn.functional as F
-from ray_pixel_detector import (RayPixelArtDetector, exact_size, oklab,
+from ray_pixel_detector import (RayPixelArtDetector, exact_size, approximate_size, oklab,
                                 quantize, outline_image, sample_image)
 
 
@@ -20,6 +20,20 @@ class PixelArtTests(unittest.TestCase):
                 self.assertTrue(1 <= oh <= h and 1 <= ow <= w)
         self.assertEqual(exact_size(667, 1001, 128), (667, 1001))
         self.assertEqual(exact_size(768, 1024, 128), (96, 128))
+
+    def test_photo_target_honors_coprime_aspects(self):
+        for h, w in ((667, 1001), (1001, 667), (17, 31), (1, 1001)):
+            for target in (1, 32, 128, 4096):
+                oh, ow = approximate_size(h, w, target)
+                self.assertEqual(max(oh, ow), target)
+                self.assertLessEqual(abs(min(oh, ow) - min(h, w) * max(oh, ow) / max(h, w)), 1)
+        self.assertEqual(approximate_size(667, 1001, 128), (85, 128))
+        source = torch.zeros(1, 667, 1001, 3)
+        out, _ = self.node.process(source, input_kind="illustration_photo", target_resolution=128,
+                                    sampling="nearest", reduce_palette=False)
+        self.assertEqual(tuple(out.shape), (1, 85, 128, 3))
+        repair, _ = self.node.process(source, target_resolution=128, sampling="nearest", reduce_palette=False)
+        self.assertEqual(tuple(repair.shape), tuple(source.shape))
 
     def test_oklab_reference_values(self):
         np.testing.assert_allclose(oklab([[1, 0, 0]])[0], [.627955, .224863, .125846], atol=1e-5)

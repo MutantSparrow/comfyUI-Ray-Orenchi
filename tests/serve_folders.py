@@ -29,7 +29,7 @@ SCAN_DELAY = 0
 THUMBNAIL_DELAY = 0
 METRICS = {"files": [], "active": 0, "peak": 0}
 _scan = ray_folders.scan
-_resolve = folders_routes.resolve
+_resolve_media = ray_folders.resolve_media
 
 
 def stress_scan(*args, **kwargs):
@@ -41,28 +41,45 @@ def stress_scan(*args, **kwargs):
 
 
 ray_folders.scan = stress_scan
-folders_routes.resolve = lambda token, relative: _resolve(token, "gallery_000.png" if relative.startswith("__virtual_") else relative)
+ray_folders.resolve_media = lambda folder, relative, recursive: _resolve_media(folder, "gallery_000.png" if relative.startswith("__virtual_") else relative, recursive)
 
-png = PngImagePlugin.PngInfo()
-png.add_text("parameters", "A red cat\nsitting in warm light\nNegative prompt: blur\nSteps: 20")
-png.add_text("workflow", json.dumps({"nodes": [{"id": 1, "type": "CLIPTextEncode", "widgets_values": ["A red cat"]}], "links": []}))
-Image.new("RGB", (180, 120), "#d43c39").save(MEDIA / "cat.png", pnginfo=png)
-Image.new("RGB", (100, 180), "#394cd4").save(MEDIA / "dog.png")
-for index in range(80):
-    Image.new("RGB", (32, 32), (index * 3, 85, 140)).save(MEDIA / f"gallery_{index:03}.png")
-with wave.open(str(MEDIA / "sound.wav"), "wb") as audio:
-    audio.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
-    samples = (np.sin(np.arange(16000) * 2 * np.pi * 440 / 16000) * 10000).astype("<i2")
-    audio.writeframes(samples.tobytes())
-with av.open(str(MEDIA / "movie.mp4"), "w") as video:
-    stream = video.add_stream("libx264", rate=10)
-    stream.width, stream.height, stream.pix_fmt = 96, 64, "yuv420p"
-    for index in range(10):
-        frame = av.VideoFrame.from_ndarray(np.full((64, 96, 3), (60 + index * 10, 120, 160), dtype=np.uint8), format="rgb24")
-        for packet in stream.encode(frame):
+def create_media():
+    MEDIA.mkdir(exist_ok=True)
+    png = PngImagePlugin.PngInfo()
+    png.add_text("parameters", "A red cat\nsitting in warm light\nNegative prompt: blur\nSteps: 20")
+    png.add_text("workflow", json.dumps({"nodes": [{"id": 1, "type": "CLIPTextEncode", "widgets_values": ["A red cat"]}], "links": []}))
+    Image.new("RGB", (180, 120), "#d43c39").save(MEDIA / "cat.png", pnginfo=png)
+    Image.new("RGB", (100, 180), "#394cd4").save(MEDIA / "dog.png")
+    for index in range(80):
+        Image.new("RGB", (32, 32), (index * 3, 85, 140)).save(MEDIA / f"gallery_{index:03}.png")
+    with wave.open(str(MEDIA / "sound.wav"), "wb") as audio:
+        audio.setparams((1, 2, 16000, 0, "NONE", "not compressed"))
+        samples = (np.sin(np.arange(16000) * 2 * np.pi * 440 / 16000) * 10000).astype("<i2")
+        audio.writeframes(samples.tobytes())
+    with av.open(str(MEDIA / "movie.mp4"), "w") as video:
+        stream = video.add_stream("libx264", rate=10)
+        stream.width, stream.height, stream.pix_fmt = 96, 64, "yuv420p"
+        for index in range(10):
+            frame = av.VideoFrame.from_ndarray(np.full((64, 96, 3), (60 + index * 10, 120, 160), dtype=np.uint8), format="rgb24")
+            for packet in stream.encode(frame):
+                video.mux(packet)
+        for packet in stream.encode():
             video.mux(packet)
-    for packet in stream.encode():
-        video.mux(packet)
+
+
+create_media()
+
+
+@routes.post("/fixture/reset")
+async def reset(request):
+    global LARGE, SCAN_DELAY, THUMBNAIL_DELAY
+    assert MEDIA.resolve().is_relative_to(Path(TEMP.name).resolve())
+    if MEDIA.exists():
+        shutil.rmtree(MEDIA)
+    create_media()
+    LARGE, SCAN_DELAY, THUMBNAIL_DELAY = False, 0, 0
+    METRICS.update(files=[], active=0, peak=0)
+    return web.json_response({"ok": True})
 
 
 @routes.get("/fixture")

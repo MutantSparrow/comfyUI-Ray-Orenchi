@@ -366,10 +366,12 @@ def test_all_presets_exist_and_are_in_range():
 
 
 def test_neutral_settings_leave_the_image_untouched():
-    img = torch.rand((1, 24, 40, 3))
+    # Saturated red/green exceed the tape's normal V clamp. A neutral node
+    # should bypass the tape transform, rather than clip these rare pixels.
+    img = torch.tensor([[[[1., 0., 0.], [0., 1., 0.], [0., 0., 1.], [.12, .45, .78]]]])
     p = rv.VHSParams("neutral", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     out = rv.apply_vhs(img, p, p, seed=1)
-    assert torch.allclose(out, img, atol=1e-4)
+    torch.testing.assert_close(out, img, atol=0, rtol=0)
 
 
 def test_every_preset_runs_through_the_node_and_stays_in_range():

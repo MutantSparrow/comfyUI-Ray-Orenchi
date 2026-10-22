@@ -57,31 +57,24 @@ _ROUTE_MODULES = (
     "folders_routes",
 )
 
-# Tolerate standalone import (e.g. pytest collection) where relative imports
-# fail; route modules are then optional.
-try:
-    _modules = {name: importlib.import_module(f".{name}", __package__)
-                for name in _NODE_MODULES.values()}
+# Choose the import mode before importing. Dependency failures must keep their
+# original traceback, rather than retrying unrelated modules from sys.path.
+def _load_module(name):
+    return importlib.import_module(f".{name}", __package__) if __package__ else importlib.import_module(name)
+
+
+_modules = {name: _load_module(name) for name in _NODE_MODULES.values()}
+if __package__:
     for _name in _ROUTE_MODULES:
-        importlib.import_module(f".{_name}", __package__)
-except (ImportError, TypeError):
-    _modules = {name: importlib.import_module(name)
-                for name in _NODE_MODULES.values()}
-    for _name in _ROUTE_MODULES:
-        try:
-            importlib.import_module(_name)
-        except ImportError:
-            pass
+        _load_module(_name)
 
 NODE_CLASS_MAPPINGS = {
     class_name: getattr(_modules[module], class_name)
     for class_name, module in _NODE_MODULES.items()
 }
 
-try:
+if __package__:
     _modules["ray_save_image"].register_routes()
-except ImportError:
-    pass
 
 
 WEB_DIRECTORY = "./web"

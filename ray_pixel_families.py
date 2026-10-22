@@ -1,7 +1,5 @@
 """Hue-family-first palette allocation; no material labels or image-specific hues."""
 import numpy as np
-from sklearn.cluster import KMeans
-from threadpoolctl import threadpool_limits
 
 
 def family_features(rgb, cie_lab):
@@ -15,6 +13,8 @@ def family_features(rgb, cie_lab):
 
 def family_palette(rgb, count, seed, cie_lab, source_colors=False,
                    protect=True, threshold=90):
+    from sklearn.cluster import KMeans
+    from threadpoolctl import threadpool_limits
     colors, weights = np.unique(np.round(np.clip(rgb.reshape(-1, 3), 0, 1)*255).astype(np.uint8),
                                 axis=0, return_counts=True)
     colors = colors.astype(np.float32)/255

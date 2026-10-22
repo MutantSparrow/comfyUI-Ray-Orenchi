@@ -13,8 +13,10 @@ from comfy.cli_args import args
 
 try:
     from . import filename_template as names
+    from .route_security import require_local
 except ImportError:
     import filename_template as names
+    from route_security import require_local
 
 
 def destination_path(value):
@@ -126,6 +128,7 @@ def register_routes():
 
     @PromptServer.instance.routes.post("/ray/save-image/open-location")
     async def open_location(request):
+        require_local(request)
         if request.content_type != "application/json":
             return web.json_response({"error": "Expected a JSON request."}, status=415)
         try:
