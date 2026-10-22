@@ -30,7 +30,7 @@ EXTENSIONS = {
 }
 DEFAULTS = {"types": ["image", "video", "audio"], "sort": "name", "descending": False,
             "recursive": False, "columns": 4, "colors": [], "nsfw": "all", "threshold": .6,
-            "include_sexy": True, "nsfw_regions": True, "best_prompt": True, "prompt_format": "multiline"}
+            "include_sexy": True, "nsfw_regions": True, "hide_no_prompt": False, "best_prompt": True, "prompt_format": "multiline"}
 _META = OrderedDict()
 _LOCK = threading.RLock()
 _LOG = logging.getLogger(__name__)
@@ -51,6 +51,7 @@ def settings(value=None):
     result["recursive"] = result["recursive"] is True
     result["descending"] = result["descending"] is True
     result["best_prompt"] = result["best_prompt"] is not False
+    result["hide_no_prompt"] = result["hide_no_prompt"] is True
     return result
 
 
@@ -147,7 +148,7 @@ def scan(folder, options=None, name_filter=""):
            "date": lambda f: (f["modified"], f["id"]), "size": lambda f: (f["size"], f["id"])}[opts["sort"]]
     files.sort(key=key, reverse=opts["descending"])
     if str(name_filter or "").strip():
-        found = search_files(root, [item["id"] for item in files], name_filter, opts["recursive"])
+        found = search_files(root, [item["id"] for item in files], name_filter, opts["recursive"], opts["hide_no_prompt"])
         matching = set(found["matches"])
         files = [item for item in files if item["id"] in matching]
         errors.extend(found["unavailable"])
@@ -277,7 +278,7 @@ def _search_prompts(path):
         return extract_prompts(path, image)
 
 
-def search_files(root, files, query, recursive=True):
+def search_files(root, files, query, recursive=True, hide_no_prompt=False):
     """Search metadata in a caller-sized batch; cache only normalized prompt text."""
     root = folder_path(root)
     terms = _normalize(query or "").split()
@@ -293,7 +294,8 @@ def search_files(root, files, query, recursive=True):
         for relative in files:
             try:
                 path = resolve_media(root, relative, recursive)
-                if fuzzy_match(path.name, query):
+                needs_prompt = hide_no_prompt and media_kind(path) == "image"
+                if not needs_prompt and fuzzy_match(path.name, query):
                     matches.append(relative)
                     continue
                 stamp = json.dumps(_stamp(path))
@@ -312,7 +314,7 @@ def search_files(root, files, query, recursive=True):
                             db.execute("INSERT OR REPLACE INTO prompts VALUES (?, ?, ?)", (str(path), stamp, text))
                         except sqlite3.Error:
                             db.close(); db = None
-                if _prompt_matches(path.name, text, terms):
+                if (not needs_prompt or text.strip()) and _prompt_matches(path.name, text, terms):
                     matches.append(relative)
             except MEDIA_ERRORS:
                 unavailable.append(relative)
@@ -464,6 +466,8 @@ class RayFolders:
                 mm.throw_exception_if_processing_interrupted()
                 path = resolve_media(root, item["id"], opts["recursive"])
                 info = metadata(path)
+                if opts["hide_no_prompt"] and item["kind"] == "image" and not info["has_prompt"]:
+                    continue
                 if not search_match(item["name"], info["prompts"], name_filter):
                     continue
                 if item["kind"] == "image":

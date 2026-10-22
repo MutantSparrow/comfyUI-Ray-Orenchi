@@ -187,14 +187,15 @@ def test_total_counts_include_media_hidden_by_filters(media):
     assert scan["items"] == [] and scan["counts"]["image"] == 2
 
 
-def test_large_listing_never_opens_image_pixels(tmp_path, monkeypatch):
+@pytest.mark.parametrize("hide_no_prompt", [False, True])
+def test_large_listing_never_opens_image_pixels(tmp_path, monkeypatch, hide_no_prompt):
     monkeypatch.setattr(folders, "folder_path", lambda value: tmp_path)
     monkeypatch.setattr(folders.os, "walk", lambda *a, **k: iter([(str(tmp_path), [], [f"image_{i:06}.png" for i in range(100000)])]))
     monkeypatch.setattr(Path, "stat", lambda self, **kwargs: SimpleNamespace(st_size=64, st_mtime=1, st_mtime_ns=1000))
     monkeypatch.setattr(Path, "resolve", lambda self, **kwargs: self)
     monkeypatch.setattr(Path, "is_dir", lambda self: self == tmp_path)
     monkeypatch.setattr(Image, "open", lambda *a, **k: (_ for _ in ()).throw(AssertionError("Listings must not decode images")))
-    result = folders.scan(tmp_path)
+    result = folders.scan(tmp_path, {"hide_no_prompt": hide_no_prompt})
     assert result["counts"]["image"] == len(result["items"]) == 100000
     assert result["items"][0]["name"] == "image_000000.png"
     assert result["items"][-1]["name"] == "image_099999.png"
@@ -254,7 +255,8 @@ def test_search_cache_invalidation_sidecars_deletion_and_rename(tmp_path, monkey
     assert folders.search_files(tmp_path, ['../outside.png'], 'anything')['unavailable'] == ['../outside.png']
 
 
-def test_search_png_metadata_without_decoding_original_pixels(tmp_path, monkeypatch):
+@pytest.mark.parametrize("hide_no_prompt", [False, True])
+def test_search_png_metadata_without_decoding_original_pixels(tmp_path, monkeypatch, hide_no_prompt):
     info = PngImagePlugin.PngInfo()
     info.add_text('parameters', 'A turquoise ocean\nNegative prompt: noise\nSteps: 20', zip=True)
     info.add_itxt('Description', 'A café near the beach', zip=True)
@@ -269,7 +271,7 @@ def test_search_png_metadata_without_decoding_original_pixels(tmp_path, monkeypa
         return original_load(image, *args, **kwargs)
     monkeypatch.setattr(PngImagePlugin.PngImageFile, 'load', load)
     for query in ('turquoise', 'cafe', 'lighthouse', 'coral'):
-        assert folders.search_files(tmp_path, ['metadata.png'], query)['matches'] == ['metadata.png']
+        assert folders.search_files(tmp_path, ['metadata.png'], query, hide_no_prompt=hide_no_prompt)['matches'] == ['metadata.png']
 
 
 def test_prompt_search_skips_corrupt_files_and_cache_failure(media, monkeypatch):
@@ -285,3 +287,133 @@ def test_connected_prompt_filter_matches_workflow_outputs(media, monkeypatch):
     selection = json.dumps({'folder': str(media), 'files': ['dog.png', 'cat.png']})
     output = folders.RayFolders().browse(str(media), name_filter='small red', selected_files=selection)['result']
     assert len(output[0]) == 1 and [Path(p).name for p in output[-1]] == ['cat.png']
+
+
+def test_hide_images_without_prompts_defaults_off_and_requires_boolean():
+    assert not folders.settings()["hide_no_prompt"]
+    assert folders.settings('{"hide_no_prompt": true}')["hide_no_prompt"]
+    for value in (False, "true", 1, None):
+        assert not folders.settings({"hide_no_prompt": value})["hide_no_prompt"]
+
+
+def test_prompt_presence_filter_cannot_be_bypassed_by_a_filename_match(media):
+    Image.new("RGB", (5, 5)).save(media / "plain.png")
+    assert folders.search_files(media, ["plain.png"], "plain")["matches"] == ["plain.png"]
+    assert folders.search_files(media, ["plain.png"], "plain", hide_no_prompt=True)["matches"] == []
+    files = ["cat.png", "dog.png", "plain.png", "removed.png"]
+    result = folders.search_files(media, files, "", hide_no_prompt=True)
+    assert result == {"matches": ["cat.png", "dog.png"], "unavailable": ["removed.png"]}
+    assert folders.search_files(media, files, "small", hide_no_prompt=True)["matches"] == ["cat.png"]
+
+
+def test_prompt_presence_cache_updates_when_a_sidecar_is_added_or_removed(tmp_path, monkeypatch):
+    cache = tmp_path / "cache"; cache.mkdir()
+    monkeypatch.setattr(folders, "_cache_dir", lambda: cache)
+    path = tmp_path / "plain.png"; Image.new("RGB", (5, 5)).save(path)
+    matches = lambda: folders.search_files(tmp_path, ["plain.png"], "", hide_no_prompt=True)["matches"]
+    assert matches() == []
+    sidecar = path.with_suffix(".txt"); sidecar.write_text("A caption stored in a sidecar")
+    assert matches() == ["plain.png"]
+    original = folders._search_prompts
+    monkeypatch.setattr(folders, "_search_prompts", lambda path: (_ for _ in ()).throw(AssertionError("Reuse the prompt cache")))
+    assert matches() == ["plain.png"]
+    sidecar.unlink()
+    monkeypatch.setattr(folders, "_search_prompts", original)
+    assert matches() == []
+
+
+def test_hiding_promptless_images_keeps_video_and_audio_without_prompts(media):
+    (media / "movie.mp4").write_bytes(b"fixture")
+    (media / "sound.wav").write_bytes(b"fixture")
+    assert folders.search_files(media, ["movie.mp4", "sound.wav"], "", hide_no_prompt=True)["matches"] == ["movie.mp4", "sound.wav"]
+
+
+def test_hidden_promptless_images_are_excluded_from_workflow_outputs(media, monkeypatch):
+    monkeypatch.setitem(sys.modules, "comfy", SimpleNamespace(model_management=SimpleNamespace(throw_exception_if_processing_interrupted=lambda: None)))
+    monkeypatch.setitem(sys.modules, "comfy.model_management", sys.modules["comfy"].model_management)
+    Image.new("RGB", (5, 5)).save(media / "plain.png")
+    selection = json.dumps({"folder": str(media), "files": ["plain.png", "cat.png"]})
+    node = folders.RayFolders()
+    output = node.browse(str(media), selected_files=selection, settings_json='{"hide_no_prompt": true}')
+    assert len(output["result"][0]) == 1
+    assert [Path(path).name for path in output["result"][-1]] == ["cat.png"]
+    assert output["ui"]["ray_folders"][0]["counts"]["image"] == 3
+    assert len(node.browse(str(media), selected_files=selection)["result"][0]) == 2
+    only_plain = json.dumps({"folder": str(media), "files": ["plain.png"]})
+    assert node.browse(str(media), selected_files=only_plain, settings_json='{"hide_no_prompt": true}')["result"] == ([], [], [], [], [str(media)])
+
+
+@pytest.mark.parametrize("filename", ["cat.png", "movie.mp4", "sound.wav"])
+def test_delete_asset_uses_trash_for_one_asset_and_keeps_sidecars(media, monkeypatch, filename):
+    path = media / filename
+    if not path.exists():
+        path.write_bytes(b"Media asset fixture")
+    sidecar = path.with_suffix(".txt"); sidecar.write_text("Keep this caption")
+    called = []
+    monkeypatch.setattr(routes, "send2trash", called.append)
+    item = next(item for item in folders.scan(media)["items"] if item["id"] == filename)
+    token = routes.grant(media, False)
+    assert routes.delete_asset(token, filename, item["revision"]) == {"file": filename}
+    assert called == [str(path.resolve())]
+    assert sidecar.read_text() == "Keep this caption" and (media / "dog.png").is_file()
+
+
+@pytest.mark.parametrize("target", ["../outside.png", "nested/bird.png", "ignored.txt", "folder.png"])
+def test_delete_cannot_escape_the_session_or_delete_unsupported_files(media, monkeypatch, target):
+    (media / "folder.png").mkdir()
+    called = []; monkeypatch.setattr(routes, "send2trash", called.append)
+    with pytest.raises((OSError, ValueError)):
+        routes.delete_asset(routes.grant(media, False), target, "unused")
+    assert called == [] and (media / "cat.png").is_file()
+
+
+def test_delete_rejects_absolute_paths_and_expired_sessions(media, monkeypatch):
+    called = []; monkeypatch.setattr(routes, "send2trash", called.append)
+    token = routes.grant(media, False)
+    with pytest.raises(ValueError):
+        routes.delete_asset(token, str(media / "cat.png"), "unused")
+    monkeypatch.setattr(routes.time, "monotonic", lambda: 10**20)
+    with pytest.raises(ValueError, match="expired"):
+        routes.delete_asset(token, "cat.png", "unused")
+    assert called == []
+
+
+def test_delete_rejects_replaced_or_missing_images(media, monkeypatch):
+    called = []; monkeypatch.setattr(routes, "send2trash", called.append)
+    item = folders.scan(media)["items"][0]
+    token = routes.grant(media, False)
+    picture(media / item["id"], (100, 80), "A replacement image")
+    with pytest.raises(ValueError, match="changed"):
+        routes.delete_asset(token, item["id"], item["revision"])
+    (media / item["id"]).unlink()
+    with pytest.raises(FileNotFoundError):
+        routes.delete_asset(token, item["id"], item["revision"])
+    assert called == []
+
+
+def test_delete_failure_keeps_the_original_file(media, monkeypatch):
+    item = folders.scan(media)["items"][0]
+    token = routes.grant(media, False)
+    def denied(path):
+        raise PermissionError("Drive is read-only")
+    monkeypatch.setattr(routes, "send2trash", denied)
+    with pytest.raises(PermissionError, match="read-only"):
+        routes.delete_asset(token, item["id"], item["revision"])
+    assert (media / item["id"]).is_file()
+    monkeypatch.setattr(routes, "send2trash", None)
+    with pytest.raises(RuntimeError, match="Recycle Bin support"):
+        routes.delete_asset(token, item["id"], item["revision"])
+    assert (media / item["id"]).is_file()
+
+
+def test_delete_refuses_image_symlinks(media, monkeypatch):
+    link = media / "link.png"
+    try:
+        link.symlink_to(media / "cat.png")
+    except OSError:
+        pytest.skip("Symbolic links are unavailable on this Windows installation")
+    called = []; monkeypatch.setattr(routes, "send2trash", called.append)
+    item = next(item for item in folders.scan(media)["items"] if item["id"] == "link.png")
+    with pytest.raises(ValueError, match="links"):
+        routes.delete_asset(routes.grant(media, False), "link.png", item["revision"])
+    assert called == [] and (media / "cat.png").is_file()

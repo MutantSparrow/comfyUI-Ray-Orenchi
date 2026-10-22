@@ -49,6 +49,7 @@ export function settingsPopup(current,commit,anchor) {
     check("Check image regions · slower, stricter","nsfw_regions");
     const nsfwNote=document.createElement("p");nsfwNote.textContent="Lower thresholds hide more files and can hide safe images too. Region checks analyze the full thumbnail plus five overlapping crops; their highest NSFW score is used. The model can still miss content. Changes take effect after Apply.";panel.append(nsfwNote);
     const note=document.createElement("p");note.textContent="Color and NSFW filters analyze images and video posters locally. Audio is controlled by the media filter. Results are cached; changing the threshold does not rerun the model.";panel.append(note);
+    check("Hide images without prompts","hide_no_prompt");
     check("Best matching prompt only","best_prompt");
     select("Prompt format","prompt_format",[["single","Single line"],["multiline","Multiline"]]);
     const actions=document.createElement("div");actions.className="rf-actions";
