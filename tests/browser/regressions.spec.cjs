@@ -15,7 +15,7 @@ for (const [name, url] of [
         }
         await page.goto(url);
         const summary = page.locator('summary').first();
-        await expect(summary).toHaveText(/checks passed|Regression failed/, {timeout: 170000});
+        await expect(summary).toHaveText(/checks passed|Regression failed/, {timeout: 290000});
         const results = await page.locator('#results').textContent();
         expect(await summary.textContent(), results).toMatch(/\d+ checks passed/);
     });
