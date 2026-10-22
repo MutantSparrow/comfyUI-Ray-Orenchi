@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const source=await readFile(new URL('../web/folders_filters.js',import.meta.url),'utf8');
-const {options,nsfwScore,analysisScore,matchesAnalysis}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const {options,nsfwScore,analysisScore,matchesAnalysis,fuzzyMatch,searchFilenames}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 
 const predictions=(drawing,neutral,porn,hentai,sexy)=>[
     {className:'Drawing',probability:drawing},{className:'Neutral',probability:neutral},
@@ -33,4 +33,21 @@ for(const invalid of [undefined,[],[{className:'Porn',probability:NaN}],predicti
 assert.equal(matchesAnalysis(item,opts,{...base,region_scores:{explicit:NaN,inclusive:NaN}}),false);
 assert.equal(matchesAnalysis(item,{...opts,nsfw:'all'},undefined),true);
 assert.equal(matchesAnalysis({kind:'audio'},opts,undefined),true);
-console.log('NSFW filter regression checks passed');
+for(const [name,query,expected] of [
+    ['Red_Cat_01.png','red cat',true],['Red_Cat_01.png','rdct',true],['Cat portrait.png','catt',true],
+    ['Bär im Wald.png','bar wld',true],['cat.png','zzzz',false],['cat.png','',true],['dog.png','cat',false],
+    ['a'.repeat(200)+'.png','xyz',false],['00001.png','a very long prompt pasted into search',false],
+])assert.equal(fuzzyMatch(name,query),expected,`${name} / ${query}`);
+const many=Array.from({length:100000},(_,i)=>({id:String(i),name:`render_${i}_a_long_camera_description_and_model_name.png`}));
+let ticks=0;const heartbeat=setInterval(()=>ticks++,0),controller=new AbortController();
+try {
+    const start=performance.now(),pending=searchFilenames(many,'mountain sunset',controller.signal);
+    assert.ok(performance.now()-start<100,'Starting a six-figure filename search must yield promptly');
+    const result=await pending;
+    assert.equal(result.matches.length,0);assert.equal(result.remaining.length,100000);
+    assert.ok(ticks>1,'Keyboard and paint timers must run during filename matching');
+} finally {clearInterval(heartbeat);}
+const canceled=new AbortController(),pending=searchFilenames(many,'portrait',canceled.signal);
+setTimeout(()=>canceled.abort(),0);
+await assert.rejects(pending,{name:'AbortError'},'Superseded queries must stop between small chunks');
+console.log('Folder search responsiveness, cancellation, fuzzy matching and NSFW checks passed');

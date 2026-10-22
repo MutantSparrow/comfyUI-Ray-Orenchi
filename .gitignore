@@ -31,6 +31,7 @@ desktop.ini
 civitai.secret
 
 # Local working docs (kept on disk for reference, not published)
+FOLDERS.md
 PIXEL_ART.md
 FAST_VLM_RELIABILITY.md
 UI.md

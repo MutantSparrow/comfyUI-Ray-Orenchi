@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import logging
 import os
 import re
+import sqlite3
 import tempfile
 import threading
 import unicodedata
+import zlib
 from collections import OrderedDict
 from pathlib import Path
 
@@ -128,7 +131,7 @@ def scan(folder, options=None, name_filter=""):
                     continue
                 stat = path.stat()
                 counts[kind] += 1
-                if kind not in opts["types"] or not fuzzy_match(name, name_filter):
+                if kind not in opts["types"]:
                     continue
                 relative = path.relative_to(root).as_posix()
                 files.append({"id": relative, "name": name, "kind": kind, "size": stat.st_size,
@@ -143,19 +146,25 @@ def scan(folder, options=None, name_filter=""):
     key = {"name": lambda f: (f["name"].lower(), f["id"]),
            "date": lambda f: (f["modified"], f["id"]), "size": lambda f: (f["size"], f["id"])}[opts["sort"]]
     files.sort(key=key, reverse=opts["descending"])
+    if str(name_filter or "").strip():
+        found = search_files(root, [item["id"] for item in files], name_filter, opts["recursive"])
+        matching = set(found["matches"])
+        files = [item for item in files if item["id"] in matching]
+        errors.extend(found["unavailable"])
     return {"folder": str(root), "items": files, "name_filter": str(name_filter or ""), "counts": counts,
             "warnings": [f"{len(errors)} files or folders could not be read."] if errors else []}
 
 
 def _stamp(path):
     stat = path.stat()
-    sidecar = path.with_suffix(".txt")
-    try:
-        side = sidecar.stat()
-        side_stamp = (side.st_mtime_ns, side.st_size)
-    except OSError:
-        side_stamp = None
-    return (str(path), stat.st_mtime_ns, stat.st_size, side_stamp)
+    sides = []
+    for sidecar in (path.with_suffix(path.suffix + ".txt"), path.with_suffix(".txt")):
+        try:
+            side = sidecar.stat()
+            sides.append((side.st_mtime_ns, side.st_size))
+        except OSError:
+            sides.append(None)
+    return (str(path), stat.st_mtime_ns, stat.st_size, *sides)
 
 
 def _workflow(value):
@@ -173,6 +182,15 @@ def metadata(path):
         if key in _META:
             _META.move_to_end(key)
             return dict(_META[key])
+    result = _read_metadata(path)
+    with _LOCK:
+        _META[key] = dict(result)
+        while len(_META) > 2048:
+            _META.popitem(last=False)
+    return result
+
+
+def _read_metadata(path):
     result = {"width": None, "height": None, "duration": None, "prompts": [], "workflow": None}
     if media_kind(path) == "image":
         with Image.open(path) as image:
@@ -200,11 +218,115 @@ def metadata(path):
             if sidecar.is_file():
                 result["prompts"] = _clean_candidates([sidecar.read_text(encoding="utf-8-sig", errors="replace")])
     result["has_prompt"] = bool(result["prompts"])
-    with _LOCK:
-        _META[key] = dict(result)
-        while len(_META) > 2048:
-            _META.popitem(last=False)
     return result
+
+
+def _prompt_matches(name, text, terms):
+    words = None
+    for term in terms:
+        if fuzzy_match(name, term) or term in text:
+            continue
+        if len(term) < 3:
+            return False
+        if words is None:
+            words = set(re.findall(r"\w+", text))
+        limit = max(1, len(term) // 4)
+        if not any(abs(len(term) - len(word)) <= limit and _distance(term, word) <= limit for word in words):
+            return False
+    return True
+
+
+def search_match(name, prompts, query):
+    return _prompt_matches(name, _normalize(" ".join(prompts)), _normalize(query or "").split())
+
+
+def _png_chunk(kind, data):
+    return len(data).to_bytes(4, "big") + kind + data + zlib.crc32(kind + data).to_bytes(4, "big")
+
+
+def _search_prompts(path):
+    if path.suffix.lower() != ".png":
+        return _read_metadata(path)["prompts"]
+    # Pillow's PNG getexif() loads the original pixels, even without EXIF. Copy
+    # metadata chunks onto a 1px PNG instead, seeking past all compressed pixels.
+    chunks, total = [], 0
+    with path.open("rb") as source:
+        if source.read(8) != b"\x89PNG\r\n\x1a\n":
+            raise ValueError("Invalid PNG header")
+        while True:
+            header = source.read(8)
+            if len(header) != 8:
+                raise ValueError("Incomplete PNG metadata")
+            size, kind = int.from_bytes(header[:4], "big"), header[4:]
+            if kind == b"IEND":
+                break
+            if kind in (b"tEXt", b"zTXt", b"iTXt", b"eXIf"):
+                total += size
+                if total > 64 * 1024 * 1024:
+                    raise ValueError("PNG metadata exceeds the search limit")
+                data = source.read(size + 4)
+                if len(data) != size + 4:
+                    raise ValueError("Incomplete PNG metadata")
+                chunks.append(header + data)
+            else:
+                source.seek(size + 4, 1)
+    header = _png_chunk(b"IHDR", b"\0\0\0\1\0\0\0\1\x08\x02\0\0\0")
+    pixels = _png_chunk(b"IDAT", zlib.compress(b"\0\0\0\0"))
+    data = b"\x89PNG\r\n\x1a\n" + header + b"".join(chunks) + pixels + _png_chunk(b"IEND", b"")
+    with Image.open(io.BytesIO(data)) as image:
+        return extract_prompts(path, image)
+
+
+def search_files(root, files, query, recursive=True):
+    """Search metadata in a caller-sized batch; cache only normalized prompt text."""
+    root = folder_path(root)
+    terms = _normalize(query or "").split()
+    matches, unavailable, db = [], [], None
+    try:
+        try:
+            db = sqlite3.connect(_cache_dir() / "prompts-v1.sqlite3", timeout=1)
+            db.execute("CREATE TABLE IF NOT EXISTS prompts (path TEXT PRIMARY KEY, stamp TEXT NOT NULL, text TEXT NOT NULL)")
+        except (OSError, sqlite3.Error):
+            if db is not None:
+                db.close()
+            db = None
+        for relative in files:
+            try:
+                path = resolve_media(root, relative, recursive)
+                if fuzzy_match(path.name, query):
+                    matches.append(relative)
+                    continue
+                stamp = json.dumps(_stamp(path))
+                text = None
+                if db is not None:
+                    try:
+                        row = db.execute("SELECT stamp, text FROM prompts WHERE path = ?", (str(path),)).fetchone()
+                        if row and row[0] == stamp:
+                            text = row[1]
+                    except sqlite3.Error:
+                        db.close(); db = None
+                if text is None:
+                    text = _normalize(" ".join(_search_prompts(path)))
+                    if db is not None:
+                        try:
+                            db.execute("INSERT OR REPLACE INTO prompts VALUES (?, ?, ?)", (str(path), stamp, text))
+                        except sqlite3.Error:
+                            db.close(); db = None
+                if _prompt_matches(path.name, text, terms):
+                    matches.append(relative)
+            except MEDIA_ERRORS:
+                unavailable.append(relative)
+        if not root.is_dir():
+            raise OSError("The folder is no longer available. Check its drive, then refresh.")
+    finally:
+        if db is not None:
+            try:
+                db.commit()
+            except sqlite3.Error:
+                pass
+            finally:
+                db.close()
+    return {"matches": matches, "unavailable": unavailable}
 
 
 def prompt_text(info, options=None):
@@ -298,7 +420,7 @@ class RayFolders:
     def INPUT_TYPES(cls):
         return {"required": {
             "folder": ("STRING", {"default": "", "tooltip": "Browse or connect an absolute folder path."}),
-            "name_filter": ("STRING", {"default": "", "tooltip": "Fuzzy filename search; words are matched together."}),
+            "name_filter": ("STRING", {"default": "", "tooltip": "Fuzzy filename and prompt search; all words must match."}),
         }, "optional": {
             "selected_files": ("STRING", {"default": "{}"}),
             "settings_json": ("STRING", {"default": "{}"}),
@@ -324,7 +446,8 @@ class RayFolders:
             return {"ui": {"ray_folders": [{"folder": "", "items": [], "name_filter": name_filter}]},
                     "result": ([], [], [], [], [""])}
         try:
-            listing = scan(folder, opts, name_filter)
+            listing = scan(folder, opts)
+            listing["name_filter"] = str(name_filter or "")
         except (OSError, ValueError) as error:
             listing = {"folder": str(folder), "items": [], "name_filter": name_filter,
                        "counts": {"image": 0, "video": 0, "audio": 0},
@@ -341,6 +464,8 @@ class RayFolders:
                 mm.throw_exception_if_processing_interrupted()
                 path = resolve_media(root, item["id"], opts["recursive"])
                 info = metadata(path)
+                if not search_match(item["name"], info["prompts"], name_filter):
+                    continue
                 if item["kind"] == "image":
                     import torch
                     with Image.open(path) as image:

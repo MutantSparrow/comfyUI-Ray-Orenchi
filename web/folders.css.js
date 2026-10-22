@@ -3,7 +3,11 @@ export function styles() {
     const style=document.createElement("style");style.id="ray-folders-style";
     style.textContent=`
 .dom-widget:has(> .ray-folders){pointer-events:none!important}
-.ray-folders{box-sizing:border-box;position:relative;width:100%;min-width:0;height:100%;display:flex;flex-direction:column;gap:6px;padding:6px;background:#000;color:#eee;font:12px system-ui;color-scheme:dark;overflow:hidden;pointer-events:none;border-radius:8px}
+.ray-folders{box-sizing:border-box;position:relative;width:100%;min-width:0;min-height:0;height:100%;contain:size layout;display:flex;flex-direction:column;gap:6px;padding:6px;color:#eee;font:12px system-ui;color-scheme:dark;overflow:hidden;pointer-events:none;border-radius:8px}
+.rf-controls{display:flex;flex-direction:column;gap:6px;min-width:0;min-height:100px;padding-right:92px;flex-shrink:0}
+.lg-node:has(.ray-folders) [data-testid^="node-body-"]{position:relative}
+.lg-node:has(.ray-folders) [data-testid^="node-body-"]>:has(>div>.lg-slot--output){position:absolute;top:4px;left:0;right:0;z-index:2;pointer-events:none}
+.lg-node:has(.ray-folders) .lg-slot{pointer-events:auto}
 .ray-folders *,.rf-settings *{box-sizing:border-box}
 .ray-folders button,.ray-folders input,.rf-backdrop button,.rf-backdrop select,.rf-backdrop input{font:inherit;color:inherit;color-scheme:dark}
 .ray-folders button,.rf-backdrop button{background:#171717;border:1px solid #383838;border-radius:5px;cursor:pointer;pointer-events:auto}

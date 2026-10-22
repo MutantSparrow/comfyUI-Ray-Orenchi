@@ -65,6 +65,23 @@ if PromptServer is not None and getattr(PromptServer, "instance", None) is not N
         except folders.MEDIA_ERRORS + (TypeError,) as error:
             return web.json_response({"error": str(error)}, status=400)
 
+    @PromptServer.instance.routes.post("/ray/folders/search")
+    async def search(request):
+        try:
+            data = await request.json()
+            if not isinstance(data, dict) or not isinstance(data.get("query"), str):
+                raise ValueError("Expected a filename/prompt search query.")
+            files = data.get("files")
+            if not isinstance(files, list) or len(files) > 128 or not all(isinstance(item, str) for item in files):
+                raise ValueError("Expected a batch of at most 128 relative file paths.")
+            root = _ROOTS.get(data.get("root", ""))
+            if not root or time.monotonic() - root[2] > 24 * 3600:
+                raise ValueError("This folder session has expired. Refresh the gallery.")
+            result = await work(folders.search_files, root[0], files, data["query"], root[1])
+            return web.json_response(result)
+        except folders.MEDIA_ERRORS + (TypeError,) as error:
+            return web.json_response({"error": str(error)}, status=400)
+
     @PromptServer.instance.routes.get("/ray/folders/thumbnail")
     async def thumbnail(request):
         try:

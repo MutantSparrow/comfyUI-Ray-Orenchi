@@ -56,8 +56,6 @@ the browser. After updating the pack, restart again so new and changed nodes loa
 
 [NODES.md](NODES.md) is the node-by-node reference for inputs, outputs and behavior.
 
-[FOLDERS.md](FOLDERS.md) covers the media gallery, selection, filtering and outputs.
-
 ## License
 
 Apache License 2.0, see [LICENSE](LICENSE). The vendored Pixel Art Fixer grid detector is

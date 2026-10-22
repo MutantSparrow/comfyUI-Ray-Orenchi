@@ -36,6 +36,38 @@ try{
     await loading({});
     const host=document.querySelector('#gallery'),layoutSettings=node.widgets.find(w=>w.name==='settings_json');
     const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const scrollView=root.querySelector('.rf-viewport');let forwarded=0;
+    const canvasWheel=()=>forwarded++;host.addEventListener('wheel',canvasWheel,{capture:true});
+    const wheel=(target,options={})=>{const event=new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:120,...options});target.dispatchEvent(event);return event;};
+    check(wheel(root.querySelector('.rf-tile img')).defaultPrevented&&scrollView.scrollTop===120&&forwarded===0,'Plain wheel over an unfocused thumbnail scrolls before Nodes 2.0 ancestor capture');
+    scrollView.scrollTop=0;
+    check(wheel(scrollView,{deltaY:-120}).defaultPrevented&&forwarded===0&&scrollView.scrollTop===0,'Wheel at a gallery boundary cannot leak into canvas zoom');
+    wheel(scrollView,{deltaY:3,deltaMode:1});
+    check(scrollView.scrollTop===48,'Line-based mouse wheels use CSS-pixel scrolling');
+    wheel(scrollView,{ctrlKey:true});wheel(scrollView,{metaKey:true});
+    window.dispatchEvent(new KeyboardEvent('keydown',{key:' ',code:'Space'}));wheel(scrollView);window.dispatchEvent(new KeyboardEvent('keyup',{key:' ',code:'Space'}));
+    check(forwarded===3,'Ctrl/Cmd wheel and Space navigation reach the canvas');
+    wheel(host);check(forwarded===4,'Wheel events outside the gallery remain untouched');
+    host.removeEventListener('wheel',canvasWheel,{capture:true});scrollView.scrollTop=0;await frame();
+    // Nodes 2.0 supplies a minimum node height, with auto-sized nested flex/grid
+    // widget hosts. Content must not increase that minimum to the full file list.
+    const vueBody=document.createElement('div'),vueGrid=document.createElement('div'),vueWidget=document.createElement('div');
+    const slots=document.createElement('div'),outputs=document.createElement('div');
+    slots.style.cssText='display:flex;justify-content:space-between';outputs.style.cssText='margin-left:auto;display:flex;flex-direction:column';
+    for(const name of ['images','videos','audio','prompt','paths']){const slot=document.createElement('div');slot.className='lg-slot lg-slot--output';slot.style.cssText='height:20px;text-align:right';slot.textContent=name;outputs.append(slot);}
+    slots.append(outputs);vueBody.setAttribute('data-testid','node-body-fixture');host.classList.add('lg-node');
+    vueBody.style.cssText='display:flex;flex:1;flex-direction:column';
+    vueGrid.style.cssText='display:grid;grid-template-rows:auto;flex:1';
+    vueWidget.style.cssText='display:flex;flex-direction:column';root.style.flex='1';
+    host.style.cssText='width:540px;min-height:620px;display:flex;flex-direction:column';
+    vueWidget.append(root);vueGrid.append(vueWidget);vueBody.append(slots,vueGrid);host.append(vueBody);await frame();
+    check(root.clientHeight<=620&&root.querySelector('.rf-viewport').clientHeight<620&&controls().length<82,'Nodes 2.0 auto-sized flex/grid hosts keep the gallery bounded and virtualized');
+    const folderBox=root.querySelector('.rf-row').getBoundingClientRect(),outputBox=outputs.getBoundingClientRect();
+    check(Math.abs(folderBox.top-outputBox.top)<12&&folderBox.right<outputBox.left,'Nodes 2.0 controls and native outputs share a top row without overlap');
+    check(node.widgets_start_y===0&&getComputedStyle(root).backgroundColor==='rgba(0, 0, 0, 0)','Legacy widgets start beside output sockets and leave canvas labels visible');
+    host.style.minHeight='780px';await frame();
+    check(root.clientHeight===780&&controls().length<82,'Nodes 2.0 resizing expands the viewport without expanding to every file');
+    host.append(root);vueBody.remove();host.classList.remove('lg-node');root.style.removeProperty('flex');host.style.cssText='width:540px;height:620px';await frame();
     for(const columns of [2,3,4,5,6,7])for(const width of [280,320,399.5,400,459.25,540,760.75,980]) {
         host.style.width=width+'px';layoutSettings.value=JSON.stringify({columns});node._rayFolders.sync();await frame();
         const view=root.querySelector('.rf-viewport'),style=getComputedStyle(view);
@@ -73,9 +105,21 @@ try{
     check(selected(node).length===2,'Ctrl-click adds a second image');
     root.querySelector('[data-file="dog.png"]').dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}));
     check(selected(node).length===1,'Ctrl-click removes one selected file');
-    const filter=root.querySelector('[aria-label="Filename filter"]');filter.value='catt';filter.dispatchEvent(new Event('input'));
+    const filter=root.querySelector('[aria-label="Filename or prompt filter"]');filter.value='catt';filter.dispatchEvent(new Event('input'));
+    await until(()=>controls().length===1&&!!cat());
     check(controls().length===1&&!!cat(),'Fuzzy filter tolerates a small filename typo');
     check(root.querySelector('.rf-total').textContent.includes('82 images'),'Total image count remains independent of filtering');
+    filter.value='werm light';filter.dispatchEvent(new Event('input'));
+    await until(()=>controls().length===1&&ready(cat())&&!root.querySelector('.rf-status').classList.contains('rf-busy'));
+    check(!!cat(),'Fuzzy prompt search finds metadata-only words and tolerates a typo');
+    check(selected(node).includes('cat.png'),'A selected prompt match survives asynchronous metadata search');
+    filter.value='cat light';filter.dispatchEvent(new Event('input'));
+    await until(()=>controls().length===1&&ready(cat())&&!root.querySelector('.rf-status').classList.contains('rf-busy'));
+    check(!!cat(),'Search terms can match across filename and prompt');
+    filter.value='warm light';filter.dispatchEvent(new Event('input'));
+    filter.value='dog';filter.dispatchEvent(new Event('input'));
+    await until(()=>controls().length===1&&root.querySelector('[data-file="dog.png"]')?.dataset.state==='ready'&&!root.querySelector('.rf-status').classList.contains('rf-busy'));
+    check(!cat(),'Changing the query cancels obsolete prompt results');
     filter.value='';filter.dispatchEvent(new Event('input'));
     await until(()=>ready(cat()));
     cat().dispatchEvent(new PointerEvent('pointerenter',{clientX:100,clientY:200}));
@@ -138,7 +182,20 @@ try{
 
     await fetch('/fixture/large',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"enabled":true}'});
     node._rayFolders.refresh();await until(()=>root.querySelector('.rf-total').textContent.includes('100,082'),20000);
+    vueWidget.append(root);host.append(vueBody);host.classList.add('lg-node');root.style.flex='1';host.style.cssText='width:400px;min-height:620px;display:flex;flex-direction:column';await frame();
+    check(root.clientHeight<=620&&root.querySelector('.rf-viewport').clientHeight<620,'Nodes 2.0 layout remains bounded with 100,000 additional files');
     check(controls().length<140,'100,000 additional files still mount fewer than 140 tiles');
+    let inputTicks=0,sawProgress=false;
+    const progressObserver=new MutationObserver(()=>{if(/names [1-9]/.test(root.querySelector('.rf-status').textContent))sawProgress=true;});
+    progressObserver.observe(root.querySelector('.rf-status'),{childList:true,subtree:true,characterData:true});
+    const heartbeat=setInterval(()=>inputTicks++,0),inputStart=performance.now();
+    filter.value='a mountain sunset';filter.dispatchEvent(new Event('input'));
+    check(performance.now()-inputStart<100,'Typing a filter on 100,000 files returns promptly to the input event loop');
+    await until(()=>sawProgress);
+    check(inputTicks>1,'The UI event loop stays responsive during filename search');clearInterval(heartbeat);progressObserver.disconnect();
+    filter.value='';filter.dispatchEvent(new Event('input'));
+    await until(()=>[...controls()].every(ready));
+    check(filter.value===''&&!root.querySelector('.rf-status').textContent.includes('names'),'Clearing the filter cancels an in-progress large search');
     const viewport=root.querySelector('.rf-viewport');viewport.scrollTop=viewport.scrollHeight;viewport.dispatchEvent(new Event('scroll'));
     check(controls().length<140&&root.querySelector('[data-file="__virtual_099999.png"]'),'Virtualized scrolling reaches the end of a 100,000-file listing');
     await until(()=>[...controls()].every(ready),20000);
@@ -162,20 +219,21 @@ try{
     const rejectedRequests=(await metrics()).files.length;
     await new Promise(resolve=>setTimeout(resolve,250));
     check((await metrics()).files.length===rejectedRequests&&rejectedRequests<140,'A filter rejecting the entire window pauses instead of scanning all offscreen files');
+    const analyzedBefore=Number(root.querySelector('.rf-status').textContent.match(/(\d+) analyzed/)?.[1]||0);
     root.querySelector('.rf-more').click();
-    await until(()=>!root.querySelector('.rf-more').hidden&&root.querySelector('.rf-viewport').getAttribute('aria-busy')==='false'&&(root.querySelector('.rf-status').textContent.match(/(\d+) analyzed/)?.[1]||0)>100,20000);
-    check((await metrics()).files.length>rejectedRequests,'Load more explicitly checks the next window of filtered files');
+    await until(()=>!root.querySelector('.rf-more').hidden&&root.querySelector('.rf-viewport').getAttribute('aria-busy')==='false'&&Number(root.querySelector('.rf-status').textContent.match(/(\d+) analyzed/)?.[1]||0)>analyzedBefore,30000);
+    check(Number(root.querySelector('.rf-status').textContent.match(/(\d+) analyzed/)?.[1]||0)>analyzedBefore,'Load more explicitly checks the next window of filtered files, including cached analysis');
     settingsWidget.value=previousSettings;node._rayFolders.sync();await loading({});
     for(const fraction of [.1,.2,.3,.4,.5,.6]) {
         viewport.scrollTop=viewport.scrollHeight*fraction;viewport.dispatchEvent(new Event('scroll'));
-        await until(()=>[...controls()].every(ready));
+        await until(()=>[...controls()].every(ready),30000);
     }
     check(liveURLs.size<=Math.max(128,controls().length),'Scrolling through many pages keeps thumbnail memory bounded');
     await fetch('/fixture/large',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"enabled":false}'});
     viewport.scrollTop=0;node._rayFolders.refresh();await until(()=>root.querySelector('.rf-total').textContent.startsWith('82 images'));
 
     await fetch('/fixture/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-    node._rayFolders.refresh();await until(()=>!cat());
+    node._rayFolders.refresh();await until(()=>!cat()&&root.querySelector('.rf-total').textContent.startsWith('81 images'));
     check(!selected(node).includes('cat.png'),'An externally removed file is removed from selection');
     await fetch('/fixture/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"folder":true}'});
     node._rayFolders.refresh();await until(()=>root.querySelector('.rf-status').textContent.includes('Folder unavailable'));
