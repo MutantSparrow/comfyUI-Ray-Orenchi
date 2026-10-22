@@ -10,12 +10,15 @@ spec.loader.exec_module(release)
 SHA = "a" * 40
 
 
-def setup_release(monkeypatch, runs, node=None):
+def setup_release(monkeypatch, runs, node=None, versions=None):
     monkeypatch.setattr(release.subprocess, "check_output", lambda *args, **kwargs: SHA)
     def get(url, token=None, allow_missing=False):
         if url.startswith("https://api.github.com/"):
             assert token == "github-credential"
             return {"workflow_runs": runs}
+        if url == "https://api.comfy.org/nodes/ray-orenchi/versions":
+            assert token is None
+            return versions if versions is not None else [node["latest_version"]] if node.get("latest_version") else []
         assert url == "https://api.comfy.org/nodes/ray-orenchi"
         assert token is None and allow_missing
         return node
@@ -59,6 +62,12 @@ def test_other_publishers_package_is_rejected(monkeypatch):
     setup_release(monkeypatch, [run()], {"publisher": {"id": "someone-else"}, "latest_version": {"version": "1.0.0"}})
     with pytest.raises(RuntimeError, match="different publisher"):
         release.preflight(ROOT, SHA, "github-credential")
+
+
+def test_pending_version_is_not_uploaded_again_before_catalog_processing(monkeypatch):
+    setup_release(monkeypatch, [run()], {"publisher": {"id": "ray"}, "latest_version": None},
+                  versions=[{"version": "1.0.0", "status": "NodeVersionStatusPending"}])
+    assert release.preflight(ROOT, SHA, "github-credential") == ("ray-orenchi", "1.0.0", False)
 
 
 def test_registry_errors_do_not_silently_allow_a_release(monkeypatch):
