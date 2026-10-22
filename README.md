@@ -44,14 +44,6 @@ The supported test matrix is Python **3.11–3.13**, ComfyUI **0.42.0+**, with
 CI targeting stable **0.42.4** and current `master`. Torch/CUDA and the model runtime
 are owned by ComfyUI; the pack does not install or upgrade Torch.
 
-`requirements.txt` installs all features. For a smaller clone install, use
-`requirements-core.txt`, then add `requirements-media.txt` for video/audio metadata
-and posters and `requirements-pixel.txt` for Pixel Art analysis. These imports are
-deferred until those features run. Registry metadata installs the complete feature
-set under publisher **ray**, package **ray-orenchi**; workflow node IDs are unchanged.
-See [Comfy's publishing instructions](https://docs.comfy.org/registry/publishing)
-when preparing a Registry release. Adding metadata does not publish a release.
-
 ## Good to know
 
 - **Fast Qwen3-VL Infer** needs a full native Qwen3-VL 4B or 8B checkpoint loaded with
