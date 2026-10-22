@@ -71,5 +71,20 @@ Builds also support a conventional `ray_orenchi` wheel for packaging validation.
 ComfyUI loads Registry/cloned custom-node directories; installing a wheel alone is
 not a replacement for that discovery mechanism. Stable workflow IDs remain fixed.
 
-Publishing is a separate manual release step using Comfy CLI and the publisher's
-Registry credentials; no workflow automatically publishes this package.
+## Registry publishing
+
+The **Publish to Comfy Registry** workflow runs after **Tests** passes on a push to
+`main`. It checks out that exact tested commit and publishes its `pyproject.toml`
+version if the Registry has not received it yet. Bump the version and push to
+`main` to release an update. Existing versions are skipped; older versions are
+rejected. Workflow node IDs remain unchanged.
+
+The publishing credential is the encrypted repository Actions secret
+`REGISTRY_ACCESS_TOKEN`, belonging to publisher `ray`. Never put the token in
+`pyproject.toml`, workflow source, shell commands or committed files. The pinned
+Comfy CLI reads it through the release runner's environment, with telemetry disabled.
+Only the publishing step receives the Registry secret; CI and pull requests do not.
+
+You can also run **Publish to Comfy Registry** manually from GitHub Actions on
+`main`. Manual runs still require a successful Tests run for the exact selected
+commit. A failed, pending or unrelated CI result blocks publication.

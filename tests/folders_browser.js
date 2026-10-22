@@ -4,7 +4,7 @@ import '/extensions/ray/ray_folders.js';
 import {fuzzyMatch,colorSignature} from '/extensions/ray/folders_filters.js';
 let passes=0;
 const check=(condition,message)=>{if(!condition)throw new Error(message);passes++;document.querySelector('#results').textContent+='PASS '+message+'\n';};
-async function until(predicate,timeout=10000){const start=performance.now();while(!predicate()){if(performance.now()-start>timeout)throw new Error('Timed out waiting for browser state');await new Promise(resolve=>setTimeout(resolve,30));}}
+async function until(predicate,timeout=10000){const start=performance.now();while(!predicate()){if(performance.now()-start>timeout){const states=[...document.querySelectorAll('.rf-tile')].reduce((counts,tile)=>{const state=tile.dataset.state;counts[state]=(counts[state]||0)+1;return counts;},{});throw new Error('Timed out waiting for browser state: '+JSON.stringify(states)+'; '+document.querySelector('.rf-status')?.textContent);}await new Promise(resolve=>setTimeout(resolve,30));}}
 const controls=()=>document.querySelectorAll('.rf-tile');
 const selected=node=>JSON.parse(node.widgets.find(w=>w.name==='selected_files').value).files;
 const metrics=()=>fetch('/fixture/metrics').then(r=>r.json());
@@ -242,7 +242,9 @@ try{
     await loading({reset:true,thumbnail_delay:.05});
     settingsWidget.value=JSON.stringify({...JSON.parse(previousSettings),nsfw:'safe',threshold:.99,nsfw_regions:false});node._rayFolders.sync();
     check([...controls()].filter(tile=>tile.dataset.kind!=='audio').every(tile=>!tile.querySelector('img').hasAttribute('src')),'Unclassified thumbnails remain concealed while NSFW checking is pending');
-    await until(()=>[...controls()].every(ready)&&root.querySelector('.rf-viewport').getAttribute('aria-busy')==='false',20000);
+    // Hosted Chromium uses software inference. Keep event-loop responsiveness
+    // assertions strict, but allow the real model to finish this visible window.
+    await until(()=>[...controls()].every(ready)&&root.querySelector('.rf-viewport').getAttribute('aria-busy')==='false',90000);
     const lazyRequests=(await metrics()).files.length;
     await new Promise(resolve=>setTimeout(resolve,250));
     check((await metrics()).files.length===lazyRequests&&lazyRequests<140,'NSFW analysis stays within the scrolling window instead of scanning 100,000 offscreen files');
