@@ -37,7 +37,7 @@ export function createGallery(node) {
     const lifecycle=new AbortController();
     let scanRequest,folder="",rootToken="",items=[],visible=[],opts=options(widget(node,"settings_json")?.value);
     let selected=new Set(),resolved=null,lastNative="",lastScan="",dead=false,scanSerial=0,analysisSerial=0,counts={},message="Choose a folder to browse.";
-    let tooltip,timer,hovered,hoverInfo,shift=false,viewerClose,menuClose,popupClose,debounce,resizeFrame,filterFrame;
+    let tooltip,timer,hovered,hoverInfo,shift=false,viewerClose,menuClose,popupClose,promptClose,debounce,resizeFrame,filterFrame;
     let reading=false,hydrating=false,pendingCount=0,scrolling=false,scrollTimer;
     let searchRequest,searchTimer,searchSerial=0,searchQuery="",searching=false,searchChecked=0,searchError="",searchStage="names";
     let textMatches=new Set(),searchPending=new Set();
@@ -357,6 +357,44 @@ export function createGallery(node) {
         const close=()=>{abort.abort();media.onerror=null;if(media.pause)media.pause();media.removeAttribute("src");media.load?.();backdrop.remove();viewerClose=null;};
         viewerClose=close;backdrop.onclick=close;closeOnEscape(close,abort.signal);
     }
+    async function copyPrompt(item) {
+        const info=await details(item);if(dead)return;
+        const prompts=[...new Set((info.prompts||[]).filter(text=>typeof text==="string"&&text.trim()))]
+            .map(text=>promptText({prompts:[text]},opts));
+        if(prompts.length===1){await navigator.clipboard.writeText(prompts[0]);return;}
+        if(!prompts.length)return;
+        promptClose?.();hideTooltip();
+        const abort=new AbortController(),backdrop=element("div","rf-backdrop"),picker=element("div","rf-prompt-picker");
+        const previous=tiles.get(item.id)||document.activeElement;
+        const close=()=>{
+            abort.abort();backdrop.remove();if(promptClose===close)promptClose=null;
+            if(!dead&&previous?.isConnected)previous.focus?.({preventScroll:true});
+        };
+        promptClose=close;
+        picker.setAttribute("role","dialog");picker.setAttribute("aria-modal","true");picker.setAttribute("aria-label","Choose a prompt to copy");
+        picker.style.setProperty("--rf-prompt-columns",Math.ceil(Math.sqrt(prompts.length)));
+        const cards=prompts.map(text=>{
+            const card=element("button","rf-prompt-card");card.type="button";card.append(element("span","",text));
+            card.onclick=async event=>{
+                event.stopPropagation();card.disabled=true;
+                try {await navigator.clipboard.writeText(text);close();}
+                catch(error){if(backdrop.isConnected)notify(error.message);}
+                finally{card.disabled=false;}
+            };
+            picker.append(card);return card;
+        });
+        backdrop.onclick=close;
+        backdrop.onkeydown=event=>{
+            event.stopPropagation();
+            if(event.key!=="Tab")return;
+            const first=cards[0],last=cards[cards.length-1];
+            if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+            else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+        };
+        backdrop.onkeyup=event=>event.stopPropagation();
+        backdrop.append(picker);document.body.append(backdrop);closeOnEscape(close,abort.signal);
+        cards[0].focus({preventScroll:true});
+    }
     async function showMenu(item,event) {
         hideTooltip();menuClose?.();
         const abort=new AbortController(),menu=element("div","rf-menu");
@@ -369,7 +407,7 @@ export function createGallery(node) {
                 const png=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
                 await navigator.clipboard.write([new ClipboardItem({"image/png":png})]);
             },item.kind!=="image"],
-            ["Copy prompt",async()=>navigator.clipboard.writeText(promptText(await details(item),opts)),true],
+            ["Copy prompt",()=>copyPrompt(item),true],
             ["Copy ComfyUI workflow",async()=>navigator.clipboard.writeText(JSON.stringify((await details(item)).workflow,null,2)),true],
         ];
         const buttons=actions.map(([label,action,disabled])=>{
@@ -418,7 +456,7 @@ export function createGallery(node) {
     queueMicrotask(()=>sync(true));
     return {root,sync,refresh:()=>sync(true),
         executed(data){resolved=data;sync(true);if(data.error)status.title=data.error;},
-        destroy(){dead=true;scanRequest?.abort();cancelSearch();resetTiles();thumbnails.clear();lifecycle.abort();observer.disconnect();cancelAnimationFrame(resizeFrame);clearTimeout(filterFrame);clearTimeout(scrollTimer);clearInterval(poll);clearTimeout(debounce);hideTooltip();viewerClose?.();menuClose?.();popupClose?.();unregister();},
+        destroy(){dead=true;scanRequest?.abort();cancelSearch();resetTiles();thumbnails.clear();lifecycle.abort();observer.disconnect();cancelAnimationFrame(resizeFrame);clearTimeout(filterFrame);clearTimeout(scrollTimer);clearInterval(poll);clearTimeout(debounce);hideTooltip();viewerClose?.();menuClose?.();popupClose?.();promptClose?.();unregister();},
     };
 }
 
