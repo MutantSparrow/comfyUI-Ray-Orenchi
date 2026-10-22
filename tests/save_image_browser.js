@@ -31,6 +31,12 @@ try {
         node.onExecuted(msg);
         check(!root.querySelector('.ray-save-divider').hidden, 'Two images enable comparison');
         const stage=root.querySelector('[role=slider]');
+        const divider=root.querySelector('.ray-save-divider'),view=root.querySelector('.ray-save-stage');
+        const lineBox=divider.getBoundingClientRect(),viewBox=view.getBoundingClientRect(),lineX=lineBox.left+lineBox.width/2;
+        check(document.elementFromPoint(lineX,viewBox.top+12)===divider,'The comparison line accepts pointer input above the handle');
+        check(document.elementFromPoint(lineX,viewBox.bottom-12)===divider,'The comparison line accepts pointer input below the handle');
+        check(lineBox.width>=12&&getComputedStyle(divider,'::before').width==='2px','The thin visible line has a wider invisible drag target');
+        check(!root.contains(document.elementFromPoint(viewBox.left+24,viewBox.top+12)),'The preview outside the divider stays transparent to canvas navigation');
         let wheels=0, spaces=0, panStarts=0;
         const wheelListener=()=>wheels++;
         const keyListener=e=>{if(e.code==='Space')spaces++;};

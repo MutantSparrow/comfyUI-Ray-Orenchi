@@ -44,6 +44,11 @@ export function styles() {
 .rf-kind{position:absolute;right:4px;top:4px;padding:2px 4px;background:#000b;border-radius:3px;color:#ddd;font-size:9px}
 .rf-selected{position:absolute;left:4px;top:4px;padding:1px 4px;border-radius:8px;background:#b9a4fa;color:#111;font-size:10px}
 .rf-backdrop{position:fixed;inset:0;z-index:100000;background:#0009;display:grid;place-items:center;color:#eee;font:12px system-ui}
+.rf-prompt-picker{display:grid;grid-template-columns:repeat(var(--rf-prompt-columns),minmax(0,1fr));grid-template-rows:repeat(var(--rf-prompt-columns),minmax(0,1fr));gap:18px;width:min(90vw,86vh);height:min(90vw,86vh);pointer-events:none}
+.rf-prompt-picker .rf-prompt-card{box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;min-width:0;min-height:0;padding:16px;border:1px solid #333;border-radius:4px;background:#000;color:#eee;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;overscroll-behavior:contain;font:13px/1.5 system-ui;pointer-events:auto}
+.rf-prompt-card>span{display:block;flex:0 0 auto;min-width:0}
+.rf-prompt-picker .rf-prompt-card:hover{background:#000;border-color:#999}
+.rf-prompt-picker .rf-prompt-card:focus-visible{outline:2px solid #b9a4fa;outline-offset:3px}
 .rf-settings{box-sizing:border-box;width:min(430px,92vw);max-height:85vh;overflow:auto;background:#101010;border:1px solid #444;border-radius:10px;padding:18px;box-shadow:0 12px 50px #0009;color-scheme:dark}
 .rf-settings h3{font-size:15px;margin:0 0 16px}.rf-settings p{color:#999;font-size:11px;line-height:1.5}
 .rf-setting{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:11px 0;min-height:24px}.rf-setting>span{flex:0 0 145px;color:#bbb}
