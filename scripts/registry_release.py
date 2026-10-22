@@ -43,6 +43,11 @@ def preflight(root, sha, github_token):
         publisher = node.get("publisher", {}).get("id")
         if publisher and publisher != config["PublisherId"]:
             raise RuntimeError("The Registry package belongs to a different publisher.")
+        versions = get_json("https://api.comfy.org/nodes/" + project["name"] + "/versions")
+        if any(Version(item["version"]) == Version(project["version"]) for item in versions):
+            # A newly uploaded version can remain Pending while latest_version
+            # is null. It is already immutable and must not be uploaded twice.
+            return project["name"], project["version"], False
         published = (node.get("latest_version") or {}).get("version")
         if published:
             if Version(project["version"]) < Version(published):
@@ -60,7 +65,7 @@ def main():
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
             output.write(f"publish={str(should_publish).lower()}\n")
-    print(f"{name} {version}: " + ("CI passed; ready to publish." if should_publish else "already published; skipping."))
+    print(f"{name} {version}: " + ("CI passed; ready to publish." if should_publish else "version already registered; skipping."))
     if sys.argv[1:] != ["publish"] or not should_publish:
         return
     token = os.environ.get("REGISTRY_ACCESS_TOKEN", "")
