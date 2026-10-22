@@ -224,3 +224,64 @@ def test_corrupt_media_is_skipped_without_breaking_other_outputs(media, monkeypa
     output = folders.RayFolders().browse(str(media), selected_files=selection)
     assert len(output["result"][0]) == 1
     assert output["ui"]["ray_folders"][0]["warnings"] == ["Unavailable: broken.png"]
+
+
+def test_prompt_search_fuzzy_terms_across_fields_and_negative_exclusion(media):
+    assert folders.search_files(media, ["cat.png", "dog.png"], "small")['matches'] == ['cat.png']
+    assert folders.search_files(media, ["cat.png", "dog.png"], "smal red")['matches'] == ['cat.png']
+    assert folders.search_files(media, ["cat.png", "dog.png"], "cat small")['matches'] == ['cat.png']
+    assert folders.search_files(media, ["cat.png", "dog.png"], "blur")['matches'] == []
+    assert [i['name'] for i in folders.scan(media, name_filter='large')['items']] == ['dog.png']
+    assert folders.search_match('0001.png', ['Bär im Wäld'], 'bar wald')
+    assert not folders.search_match('0001.png', ['A very long unrelated collection of words'], 'zebra')
+
+
+def test_search_cache_invalidation_sidecars_deletion_and_rename(tmp_path, monkeypatch):
+    cache = tmp_path / 'cache'; cache.mkdir()
+    monkeypatch.setattr(folders, '_cache_dir', lambda: cache)
+    path = tmp_path / 'plain.png'; Image.new('RGB', (5, 5)).save(path)
+    sidecar = path.with_suffix('.png.txt'); sidecar.write_text('A violet sunset')
+    assert folders.search_files(tmp_path, ['plain.png'], 'violet')['matches'] == ['plain.png']
+    original = folders._search_prompts
+    monkeypatch.setattr(folders, '_search_prompts', lambda path: (_ for _ in ()).throw(AssertionError('Cached prompts should be reused')))
+    assert folders.search_files(tmp_path, ['plain.png'], 'sunset')['matches'] == ['plain.png']
+    monkeypatch.setattr(folders, '_search_prompts', original)
+    sidecar.write_text('An emerald forest')
+    assert folders.search_files(tmp_path, ['plain.png'], 'emerald')['matches'] == ['plain.png']
+    assert folders.search_files(tmp_path, ['plain.png'], 'violet')['matches'] == []
+    path.rename(tmp_path / 'renamed.png')
+    assert folders.search_files(tmp_path, ['plain.png'], 'emerald')['unavailable'] == ['plain.png']
+    assert folders.search_files(tmp_path, ['../outside.png'], 'anything')['unavailable'] == ['../outside.png']
+
+
+def test_search_png_metadata_without_decoding_original_pixels(tmp_path, monkeypatch):
+    info = PngImagePlugin.PngInfo()
+    info.add_text('parameters', 'A turquoise ocean\nNegative prompt: noise\nSteps: 20', zip=True)
+    info.add_itxt('Description', 'A café near the beach', zip=True)
+    # Include text after IDAT and EXIF: these are why ordinary Pillow getexif()
+    # decodes the original PNG, defeating metadata-only indexing.
+    info.add(b'tEXt', b'Comment\0A golden lighthouse', after_idat=True)
+    exif = Image.Exif(); exif[270] = 'A coral reef'
+    path = tmp_path / 'metadata.png'; Image.new('RGB', (4096, 3072)).save(path, pnginfo=info, exif=exif)
+    original_load = PngImagePlugin.PngImageFile.load
+    def load(image, *args, **kwargs):
+        assert image.size == (1, 1), 'Prompt search must not decode original PNG pixels'
+        return original_load(image, *args, **kwargs)
+    monkeypatch.setattr(PngImagePlugin.PngImageFile, 'load', load)
+    for query in ('turquoise', 'cafe', 'lighthouse', 'coral'):
+        assert folders.search_files(tmp_path, ['metadata.png'], query)['matches'] == ['metadata.png']
+
+
+def test_prompt_search_skips_corrupt_files_and_cache_failure(media, monkeypatch):
+    (media / 'broken.png').write_bytes(b'invalid png')
+    monkeypatch.setattr(folders, '_cache_dir', lambda: (_ for _ in ()).throw(OSError('Cache drive disconnected')))
+    result = folders.search_files(media, ['broken.png', 'cat.png', 'removed.png'], 'small')
+    assert result == {'matches': ['cat.png'], 'unavailable': ['broken.png', 'removed.png']}
+
+
+def test_connected_prompt_filter_matches_workflow_outputs(media, monkeypatch):
+    monkeypatch.setitem(sys.modules, 'comfy', SimpleNamespace(model_management=SimpleNamespace(throw_exception_if_processing_interrupted=lambda: None)))
+    monkeypatch.setitem(sys.modules, 'comfy.model_management', sys.modules['comfy'].model_management)
+    selection = json.dumps({'folder': str(media), 'files': ['dog.png', 'cat.png']})
+    output = folders.RayFolders().browse(str(media), name_filter='small red', selected_files=selection)['result']
+    assert len(output[0]) == 1 and [Path(p).name for p in output[-1]] == ['cat.png']

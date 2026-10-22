@@ -11,25 +11,45 @@ export function options(value) {
     return result;
 }
 const normalize = value => String(value||"").toLowerCase().normalize("NFKD").replace(/\p{M}/gu,"");
-function distance(a,b) {
+function distance(a,b,limit) {
+    if(Math.abs(a.length-b.length)>limit)return limit+1;
     let row = Array.from({length:b.length+1},(_,i)=>i);
     for (let i=0;i<a.length;i++) {
         const next=[i+1];
         for(let j=0;j<b.length;j++) next.push(Math.min(row[j+1]+1,next[j]+1,row[j]+(a[i]!==b[j])));
+        if(Math.min(...next)>limit)return limit+1;
         row=next;
     }
     return row[b.length];
 }
-export function fuzzyMatch(name,query) {
-    if(!String(query||"").trim())return true;
-    name=normalize(name);
-    const words=name.match(/[\p{L}\p{N}_]+/gu)||[];
-    return normalize(query).split(/\s+/).filter(Boolean).every(term=>{
-        if(name.includes(term)) return true;
-        let at=0;
-        for(const char of name) if(char===term[at]) at++;
-        return at===term.length || (term.length>=3 && words.some(word=>distance(term,word)<=Math.max(1,Math.floor(term.length/4))));
-    });
+function matcher(query) {
+    const terms=normalize(query).split(/\s+/).filter(Boolean);
+    return value=>{
+        const name=normalize(value),words=name.match(/[\p{L}\p{N}_]+/gu)||[];
+        return terms.every(term=>{
+            if(name.includes(term)) return true;
+            let at=0;
+            for(const char of name) if(char===term[at]) at++;
+            const limit=Math.max(1,Math.floor(term.length/4));
+            return at===term.length || (term.length>=3 && words.some(word=>distance(term,word,limit)<=limit));
+        });
+    };
+}
+export function fuzzyMatch(name,query) {return matcher(query)(name);}
+export async function searchFilenames(items,query,signal,progress) {
+    const match=matcher(query),matches=[],remaining=[];let at=0,lastProgress=0;
+    while(at<items.length) {
+        const end=performance.now()+6;
+        do {
+            if(signal.aborted)throw new DOMException("Search canceled","AbortError");
+            const item=items[at++];(match(item.name)?matches:remaining).push(item.id);
+        } while(at<items.length&&performance.now()<end);
+        if(performance.now()-lastProgress>100||at===items.length){progress?.(at);lastProgress=performance.now();}
+        // Yield to keyboard, wheel and paint events even on six-figure listings.
+        await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    if(signal.aborted)throw new DOMException("Search canceled","AbortError");
+    return {matches,remaining};
 }
 // Adapted from FastGallery's MIT-licensed, centre-weighted 32x32 color signature.
 export function colorSignature(image) {
