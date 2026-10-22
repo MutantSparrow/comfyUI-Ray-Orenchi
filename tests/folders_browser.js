@@ -1,4 +1,5 @@
 import {app,nodeClass} from '/scripts/app.js';
+import {api} from '/scripts/api.js';
 import '/extensions/ray/ray_folders.js';
 import {fuzzyMatch,colorSignature} from '/extensions/ray/folders_filters.js';
 let passes=0;
@@ -10,6 +11,7 @@ const metrics=()=>fetch('/fixture/metrics').then(r=>r.json());
 const loading=options=>fetch('/fixture/loading',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(options)});
 const ready=tile=>tile?.dataset.state==='ready';
 const liveURLs=new Set(),createURL=URL.createObjectURL,revokeURL=URL.revokeObjectURL;
+const originalFetchApi=api.fetchApi;
 URL.createObjectURL=blob=>{const url=createURL.call(URL,blob);liveURLs.add(url);return url;};
 URL.revokeObjectURL=url=>{liveURLs.delete(url);return revokeURL.call(URL,url);};
 try{
@@ -92,6 +94,12 @@ try{
     await until(()=>[...root.querySelectorAll('[data-kind=audio] img,[data-kind=video] img')].every(img=>img.complete&&img.naturalWidth>0));
     check(root.querySelector('[data-kind=audio] img').naturalWidth>0,'Audio tile renders a real waveform thumbnail');
     check(root.querySelector('[data-kind=video] img').naturalWidth>0,'Video tile renders a decoded poster');
+    root.querySelector('[data-file="movie.mp4"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:200,clientY:200}));
+    check([...document.querySelectorAll('.rf-menu button')].some(button=>button.textContent==='Delete asset'),'Delete asset is offered for videos');
+    document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
+    root.querySelector('[data-file="sound.wav"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:200,clientY:200}));
+    check([...document.querySelectorAll('.rf-menu button')].some(button=>button.textContent==='Delete asset'),'Delete asset is offered for audio');
+    document.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
     root.querySelector('[data-file="sound.wav"]').click();
     root.querySelector('[data-file="movie.mp4"]').dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}));
     check(selected(node).includes('sound.wav')&&selected(node).includes('movie.mp4'),'Video and audio participate in multi-selection');
@@ -122,6 +130,31 @@ try{
     check(!cat(),'Changing the query cancels obsolete prompt results');
     filter.value='';filter.dispatchEvent(new Event('input'));
     await until(()=>ready(cat()));
+    await until(()=>ready(root.querySelector('[data-file="dog.png"]')));
+    cat().click();
+    root.querySelector('[data-file="dog.png"]').dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}));
+    function promptCheckbox(){return [...document.querySelectorAll('.rf-settings label')].find(label=>label.textContent==='Hide images without prompts')?.querySelector('input');}
+    root.querySelector('[aria-label="Folders settings"]').click();
+    check(promptCheckbox()&&!promptCheckbox().checked,'Hide images without prompts is available and off by default');
+    promptCheckbox().click();[...document.querySelectorAll('.rf-settings button')].find(button=>button.textContent==='Cancel').click();
+    check(!JSON.parse(layoutSettings.value).hide_no_prompt&&selected(node).includes('dog.png'),'Cancel leaves the prompt-presence setting and selection unchanged');
+    root.querySelector('[aria-label="Folders settings"]').click();promptCheckbox().click();
+    [...document.querySelectorAll('.rf-settings button')].find(button=>button.textContent==='Apply').click();
+    await until(()=>!root.querySelector('.rf-status').classList.contains('rf-busy')&&controls().length===3&&ready(cat()));
+    check(JSON.parse(layoutSettings.value).hide_no_prompt===true,'Hide images without prompts persists in workflow settings');
+    check(!root.querySelector('[data-file="dog.png"]')&&!!cat(),'An empty text filter still hides promptless images');
+    check(root.querySelector('[data-file="movie.mp4"]')&&root.querySelector('[data-file="sound.wav"]'),'Promptless video and audio remain visible');
+    check(selected(node).join()==='cat.png','Hidden promptless images are removed from selection while matching selections survive');
+    check(root.querySelector('.rf-total').textContent.includes('82 images'),'Prompt-presence filtering preserves the total image count');
+    filter.value='dog';filter.dispatchEvent(new Event('input'));
+    await until(()=>!root.querySelector('.rf-status').classList.contains('rf-busy')&&controls().length===0);
+    check(!controls().length,'A filename match cannot bypass the hide-promptless setting');
+    filter.value='werm light';filter.dispatchEvent(new Event('input'));
+    await until(()=>!root.querySelector('.rf-status').classList.contains('rf-busy')&&controls().length===1&&ready(cat()));
+    check(!!cat(),'Prompt presence and fuzzy prompt text search work together');
+    filter.value='';filter.dispatchEvent(new Event('input'));layoutSettings.value='{}';node._rayFolders.sync();
+    await until(()=>!root.querySelector('.rf-status').classList.contains('rf-busy')&&ready(cat())&&ready(root.querySelector('[data-file="dog.png"]')));
+    check(!!root.querySelector('[data-file="dog.png"]'),'Turning prompt-presence filtering off restores images without changing the text filter');
     cat().dispatchEvent(new PointerEvent('pointerenter',{clientX:100,clientY:200}));
     await until(()=>document.querySelector('.rf-tooltip')?.textContent.includes('Prompt: Yes'));
     window.dispatchEvent(new KeyboardEvent('keydown',{key:'Shift'}));
@@ -235,6 +268,56 @@ try{
     await fetch('/fixture/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     node._rayFolders.refresh();await until(()=>!cat()&&root.querySelector('.rf-total').textContent.startsWith('81 images'));
     check(!selected(node).includes('cat.png'),'An externally removed file is removed from selection');
+
+    const target=()=>root.querySelector('[data-file="gallery_000.png"]'),dog=()=>root.querySelector('[data-file="dog.png"]');
+    await until(()=>ready(target())&&ready(dog()));dog().click();target().dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}));
+    let deleteCalls=0,scanCalls=0,denyDelete=true,payload;
+    api.fetchApi=(url,options)=>{
+        if(url==='/ray/folders/scan')scanCalls++;
+        if(url==='/ray/folders/delete'){
+            deleteCalls++;payload=JSON.parse(options.body);
+            if(denyDelete)return Promise.resolve(new Response(JSON.stringify({error:'Drive is read-only'}),{status:400}));
+        }
+        return originalFetchApi(url,options);
+    };
+    async function openDelete(tile=target()){
+        tile.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:innerWidth-5,clientY:innerHeight-5}));
+        const menu=document.querySelector('.rf-menu'),box=menu.getBoundingClientRect();
+        check(box.right<=innerWidth&&box.bottom<=innerHeight,'The expanded context menu stays inside the viewport');
+        [...menu.querySelectorAll('button')].find(button=>button.textContent==='Delete asset').click();
+        await until(()=>document.querySelector('.rf-delete-dialog'));
+    }
+    await openDelete();
+    check(document.querySelector('.rf-delete-name').textContent==='gallery_000.png'&&document.querySelector('.rf-delete-dialog').textContent.includes('Recycle Bin'),'Delete asset names the file and explains recoverable deletion');
+    check(document.activeElement.textContent==='Cancel','Delete confirmation focuses Cancel initially');
+    document.querySelector('.rf-delete-dialog .rf-actions button').click();
+    check(!document.querySelector('.rf-delete-dialog')&&deleteCalls===0&&selected(node).length===2,'Cancel keeps the image and selection without making a delete request');
+    await openDelete();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+    check(!document.querySelector('.rf-delete-dialog')&&deleteCalls===0,'Escape dismisses deletion without changing the file');
+    await openDelete();document.querySelector('.rf-backdrop').click();
+    check(!document.querySelector('.rf-delete-dialog')&&deleteCalls===0,'Clicking outside cancels deletion');
+    await openDelete();document.querySelector('.rf-delete-dialog .rf-danger').click();
+    await until(()=>!document.querySelector('.rf-delete-error').hidden);
+    check(document.querySelector('.rf-delete-error').textContent.includes('read-only')&&!!target()&&selected(node).length===2,'Deletion errors keep the image and selection and show an actionable error');
+    denyDelete=false;document.querySelector('.rf-delete-dialog .rf-danger').click();
+    await until(()=>!document.querySelector('.rf-delete-dialog')&&!target()&&root.querySelector('.rf-total').textContent.startsWith('80 images'));
+    check(payload.file==='gallery_000.png'&&typeof payload.revision==='string'&&!!payload.root,'Deletion sends the scoped folder token, image path and displayed revision');
+    check(selected(node).join()==='dog.png','Successful deletion removes only the deleted image from selection');
+    check(scanCalls===0,'Deleting an image updates the gallery count without rescanning the folder');
+    node._rayFolders.refresh();await until(()=>root.querySelector('.rf-total').textContent.startsWith('80 images')&&ready(dog()));
+    check(!target(),'The image remains absent after a real folder refresh');api.fetchApi=originalFetchApi;
+    for(const [file,countText] of [['movie.mp4','0 videos'],['sound.wav','0 audio files']]) {
+        viewport.scrollTop=viewport.scrollHeight;viewport.dispatchEvent(new Event('scroll'));
+        const asset=()=>root.querySelector(`[data-file="${file}"]`);
+        await until(()=>ready(asset()));asset().dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}));
+        await openDelete(asset());
+        check(document.querySelector('.rf-delete-name').textContent===file,'Delete asset confirmation identifies '+file);
+        document.querySelector('.rf-delete-dialog .rf-danger').click();
+        await until(()=>!document.querySelector('.rf-delete-dialog')&&!asset()&&root.querySelector('.rf-total').textContent.includes(countText));
+        check(selected(node).join()==='dog.png'&&root.querySelector('.rf-total').textContent.startsWith('80 images'),'Deleting '+file+' updates its media count and preserves other selections');
+    }
+    node._rayFolders.refresh();await until(()=>root.querySelector('.rf-status').textContent.startsWith('80 / 80 files'));
+    check(root.querySelector('.rf-total').textContent.includes('0 videos')&&root.querySelector('.rf-total').textContent.includes('0 audio files'),'Deleted video and audio assets remain absent after refreshing');
     await fetch('/fixture/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"folder":true}'});
     node._rayFolders.refresh();await until(()=>root.querySelector('.rf-status').textContent.includes('Folder unavailable'));
     check(controls().length===0&&root.querySelector('.rf-total').textContent.startsWith('0 images'),'Deleted folder clears gallery and count without throwing');
@@ -246,4 +329,4 @@ try{
     check(liveURLs.size===0,'Removing the node during a preview load releases all cached thumbnail object URLs');
     document.querySelector('#summary').textContent=passes+' checks passed';
 }catch(error){document.querySelector('#summary').textContent='Regression failed';document.querySelector('#results').textContent+=error.stack;document.querySelector('details').open=true;}
-finally{URL.createObjectURL=createURL;URL.revokeObjectURL=revokeURL;}
+finally{URL.createObjectURL=createURL;URL.revokeObjectURL=revokeURL;api.fetchApi=originalFetchApi;}

@@ -39,6 +39,7 @@ export function createThumbnailCache() {
             }
             finally {signal.removeEventListener("abort",cancel);}
         },
+        remove(key){const entry=entries.get(key);if(entry){URL.revokeObjectURL(entry.url);entries.delete(key);bytes-=entry.bytes;}pinned.delete(key);},
         clear(){for(const entry of entries.values())URL.revokeObjectURL(entry.url);entries.clear();bytes=0;},
     };
 }

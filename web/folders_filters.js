@@ -1,5 +1,5 @@
 export const DEFAULTS = {types:["image","video","audio"],sort:"name",descending:false,recursive:false,
-    columns:4,colors:[],nsfw:"all",threshold:.6,include_sexy:true,nsfw_regions:true,best_prompt:true,prompt_format:"multiline"};
+    columns:4,colors:[],nsfw:"all",threshold:.6,include_sexy:true,nsfw_regions:true,hide_no_prompt:false,best_prompt:true,prompt_format:"multiline"};
 export const COLORS = ["neutral","h0","h30","h60","h90","h120","h150","h180","h210","h240","h270","h300","h330"];
 export function options(value) {
     try { if (typeof value === "string") value = JSON.parse(value); } catch { value = {}; }
@@ -8,6 +8,7 @@ export function options(value) {
     result.threshold = Math.max(.01,Math.min(.99,Number(result.threshold)||.6));
     result.colors = Array.isArray(result.colors) ? result.colors.filter(c=>COLORS.includes(c)) : [];
     result.types = Array.isArray(result.types) ? result.types.filter(t=>["image","video","audio"].includes(t)) : [...DEFAULTS.types];
+    result.hide_no_prompt = result.hide_no_prompt === true;
     return result;
 }
 const normalize = value => String(value||"").toLowerCase().normalize("NFKD").replace(/\p{M}/gu,"");
