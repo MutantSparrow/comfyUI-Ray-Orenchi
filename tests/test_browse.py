@@ -2,13 +2,15 @@ import importlib.util
 import json
 import sys
 import threading
+from unittest.mock import patch
 from pathlib import Path
 
 import pytest
 
 spec = importlib.util.spec_from_file_location("browse_routes", Path(__file__).resolve().parents[1] / "browse_routes.py")
 br = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(br)
+with patch.dict(sys.modules, {"server": None}):
+    spec.loader.exec_module(br)
 
 
 # ---- what the page may ask for -------------------------------------------------------------------------

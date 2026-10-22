@@ -1,5 +1,28 @@
 # Fast Qwen3-VL Infer
 
+## Current defaults and compatibility
+
+New nodes use neutral generation penalties: `repetition_penalty=1.0` and
+`presence_penalty=0.0`. `generation_preset=anti_loop` explicitly selects presence
+1.5; `custom` uses the two penalty widgets, including values already saved in old
+workflows. The repeated-tail guard remains enabled, intervening only after a phrase
+repeats three times. For speed/parity comparisons, match sampling parameters and
+disable the guard in both compared runs if uncapped pathological output matters.
+
+Acceleration is explicitly limited to ComfyUI 0.42.x private interfaces. Unknown
+minor releases and incompatible initialization use native generation with a log
+message. A changed FixedKV layout also falls back before decoding starts. Errors
+after generation starts, out-of-memory failures and interruption propagate rather
+than silently retrying an expensive request. Non-VL Qwen families use their native
+ComfyUI generator. Historical measurements below describe their stated build and
+hardware; they are not fresh measurements of every currently supported build.
+
+CPU integration tests exercise real ComfyUI Qwen decoder layers, cache allocation,
+MRoPE/DeepStack, long output, interruption and patcher/model reuse with tiny random
+weights. CI runs stable 0.42.4 and current master. Opt-in CUDA tests additionally
+exercise the native prefetch/graph entry points; checkpoint tests cover actual
+vision preprocessing and dynamic model loading. See `TESTING.md`.
+
 Implemented on branch `FastVLM` in `G:\AI_APPS\_APPS\_MyApps\_ComfyUI_A1111_etc\comfyUI-Ray-Orenchi` and installed in the local ComfyUI copy of that pack. Existing uncommitted work was preserved. No core ComfyUI source, checkpoint, or dependency was changed.
 
 ## Use

@@ -15,6 +15,11 @@ import subprocess
 import sys
 import threading
 
+try:
+    from .route_security import is_local, require_local
+except ImportError:
+    from route_security import is_local, require_local
+
 KINDS = ("folder", "file")
 TIMEOUT_SECONDS = 15 * 60
 MAX_FILTERS = 8
@@ -123,10 +128,6 @@ def pick(kind, initial="", title="", filters=None):
         _busy.release()
 
 
-def is_local(remote):
-    return str(remote or "") in ("127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost")
-
-
 try:
     from aiohttp import web
     from server import PromptServer
@@ -138,9 +139,7 @@ if PromptServer is not None:
 
     @PromptServer.instance.routes.post("/ray/browse")
     async def browse(request):
-        # A dialog requested from another computer would open on this one, where nobody can answer it.
-        if not is_local(request.remote):
-            return web.json_response({"ok": False, "error": "Browse needs ComfyUI to run on this computer. Type the path instead."}, status=403)
+        require_local(request)
         if request.content_type != "application/json":
             return web.json_response({"ok": False, "error": "Expected a JSON request."}, status=415)
         try:

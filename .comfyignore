@@ -1,0 +1,16 @@
+.github/
+tests/
+benchmarks/
+scripts/
+node_modules/
+playwright-report/
+test-results/
+dist/
+build/
+package.json
+package-lock.json
+playwright.config.cjs
+pytest.ini
+requirements-dev.txt
+FAST_VLM.md
+TESTING.md

@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8"><title>Pixel Art conversion comparison</title>
+<style>
+body{background:#151515;color:#eee;font:16px system-ui;max-width:1200px;margin:24px auto;padding:0 16px}
+button,input{background:#262626;color:#eee;border:1px solid #666;padding:12px;border-radius:5px}
+#source{max-width:240px;max-height:200px;object-fit:contain}#choices{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:20px 0}
+#choices img{width:100%;height:360px;object-fit:contain;image-rendering:pixelated;background:#080808;display:block}
+button{cursor:pointer}#choices button{padding:12px}textarea{display:block;width:100%;height:60px;background:#222;color:#eee;margin:12px 0}
+</style>
+<h1>Pixel Art conversion comparison</h1>
+<p>Choose the result that looks more like deliberate pixel art: readable clusters, clean contours, coherent ramps and intentional dithering. Method names stay hidden. Ties and skips are valid.</p>
+<label>Reviewer label <input id="reviewer" placeholder="Your name or pseudonym"></label>
+<p id="progress"></p><img id="source" alt="Source reference">
+<div id="choices"><button id="left"><img alt="Candidate A">Choose A</button><button id="right"><img alt="Candidate B">Choose B</button></div>
+<textarea id="notes" placeholder="Optional reason for this choice"></textarea>
+<button id="tie">Tie</button> <button id="skip">Skip</button> <button id="back">Back</button> <button id="export">Export votes</button>
+<p id="status" role="status"></p>
+<script>
+const pairs = /* PAIRS */ [];
+const votes = new Map(); let index = 0;
+const $ = selector => document.querySelector(selector);
+function render(){
+    const pair=pairs[index];
+    $('#progress').textContent=pairs.length ? `Pair ${index+1} of ${pairs.length} · ${votes.size} reviewed · ${pair.case}` : 'No pairs available';
+    for(const side of ['left','right']) {$('#'+side).disabled=!pair;if(pair)$('#'+side+' img').src=pair[side].image;}
+    $('#source').src=pair?.source||''; $('#notes').value=votes.get(index)?.notes||'';
+    $('#back').disabled=index===0; $('#tie').disabled=$('#skip').disabled=!pair;
+}
+function choose(choice){
+    if(!pairs[index])return;
+    const pair=pairs[index]; votes.set(index,{case:pair.case,left:pair.left.method,right:pair.right.method,
+        choice,winner:choice==='left'||choice==='right'?pair[choice].method:null,notes:$('#notes').value});
+    if(index<pairs.length-1)index++;else $('#status').textContent='Review complete. Export votes to keep your judgments.';
+    render();
+}
+for(const action of ['left','right','tie','skip'])$('#'+action).onclick=()=>choose(action);
+$('#back').onclick=()=>{index=Math.max(0,index-1);render();};
+$('#export').onclick=()=>{
+    const blob=new Blob([JSON.stringify({schema:1,reviewer:$('#reviewer').value,track:'human_conversion_pairwise',votes:[...votes.values()]},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob), link=document.createElement('a');link.href=url;link.download='pixel-art-votes.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+render();
+</script>

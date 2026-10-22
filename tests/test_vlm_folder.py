@@ -2,6 +2,7 @@ import importlib.util
 import tempfile
 import types
 import unittest
+import weakref
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -13,6 +14,8 @@ def load_module():
     management = types.ModuleType("comfy.model_management")
     management.get_torch_device = Mock(return_value=torch.device("cuda:0"))
     management.throw_exception_if_processing_interrupted = Mock()
+    management.get_free_memory = Mock(return_value=8 * 1024**3)
+    management.soft_empty_cache = Mock()
     comfy = types.ModuleType("comfy")
     comfy.model_management = management
     utils = types.ModuleType("comfy.utils")
@@ -43,7 +46,7 @@ class VLMFolderTests(unittest.TestCase):
                          repetition_penalty=1.2, seed=42, thinking=True)
 
     def test_per_image_inference_and_paired_outputs(self):
-        texts, images, paths = self.module.RayVLMFolder().process(**self.args)
+        texts, images, paths = self.module.RayVLMFolder().process(**self.args, return_images=True)
         self.assertEqual(texts, ["first answer\n", "second answer"])
         self.assertEqual([Path(p).name for p in paths], ["a.png", "b.png"])
         self.assertEqual([tuple(i.shape) for i in images], [(1, 4, 8, 3), (1, 9, 3, 3)])
@@ -57,6 +60,73 @@ class VLMFolderTests(unittest.TestCase):
         self.assertEqual(self.clip.generate.call_args.kwargs, dict(do_sample=True, max_length=321,
                          temperature=0.25, top_k=17, top_p=0.8, min_p=0.1, repetition_penalty=1.2, seed=42))
         self.assertEqual(list(self.folder.glob("*.txt")), [])
+
+    def memory_clip(self, during_generate=None):
+        refs = []
+        def tokenize(text, **kwargs):
+            self.assertTrue(all(ref() is None for ref in refs), "previous source image is retained")
+            refs.append(weakref.ref(kwargs["image"]))
+            return {"vlm": [[({"type": "image", "data": kwargs["image"]}, 1.0)]]}
+        def generate(*args, **kwargs):
+            if during_generate:
+                during_generate()
+            return torch.tensor([1, 2])
+        clip = types.SimpleNamespace(patcher=self.clip.patcher, tokenize=tokenize,
+                                     generate=generate, decode=lambda ids: "caption")
+        return clip, refs
+
+    def test_default_retains_no_source_tensors(self):
+        clip, refs = self.memory_clip()
+        self.args["clip"] = clip
+        texts, images, paths = self.module.RayVLMFolder().process(**self.args)
+        self.assertEqual(images, [])
+        self.assertEqual(len(texts), 2)
+        self.assertEqual(len(paths), 2)
+        self.assertTrue(all(ref() is None for ref in refs))
+
+    def test_images_decoded_only_after_inference_finishes(self):
+        clip, refs = self.memory_clip()
+        self.args["clip"] = clip
+        original = self.module.load_image
+        loads = []
+        def load(path):
+            loads.append((path.name, len(refs)))
+            return original(path)
+        with patch.object(self.module, "load_image", load):
+            _, images, _ = self.module.RayVLMFolder().process(**self.args, return_images=True)
+        self.assertEqual(loads, [("a.png", 0), ("b.png", 1), ("a.png", 2), ("b.png", 2)])
+        self.assertEqual(len(images), 2)
+        self.assertTrue(all(ref() is None for ref in refs))
+
+    def test_periodic_and_memory_pressure_cleanup(self):
+        for interval, free, expected in ((1, 8 * 1024**3, 3), (0, 8 * 1024**3, 1), (0, 100, 3)):
+            clip, _ = self.memory_clip()
+            self.args["clip"] = clip
+            self.module.model_management.soft_empty_cache.reset_mock()
+            self.module.model_management.get_free_memory.return_value = free
+            self.module.RayVLMFolder().process(**self.args, cleanup_every=interval)
+            self.assertEqual(self.module.model_management.soft_empty_cache.call_count, expected)
+
+    def test_error_releases_transients_and_preserves_cause(self):
+        clip, refs = self.memory_clip()
+        clip.decode = lambda ids: (_ for _ in ()).throw(RuntimeError("decode failed"))
+        self.args["clip"] = clip
+        with self.assertRaisesRegex(RuntimeError, "decode failed"):
+            self.module.RayVLMFolder().process(**self.args)
+        self.assertTrue(all(ref() is None for ref in refs))
+        self.module.model_management.soft_empty_cache.assert_called_once()
+
+    def test_deleted_file_during_return_pass_reports_source(self):
+        clip, _ = self.memory_clip(lambda: (self.folder / "a.png").unlink(missing_ok=True))
+        self.args["clip"] = clip
+        with self.assertRaisesRegex(RuntimeError, "Cannot read source image.*a.png"):
+            self.module.RayVLMFolder().process(**self.args, return_images=True)
+
+    def test_replaced_source_cannot_be_paired_with_its_old_caption(self):
+        clip, _ = self.memory_clip(lambda: Image.new("RGB", (7, 7), "green").save(self.folder / "a.png"))
+        self.args["clip"] = clip
+        with self.assertRaisesRegex(RuntimeError, "Source image changed during captioning.*a.png"):
+            self.module.RayVLMFolder().process(**self.args, return_images=True)
 
     def test_scan_recursion_range_and_refresh(self):
         sub = self.folder / "sub"

@@ -4,22 +4,23 @@ Lab/RGB means and chroma/lightness ramps restore the original node's choices.
 All strategies share the same hard color budget; supplied palettes bypass this.
 """
 import numpy as np
-import cv2
-from sklearn.cluster import MiniBatchKMeans
-from threadpoolctl import threadpool_limits
-try:
+if __package__:
     from .ray_pixel_families import family_palette
-except ImportError:
+else:
     from ray_pixel_families import family_palette
 
 
 def cie_lab(rgb):
+    import cv2
     return cv2.cvtColor(np.asarray(rgb, np.float32).reshape(1, -1, 3), cv2.COLOR_RGB2Lab).reshape(-1, 3)
 
 
 def build_palette(rgb, count, seed, oklab, nearest, strategy="kmeans_lab",
                   protect=True, threshold=90, ramp_levels=4, source_colors=False,
                   allocation="area_preserving"):
+    import cv2
+    from sklearn.cluster import MiniBatchKMeans
+    from threadpoolctl import threadpool_limits
     if strategy == "color_families":
         return family_palette(rgb, max(1, int(count)), seed, cie_lab,
                               source_colors, protect, threshold)
