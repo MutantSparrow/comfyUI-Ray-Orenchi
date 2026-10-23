@@ -759,7 +759,7 @@ connect Save Image or another output node when you want to save them.
 
 ![🧰 Ray's Model Tools: Model Merge](screenshots/RayModelMerge.png)
 
-**Purpose.** Merge compatible model sources with LERP, SLERP, TIES, DARE, DELLA, or Breadcrumbs variants. Includes component selection, seeded controls, block weights, and optional loading of the result.
+**Purpose.** Merge compatible models connected to A, B and any required base, using MODEL or model-data inputs. Supports LERP, SLERP, TIES, DARE, DELLA, or Breadcrumbs variants, component selection, seeded controls, block weights, and optional loading of the result.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
 

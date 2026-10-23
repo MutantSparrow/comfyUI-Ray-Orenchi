@@ -213,7 +213,6 @@ const SECTIONS = {
         ["Source model", "source_model_path"], ["Metadata", "metadata_json"],
     ],
     RayModelMerge: [
-        ["Sources", "path_a", "path_b", "base_path"],
         ["Merge", "strategy", "weight_a", "components", "mismatch"],
         ["Algorithm", "density", "lambda", "top_trim", "bottom_trim", "seed"],
         ["Block weights", "block_weights"], ["Output", "weight_format", "load_result"],
@@ -257,7 +256,8 @@ export function installModelTools(node, id) {
     if (id === "RayModelLoadAs") normalizeLoadSource(node);
     if (node._rayModelTools) return;
     node._rayModelTools = true; styles(); applyBucketTint(node, "Tools");
-    const hidden = id === "RayModelMetadata" ? ["editor_json", "editor_source"] : [];
+    const hidden = id === "RayModelMetadata" ? ["editor_json", "editor_source"]
+        : id === "RayModelMerge" ? ["path_a", "path_b", "base_path"] : [];
     for (const name of hidden) if (widget(node, name)) setWidgetHidden(node, widget(node, name), true);
     const native = (node.widgets || []).filter(w => w.type !== "button" && w.name !== "control_after_generate" && !hidden.includes(w.name));
     const fields = native.map(w => {

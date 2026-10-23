@@ -325,7 +325,7 @@ class RayModelMetadataSave:
 
 
 class RayModelMerge:
-    DESCRIPTION = "Merge compatible models with Ray's nine strategies. Task-vector strategies require an explicit base. Intersect merges common keys and passes through the union. MODEL inputs take priority over paths."
+    DESCRIPTION = "Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's nine strategies. Task-vector strategies require a base_model or base_data connection. Intersect merges common keys and passes through the union."
     CATEGORY, FUNCTION = CATEGORY, "merge"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report")
@@ -351,10 +351,15 @@ class RayModelMerge:
               seed=0, density=.5, top_trim=.1, bottom_trim=.01, load_result=True,
               model_a=None, model_b=None, base_model=None, clip_a=None, clip_b=None, base_clip=None, vae_a=None,
               data_a=None, data_b=None, base_data=None, path_a="", path_b="", base_path="", block_weights="{}", **kwargs):
+        if model_a is None and data_a is None and not path_a.strip():
+            raise ValueError("Connect Model A to model_a or data_a.")
+        if model_b is None and data_b is None and not path_b.strip():
+            raise ValueError("Connect Model B to model_b or data_b.")
         with ExitStack() as stack:
             a = stack.enter_context(source_path(model_a, data_a, path_a, clip_a, vae_a))
             b = stack.enter_context(source_path(model_b, data_b, path_b, clip_b))
-            base = stack.enter_context(source_path(base_model, base_data, base_path, base_clip)) if (base_model or base_data or base_path.strip()) else None
+            needs_base = strategy not in ("LERP", "SLERP")
+            base = stack.enter_context(source_path(base_model, base_data, base_path, base_clip)) if needs_base and (base_model or base_data or base_path.strip()) else None
             asset, check = core.merge_models(a, b, cache_path("merged"), strategy, weight_a, base, weight_format,
                 components, mismatch, seed, density, kwargs.get("lambda", 1.), top_trim, bottom_trim,
                 block_weights, progress())

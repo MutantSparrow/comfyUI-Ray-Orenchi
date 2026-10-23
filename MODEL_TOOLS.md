@@ -93,6 +93,10 @@ overwritten unless the node's overwrite option is enabled.
 
 ## Merging and extraction
 
+Connect Model Merge's **model_a** and **model_b**, or use **data_a** and
+**data_b** for file handles. Connect **base_model** or **base_data** when the
+chosen strategy needs a base. Choose source files in the upstream loader nodes.
+
 Weight A=1 selects A for LERP/SLERP; Weight A=0 selects B. Task-vector methods
 require an explicit compatible base. DARE/DELLA use a per-tensor seed derived
 from the supplied seed and tensor name. The density/lambda/trim controls appear
