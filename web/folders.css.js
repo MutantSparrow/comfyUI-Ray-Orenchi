@@ -5,6 +5,7 @@ export function styles() {
 .dom-widget:has(> .ray-folders){pointer-events:none!important}
 .ray-folders{box-sizing:border-box;position:relative;width:100%;min-width:0;min-height:0;height:100%;contain:size layout;display:flex;flex-direction:column;gap:6px;padding:6px;color:#eee;font:12px system-ui;color-scheme:dark;overflow:hidden;pointer-events:none;border-radius:8px}
 .rf-controls{display:flex;flex-direction:column;gap:6px;min-width:0;min-height:100px;padding-right:92px;flex-shrink:0}
+.rf-media{flex:1;min-height:0}
 .lg-node:has(.ray-folders) [data-testid^="node-body-"]{position:relative}
 .lg-node:has(.ray-folders) [data-testid^="node-body-"]>:has(>div>.lg-slot--output){position:absolute;top:4px;left:0;right:0;z-index:2;pointer-events:none}
 .lg-node:has(.ray-folders) .lg-slot{pointer-events:auto}
@@ -19,7 +20,7 @@ export function styles() {
 .rf-row input:disabled{opacity:.6}
 .ray-folders .rf-icon{flex:0 0 30px;width:30px;height:28px;padding:5px;display:grid;place-items:center}
 .rf-icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.rf-status{min-height:15px;color:#999;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+.rf-status{height:16px;min-height:16px;line-height:16px;color:#999;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
 .rf-spinner,.rf-status.rf-busy::before{display:inline-block;flex:0 0 auto;width:19px;height:19px;border:2px solid #ffffff26;border-top-color:#b9a4fa;border-radius:50%;animation:rf-spin .8s linear infinite}
 .rf-status.rf-busy::before{content:"";width:10px;height:10px;margin-right:6px;vertical-align:-1px}
 @keyframes rf-spin{to{transform:rotate(360deg)}}

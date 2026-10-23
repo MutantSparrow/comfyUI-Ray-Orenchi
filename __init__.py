@@ -122,7 +122,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayModelCompare":     "🧰 Ray's Model Tools: Model Compare",
     "RayLoraBake":          "🧰 Ray's Model Tools: LoRA Bake",
     "RayLoraExtract":       "🧰 Ray's Model Tools: LoRA Extract",
-    "RayFolders":          "📁 Ray - Folders",
+    "RayFolders":          "🔧 Ray's Tools: Folders",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]

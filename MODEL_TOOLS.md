@@ -16,7 +16,6 @@ ModelMergeTools app and its FastAPI server are not required.
 | [LoRA Bake](screenshots/RayLoraBake.png) | Bake an adapter using ComfyUI's adapter mappings and supported LoRA variants. |
 | [LoRA Extract](screenshots/RayLoraExtract.png) | SVD extraction from finetuned minus base, including convolution weights. |
 
-Node names in the table link to their default Nodes 2.0 screenshot. The [node reference](NODES.md) embeds every image.
 
 ## Connections and file-only processing
 

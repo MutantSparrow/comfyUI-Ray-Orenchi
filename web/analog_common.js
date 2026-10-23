@@ -3,7 +3,7 @@ import { getBrushedAluminumURL } from "./knob_styles.js";
 import { isMuted, setMuted } from "./analog_audio.js";
 import { FAMILIES, familyOf } from "./analog_themes.js";
 import { openCurveEditor } from "./analog_curve.js";
-import { installPanel } from "./ray_panel.js";
+import { ensurePanelStyles, installPanel } from "./ray_panel.js";
 
 let nextSvgId = 0;
 
@@ -449,12 +449,20 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                 setWidgetHidden(this, widget, true);
                 // With setup controls, the Ray panel and the face share one DOM widget, panel on top: Nodes 2.0
                 // shares a node's spare height between its DOM widgets, which would squeeze the face.
-                let element = ui.element, panelHeight = () => 0;
-                if (panel) {
-                    element = document.createElement("div");
-                    element.className = "ray-analog-host";
-                    element.append(ui.element);
+                let panelHeight = () => 0;
+                let heading;
+                if (!panel) {
+                    ensurePanelStyles();
+                    heading = document.createElement("div");
+                    heading.className = "rp-title";
+                    heading.textContent = "Switch";
+                    heading.style.padding = "0 6px";
+                    panelHeight = () => heading.hidden ? 0 : heading.offsetHeight + 6;
                 }
+                const element = document.createElement("div");
+                element.className = "ray-analog-host";
+                if (heading) element.append(heading);
+                element.append(ui.element);
                 this.addDOMWidget(`${kind}_ui`, `RAY_${kind.toUpperCase()}`, element, {
                     serialize: false, hideOnZoom: false, margin: 4,
                     getMinHeight: () => heights(ui).min + panelHeight(),
@@ -470,6 +478,7 @@ export function registerAnalog(app, { kind, name, title, styles, defaultStyle, v
                     const compact = !!this.properties.compact;
                     if (compactApplied === compact) return;
                     compactApplied = compact;
+                    if (heading) heading.hidden = compact;
                     const faceNow = ui.element.offsetHeight || 0;
                     for (const key of configNames) {
                         const config = findWidget(this, key);

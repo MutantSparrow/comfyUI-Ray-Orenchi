@@ -51,7 +51,8 @@ function styles() {
 .ray-save button:disabled {opacity:.4}
 .ray-save button:hover:not(:disabled) {background:#454753}
 .ray-save :focus-visible {outline:2px solid #b9a4fa;outline-offset:2px}
-.ray-save-head {display:flex;flex-direction:column;gap:6px;padding:6px 6px 9px;border-bottom:1px solid #2b2b2b;flex-shrink:0}
+.ray-save-head {padding:6px;flex-shrink:0}
+.ray-save-preview {flex:1;min-height:0;padding:0 6px 6px}
 .ray-save-label {font-size:11px;color:#a3a3a3}
 .ray-save-row {display:flex;gap:6px;align-items:center;min-width:0;flex-wrap:wrap}
 .ray-save-group {display:flex;gap:6px;align-items:center;flex:1 1 200px;min-width:0}
@@ -121,7 +122,7 @@ function build(node) {
     window.addEventListener("keydown", e => { if (e.code === "Space" || e.key === " ") spaceHeld = true; }, {capture: true, signal: navigation.signal});
     window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") spaceHeld = false; }, {capture: true, signal: navigation.signal});
     window.addEventListener("blur", () => { spaceHeld = false; }, {signal: navigation.signal});
-    const root = element("div", "ray-save"), head = element("div", "ray-save-head");
+    const root = element("div", "ray-save"), head = element("div", "ray-save-head rp-section");
     // Filename prefix, with { } opening the filename builder.
     const prefixLabel = element("label", "ray-save-label", "Filename prefix");
     const prefix = textField(node, "filename_prefix");
@@ -160,7 +161,7 @@ function build(node) {
     group.append(dirLabel, browse, path, directoryLink.element);
     const row = element("div", "ray-save-row");
     row.append(stops, group);
-    head.append(prefixLabel, prefixRow, row);
+    head.append(element("div", "rp-title", "Output"), prefixLabel, prefixRow, row);
     const state = element("span", "ray-save-status");
     const stage = element("div", "ray-save-stage"), first = element("img"), second = element("img"), overlay = element("div", "ray-save-overlay");
     first.alt = "Image 1"; second.alt = "Image 2"; overlay.append(first);
@@ -229,7 +230,9 @@ function build(node) {
         updateSizes();
     }
     [first, second].forEach(img => img.addEventListener("error", () => { state.textContent = "Preview expired. Queue again to refresh."; }));
-    root.append(head, stage);
+    const preview = element("div", "ray-save-preview rp-section");
+    preview.append(element("div", "rp-title", "Preview"), stage);
+    root.append(head, preview);
     // Keep canvas navigation alive over DOM widgets. Only ordinary control
     // interactions belong to this panel; wheel, Space-pan and middle-pan bubble.
     root.addEventListener("pointerdown", e => { panClick = spaceHeld || e.button === 1; }, true);

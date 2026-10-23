@@ -90,6 +90,10 @@ async function settle(page, selector) {
         manifest.browser_version = browser.version();
         manifest.platform = process.platform;
         for (const classId of classes) {
+            const definition = info[classId];
+            const category = /^👑 Ray\/(\S+) (.+)$/.exec(definition?.category || '');
+            if (!category || !definition.display_name.startsWith(`${category[1]} Ray's ${category[2]}: `))
+                throw Error(`Inconsistent category or title: ${classId}`);
             const id = await page.evaluate(async classId => {
                 const {app} = await import('/scripts/app.js');
                 app.graph.clear();
@@ -137,10 +141,27 @@ async function settle(page, selector) {
                     if (panel && panel.getBoundingClientRect().bottom > host.getBoundingClientRect().bottom+2)
                         throw Error('Custom panel is clipped');
                 }
+                const headings = [...element.querySelectorAll('.rp-title')]
+                    .filter(heading => heading.getBoundingClientRect().height > 0);
+                if (!headings.length) throw Error('Missing section headings');
+                for (const heading of headings) {
+                    const style = getComputedStyle(heading);
+                    if (!heading.textContent.trim() || style.textTransform !== 'uppercase' || style.color !== 'rgb(212, 58, 168)')
+                        throw Error(`Inconsistent section heading: ${heading.textContent}`);
+                }
+                for (const section of element.querySelectorAll('.rp-section:not([hidden])')) {
+                    if (!section.getBoundingClientRect().height) continue;
+                    if (!section.querySelector(':scope > .rp-title')) throw Error('Untitled control section');
+                    const preceding = [...section.parentElement.children].slice(0, [...section.parentElement.children].indexOf(section))
+                        .some(sibling => sibling.matches('.rp-section:not([hidden])') && sibling.getBoundingClientRect().height > 0);
+                    if ((parseFloat(getComputedStyle(section).borderTopWidth) > 0) !== preceding)
+                        throw Error(`Inconsistent section separator: ${section.textContent.slice(0, 50)}`);
+                }
                 const visible = direction => [...element.querySelectorAll(`.lg-slot--${direction}`)]
                     .filter(slot => slot.getBoundingClientRect().height > 0)
                     .map(slot => slot.textContent.trim());
                 return {title:title?.textContent.trim(), inputs:visible('input'), outputs:visible('output'),
+                    sections:headings.map(heading => heading.textContent.trim()),
                     default_widgets:Object.fromEntries((node.widgets || []).filter(w => w.name && !w.element)
                         .map(w => [w.name,w.value]).filter(([,value]) => value !== undefined)),
                     width_css_px:rect.width, height_css_px:rect.height};

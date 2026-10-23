@@ -191,6 +191,46 @@ export function createReport(node, id) {
     return root;
 }
 
+const SECTIONS = {
+    RayModelLoadAs: [
+        ["Source", "model_name", "path"],
+        ["Loading", "weight_format", "loader", "load_components"],
+    ],
+    RayModelConvert: [
+        ["Source", "path"], ["Conversion", "weight_format", "components"], ["Output", "load_result"],
+    ],
+    RayModelSave: [
+        ["Source", "path"], ["Metadata", "metadata_mode", "metadata_json"],
+        ["Output", "filename_prefix", "output_path", "overwrite"],
+    ],
+    RayModelMetadata: [["Source", "path"]],
+    RayModelMetadataSave: [
+        ["Output", "mode", "filename_prefix", "output_path", "overwrite"],
+        ["Source model", "source_model_path"], ["Metadata", "metadata_json"],
+    ],
+    RayModelMerge: [
+        ["Sources", "path_a", "path_b", "base_path"],
+        ["Merge", "strategy", "weight_a", "components", "mismatch"],
+        ["Algorithm", "density", "lambda", "top_trim", "bottom_trim", "seed"],
+        ["Block weights", "block_weights"], ["Output", "weight_format", "load_result"],
+    ],
+    RayModelInspector: [["Source", "path"], ["Inspection", "max_rows"]],
+    RayModelCompare: [["Sources", "path_a", "path_b"], ["Comparison", "components"]],
+    RayLoraBake: [
+        ["Source", "path"], ["LoRA", "lora_name", "lora_path", "strength_model", "strength_clip"],
+        ["Output", "weight_format", "load_result"],
+    ],
+    RayLoraExtract: [
+        ["Sources", "finetuned_path", "base_path"],
+        ["Extraction", "rank", "alpha", "components", "include_embeddings"],
+        ["Output", "weight_format", "filename_prefix", "output_path"],
+    ],
+};
+const LABELS = {
+    model_name: "Model", lora_name: "LoRA", lora_path: "LoRA file",
+    strength_model: "Model strength", strength_clip: "CLIP strength", metadata_json: "Metadata (JSON)",
+};
+
 export function installModelTools(node, id) {
     if (node._rayModelTools) return;
     node._rayModelTools = true; styles(); applyBucketTint(node, "Tools");
@@ -198,7 +238,7 @@ export function installModelTools(node, id) {
     for (const name of hidden) if (widget(node, name)) setWidgetHidden(node, widget(node, name), true);
     const native = (node.widgets || []).filter(w => w.type !== "button" && w.name !== "control_after_generate" && !hidden.includes(w.name));
     const fields = native.map(w => {
-        const field = { name: w.name, full: /path|block_weights|metadata_json/.test(w.name) };
+        const field = { name: w.name, label: LABELS[w.name], full: /path|block_weights|metadata_json/.test(w.name) };
         if (/^(path|path_a|path_b|base_path|finetuned_path|lora_path|source_model_path)$/.test(w.name)) {
             field.actions = [{ label: "…", title: `Browse ${w.name.replaceAll("_", " ")}`,
                 onClick: () => browseInto(node, w.name, { kind: "file", filters: [["Model / metadata", ["safetensors", "json", "gguf"]]] }) }];
@@ -210,7 +250,12 @@ export function installModelTools(node, id) {
         return field;
     });
     const custom = () => id === "RayModelMetadata" ? createMetadataEditor(node) : createReport(node, id);
-    installPanel(node, { skip: hidden, minWidth: 470, sections: [{ fields }, { fields: [{ custom }] }] });
+    const byName = new Map(fields.map(field => [field.name, field]));
+    const sections = SECTIONS[id].map(([title, ...names]) => ({
+        title, fields: names.map(name => byName.get(name)).filter(Boolean),
+    }));
+    sections.push({ title: id === "RayModelMetadata" ? "Metadata" : "Report", fields: [{ custom }] });
+    installPanel(node, { skip: hidden, minWidth: 470, sections });
 }
 
 app.registerExtension({

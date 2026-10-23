@@ -44,7 +44,7 @@ export function createGallery(node) {
     const meta=new Map(),analysis=new Map(),tiles=new Map();
     const thumbnails=createThumbnailCache(),jobs=new Map(),unavailable=new Map();let allowed=new Set();
     const cacheKey=item=>folder+"\0"+item.id+":"+item.revision;
-    const root=element("div","ray-folders"),controls=element("div","rf-controls"),folderRow=element("div","rf-row"),filterRow=element("div","rf-row");
+    const root=element("div","ray-folders"),controls=element("div","rf-controls rp-section"),folderRow=element("div","rf-row"),filterRow=element("div","rf-row");
     const path=element("input"),filter=element("input");
     path.type=filter.type="text";path.spellcheck=filter.spellcheck=false;
     path.setAttribute("aria-label","Folder");path.placeholder="Choose a folder…";
@@ -62,7 +62,9 @@ export function createGallery(node) {
     loading.append(element("span","rf-spinner"),loadingText);loading.hidden=true;
     const more=element("button","rf-more","Load more");more.type="button";more.hidden=true;
     more.title="Check the next visible files without scanning the whole folder";more.onclick=()=>render();
-    controls.append(folderRow,filterRow,status);viewport.append(grid,loading);root.append(controls,viewport,more,total);
+    controls.append(element("div","rp-title","Folder"),folderRow,filterRow,status);
+    const media=element("div","rf-media rp-section");
+    viewport.append(grid,loading);media.append(element("div","rp-title","Media"),viewport,more,total);root.append(controls,media);
     const unregister=registerLinkTargets(node,[{name:"folder",element:folderRow},{name:"name_filter",element:filterRow}],()=>sync());
 
     function readSelection() {

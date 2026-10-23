@@ -63,7 +63,7 @@ export const PANEL_CSS = `
 .rp * {box-sizing:border-box}
 .rp[hidden], .rp-row[hidden], .rp-section[hidden] {display:none !important}
 .rp-section {display:flex;flex-direction:column;gap:6px;min-width:0}
-.rp-section + .rp-section {border-top:1px solid #2b2b2b;padding-top:8px}
+.rp-section:not([hidden]) ~ .rp-section:not([hidden]) {border-top:1px solid #2b2b2b;padding-top:8px}
 .rp-title {font:600 10px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#d43aa8}
 .rp-row {display:grid;grid-template-columns:minmax(64px,34%) minmax(0,1fr);gap:8px;align-items:center;min-height:28px;border-radius:5px;position:relative}
 .rp-row.rp-full {grid-template-columns:minmax(0,1fr);gap:4px}
@@ -585,7 +585,7 @@ export function installPanel(node, spec = {}) {
     const sections = [];
     function addSection(section) {
         const box = el("div", "rp-section");
-        if (section.title) box.append(el("div", "rp-title", section.title));
+        box.append(el("div", "rp-title", section.title || "Settings"));
         const own = [];
         for (const field of section.fields || []) {
             const row = makeRow(typeof field === "string" ? { name: field } : field);
@@ -600,7 +600,7 @@ export function installPanel(node, spec = {}) {
     // Anything the layout forgot is still editable, at the end.
     const rest = (spec.settings ? [] : node.widgets || []).filter(w => !mentioned.has(w.name) && w.serialize !== false && w.type !== "button"
         && !(w.element && w.type !== "customtext") && !String(w.type).startsWith("RAY_") && w.options?.serialize !== false);
-    if (rest.length) addSection({ title: spec.sections?.length ? "More" : undefined, fields: rest.map(w => w.name) });
+    if (rest.length) addSection({ title: "Additional settings", fields: rest.map(w => w.name) });
 
     // Hide the native widgets the panel now draws. Code that hides them by mode still decides whether the
     // row shows (setWidgetHidden records it as widget.rayLogicHidden).

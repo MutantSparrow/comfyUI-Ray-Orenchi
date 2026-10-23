@@ -59,11 +59,11 @@ export function installModelCard(node, defaultConfig) {
         if (widget) setWidgetHidden(node, widget, true);
     }
     installPanel(node, { skip: [...SECONDARY, ...(control ? ["seed_mode"] : [])], minWidth: 340, sections: [
-        { fields: [{ name: "card_name", label: "Card name", full: true, placeholder: "MODEL CARD",
+        { title: "Card", fields: [{ name: "card_name", label: "Card name", full: true, placeholder: "MODEL CARD",
             actions: [{ label: "{ }", title: "Build card name", onClick: () => openCardNameBuilder(node) }] }] },
-        { fields: ["seed", ...(!control ? ["seed_mode"] : []), "steps", { name: "cfg", label: "CFG" },
+        { title: "Sampling", fields: ["seed", ...(!control ? ["seed_mode"] : []), "steps", { name: "cfg", label: "CFG" },
             { name: "sampler_name", label: "Sampler" }, "scheduler", "denoise"] },
-        { fields: [{ custom() {
+        { title: "Configuration", fields: [{ custom() {
             const row = document.createElement("div"); row.className = "rp-control";
             for (const [text, action, callback] of [["Copy Config", "copy-config", copy], ["Settings", "settings", () => openModelCardSettings(node)]]) {
                 const button = document.createElement("button"); button.type = "button";

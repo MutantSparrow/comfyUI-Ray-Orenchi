@@ -9,7 +9,7 @@ folder browsers, and reports are intentionally in their initial state.
 
 Images are named by stable registered class ID, for example `RayCRT.png`, and
 embedded in [NODES.md](../NODES.md). Model Tools also appear in
-[MODEL_TOOLS.md](../MODEL_TOOLS.md). `manifest.json` records the rendered ports,
+[MODEL_TOOLS.md](../MODEL_TOOLS.md). `screenshots/manifest.json` records the rendered ports,
 default widget values, image dimensions, capture time, image hash, and source
 fingerprint for each node.
 
@@ -34,7 +34,7 @@ when the appearance is unchanged, but its manifest must record the new capture.
 
    Use `--python /path/to/python` if Python is not on your PATH. The script enables
    Nodes 2.0 in that instance's settings and clears its test graph. It creates real
-   nodes, waits for stable layout/fonts, checks title/port clipping, and captures
+   nodes, waits for stable layout/fonts, checks title/port clipping, section headings and dividers, and captures
    the browser render directly. It never queues a workflow.
 4. Inspect every updated image for complete controls and clean framing. Update
    the corresponding documentation if the node's interface changed.
