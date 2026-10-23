@@ -1,5 +1,15 @@
 # Node screenshots are required
 
+## Repository identity
+
+Use the repository's configured maintainer identity for commit authors and
+committers. Name branches and commits after the actual change. Do not add tool,
+vendor, or generated-work attribution to branches, commit messages, co-author
+trailers, collaborators, documentation, or other project content. Preserve this
+rule in every future change.
+
+## Screenshot maintenance
+
 Every registered node must have a current image at `screenshots/<class_id>.png`,
 embedded in its section of `NODES.md`.
 
