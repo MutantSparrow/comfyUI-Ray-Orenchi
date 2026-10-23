@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { installPanel } from "./ray_panel.js";
+import { installPanel, linkOf } from "./ray_panel.js";
 import { applyBucketTint, setWidgetHidden } from "./_common.js";
 import { browseInto, notify } from "./browse_common.js";
 import { metadataRows, rowsToMetadata, mergeFields, filterTensors, parseMetadataJSON } from "./model_tools_ui.mjs";
@@ -231,7 +231,7 @@ const SECTIONS = {
     ],
 };
 const LABELS = {
-    model_name: "Model", lora_name: "LoRA", lora_path: "LoRA file",
+    model_name: "Model file", lora_name: "LoRA", lora_path: "LoRA file",
     strength_model: "Model strength", strength_clip: "CLIP strength", metadata_json: "Metadata (JSON)",
     path: "Model file", path_a: "Model A file", path_b: "Model B file", base_path: "Base model file",
     finetuned_path: "Fine-tuned model file", source_model_path: "Source model file", output_path: "Output file",
@@ -241,15 +241,28 @@ const INSPECT_FILTERS = [["Model files", ["safetensors", "gguf"]]];
 const METADATA_FILTERS = [["Models / metadata", ["safetensors", "json"]]];
 const outputExtension = (node, id) => id === "RayModelMetadataSave" && value(node, "mode") === "json_sidecar" ? "json" : "safetensors";
 
+function normalizeLoadSource(node) {
+    const source = widget(node, "model_name"), legacy = widget(node, "path");
+    if (!source) return;
+    const input = node.inputs?.find(input => input.name === "model_name" || input.widget?.name === "model_name");
+    if (input?.type === "COMBO") input.type = "STRING";
+    if (legacy?.value && !linkOf(node, "path")) {
+        if (!linkOf(node, "model_name")) source.value = legacy.value;
+        legacy.value = "";
+    }
+    if (source.value === "Select a file or use path…") source.value = "";
+}
+
 export function installModelTools(node, id) {
+    if (id === "RayModelLoadAs") normalizeLoadSource(node);
     if (node._rayModelTools) return;
     node._rayModelTools = true; styles(); applyBucketTint(node, "Tools");
     const hidden = id === "RayModelMetadata" ? ["editor_json", "editor_source"] : [];
     for (const name of hidden) if (widget(node, name)) setWidgetHidden(node, widget(node, name), true);
     const native = (node.widgets || []).filter(w => w.type !== "button" && w.name !== "control_after_generate" && !hidden.includes(w.name));
     const fields = native.map(w => {
-        const field = { name: w.name, label: LABELS[w.name], full: /path|block_weights|metadata_json/.test(w.name) };
-        if (/^(path|path_a|path_b|base_path|finetuned_path|lora_path|source_model_path)$/.test(w.name)) {
+        const field = { name: w.name, label: LABELS[w.name], full: /path|model_name|block_weights|metadata_json/.test(w.name) };
+        if (/^(model_name|path|path_a|path_b|base_path|finetuned_path|lora_path|source_model_path)$/.test(w.name)) {
             const metadata = id === "RayModelMetadata";
             if (metadata) field.label = "Model / metadata file";
             field.browse = { kind: "file", title: `Choose ${field.label.toLowerCase()}`,
@@ -259,6 +272,12 @@ export function installModelTools(node, id) {
             else if (w.name === "source_model_path") field.placeholder = "Path to a model file";
             else field.actions = [{ icon: "folder", title: "Choose a model folder",
                 onClick: () => browseInto(node, w.name, { kind: "folder", title: "Choose a model folder" }) }];
+        }
+        if (id === "RayModelLoadAs" && ["model_name", "path"].includes(w.name)) {
+            field.when = n => {
+                normalizeLoadSource(n);
+                return !!linkOf(n, "path") === (w.name === "path");
+            };
         }
         if (w.name === "output_path") {
             field.browse = n => ({ kind: "save", title: "Choose output file",

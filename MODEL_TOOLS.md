@@ -5,7 +5,7 @@ ModelMergeTools app and its FastAPI server are not required.
 
 | Node | Purpose |
 | --- | --- |
-| [Load Model As](screenshots/RayModelLoadAs.png) | Select a checkpoint/diffusion model, or browse to a safetensors file/sharded directory. Auto detects the loader. |
+| [Load Model As](screenshots/RayModelLoadAs.png) | Choose a safetensors checkpoint/diffusion model with the file picker, or select a sharded model directory. Auto detects the loader. |
 | [Convert Model](screenshots/RayModelConvert.png) | Convert a file or connected MODEL into another storage format. |
 | [Save Model](screenshots/RayModelSave.png) | Save the effective model, including active merge and LoRA patches, with optional CLIP/VAE and metadata. |
 | [Metadata Load / Edit](screenshots/RayModelMetadata.png) | Read model metadata or a JSON sidecar into an editable table and raw JSON editor. |

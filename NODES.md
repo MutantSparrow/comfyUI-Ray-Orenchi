@@ -709,7 +709,7 @@ connect Save Image or another output node when you want to save them.
 
 ![🧰 Ray's Model Tools: Load Model As](screenshots/RayModelLoadAs.png)
 
-**Purpose.** Load a checkpoint or diffusion model with automatic loading or an explicit storage format. Accepts a model selection, path, or `model_data` handle; returns MODEL, CLIP, VAE, model data, metadata, and a report.
+**Purpose.** Choose a checkpoint or diffusion model with the file picker, or select a sharded model folder. Load it automatically or with an explicit storage format. Also accepts a `model_data` handle; returns MODEL, CLIP, VAE, model data, metadata, and a report.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
 

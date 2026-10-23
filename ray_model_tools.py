@@ -44,12 +44,14 @@ def resolve_file(name="", path=""):
     import folder_paths
     if path.strip():
         result = core.clean_path(path)
-    elif ": " in name:
+    elif name.startswith(("checkpoints: ", "diffusion_models: ", "loras: ")):
         group, filename = name.split(": ", 1)
         resolved = folder_paths.get_full_path(group, filename)
         if not resolved:
             raise ValueError(f"Model file not found: {filename}")
         result = core.clean_path(resolved)
+    elif name.strip() and name != "Select a file or use path…":
+        result = core.clean_path(name)
     else:
         raise ValueError("Select a model file or enter its path.")
     if not result.exists():
@@ -174,14 +176,14 @@ def changed_path(path="", **_):
 
 
 class RayModelLoadAs:
-    DESCRIPTION = "Load a supported diffusion model or checkpoint. Conversion changes stored weights; FP8→FP16 cannot restore lost precision. Paths override the model dropdown."
+    DESCRIPTION = "Choose a supported diffusion model or checkpoint file, or a sharded model folder. Conversion changes stored weights; FP8→FP16 cannot restore lost precision."
     CATEGORY, FUNCTION = CATEGORY, "load"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report")
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"model_name": combo(files("models")), "weight_format": combo(["auto", *core.FORMATS]),
+        return {"required": {"model_name": text(), "weight_format": combo(["auto", *core.FORMATS]),
                              "loader": combo(["auto", "checkpoint", "diffusion"]),
                              "load_components": ("BOOLEAN", {"default": True})},
                 "optional": {"path": text(), "model_data": ("RAY_MODEL_DATA",)}}
@@ -190,7 +192,7 @@ class RayModelLoadAs:
     def IS_CHANGED(cls, model_name="", path="", model_data=None, **kwargs):
         return changed_path(path=model_data.path if model_data else resolve_file(model_name, path))
 
-    def load(self, model_name, weight_format="auto", loader="auto", load_components=True, path="", model_data=None):
+    def load(self, model_name="", weight_format="auto", loader="auto", load_components=True, path="", model_data=None):
         source = core.TensorSource(model_data.path if model_data else resolve_file(model_name, path))
         asset = core.ModelAsset(str(source.path), source.metadata)
         target = weight_format
