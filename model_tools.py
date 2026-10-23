@@ -114,8 +114,12 @@ def commit_file(temp, destination, overwrite=False):
     destination = clean_path(destination)
     if overwrite:
         os.replace(temp, destination)
+    elif os.name == "nt":
+        # Windows rename is atomic and refuses an existing destination, including
+        # on exFAT volumes that do not support hard links.
+        os.rename(temp, destination)
     else:
-        # Same-directory hard link gives atomic no-clobber publication on NTFS/POSIX.
+        # POSIX rename replaces existing files; a hard link keeps no-clobber atomic.
         os.link(temp, destination)
         os.unlink(temp)
 

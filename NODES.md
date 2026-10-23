@@ -711,6 +711,8 @@ connect Save Image or another output node when you want to save them.
 
 **Purpose.** Choose a checkpoint or diffusion model with the file picker, or select a sharded model folder. Load it automatically or with an explicit storage format. Also accepts a `model_data` handle; returns MODEL, CLIP, VAE, model data, metadata, and a report.
 
+For a file-only merge, turn **Load result** off and leave the format on **Auto** or **Preserve**. The node passes the source to `model_data` after reading its headers, without loading or rewriting the weights. Choose the final precision in Model Merge.
+
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
 
 ---

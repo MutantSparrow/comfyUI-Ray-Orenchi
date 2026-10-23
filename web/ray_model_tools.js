@@ -198,7 +198,7 @@ export function createReport(node, id) {
 const SECTIONS = {
     RayModelLoadAs: [
         ["Source", "model_name", "path"],
-        ["Loading", "weight_format", "loader", "load_components"],
+        ["Loading", "weight_format", "load_result", "loader", "load_components"],
     ],
     RayModelConvert: [
         ["Source", "path"], ["Conversion", "weight_format", "components"], ["Output", "load_result"],
@@ -278,6 +278,9 @@ export function installModelTools(node, id) {
                 normalizeLoadSource(n);
                 return !!linkOf(n, "path") === (w.name === "path");
             };
+        }
+        if (id === "RayModelLoadAs" && ["loader", "load_components"].includes(w.name)) {
+            field.when = n => value(n, "load_result") !== false;
         }
         if (w.name === "output_path") {
             field.browse = n => ({ kind: "save", title: "Choose output file",

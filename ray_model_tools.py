@@ -176,7 +176,7 @@ def changed_path(path="", **_):
 
 
 class RayModelLoadAs:
-    DESCRIPTION = "Choose a supported diffusion model or checkpoint file, or a sharded model folder. Conversion changes stored weights; FP8→FP16 cannot restore lost precision."
+    DESCRIPTION = "Choose a supported diffusion model or checkpoint file, or a sharded model folder. Disable load_result for file-only merge/convert/save; Auto then passes through the source without loading or rewriting weights. FP8→FP16 cannot restore lost precision."
     CATEGORY, FUNCTION = CATEGORY, "load"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report")
@@ -186,29 +186,31 @@ class RayModelLoadAs:
         return {"required": {"model_name": text(), "weight_format": combo(["auto", *core.FORMATS]),
                              "loader": combo(["auto", "checkpoint", "diffusion"]),
                              "load_components": ("BOOLEAN", {"default": True})},
-                "optional": {"path": text(), "model_data": ("RAY_MODEL_DATA",)}}
+                "optional": {"path": text(), "model_data": ("RAY_MODEL_DATA",),
+                             "load_result": ("BOOLEAN", {"default": True, "tooltip": "Disable for file-only processing. With Auto or Preserve, model_data references the original file without loading or converting it."})}}
 
     @classmethod
     def IS_CHANGED(cls, model_name="", path="", model_data=None, **kwargs):
         return changed_path(path=model_data.path if model_data else resolve_file(model_name, path))
 
-    def load(self, model_name="", weight_format="auto", loader="auto", load_components=True, path="", model_data=None):
+    def load(self, model_name="", weight_format="auto", loader="auto", load_components=True, path="", model_data=None, load_result=True):
         source = core.TensorSource(model_data.path if model_data else resolve_file(model_name, path))
         asset = core.ModelAsset(str(source.path), source.metadata)
         target = weight_format
         legacy = False
-        if target in ("auto", "preserve") and any(k.rsplit(".", 1)[-1] == "scaled_int8" for k in source.index):
+        if load_result and target in ("auto", "preserve") and any(k.rsplit(".", 1)[-1] == "scaled_int8" for k in source.index):
             # Decode the standalone suite's legacy INT8 layout into the native format.
             target = "int8_row"
             legacy = True
-        elif target in ("auto", "preserve") and any(k.endswith(".scale_weight") for k in source.index):
+        elif load_result and target in ("auto", "preserve") and any(k.endswith(".scale_weight") for k in source.index):
             target = "fp8_e4m3fn_scaled"
             legacy = True
         if target not in ("auto", "preserve"):
             asset = core.convert(source, cache_path("converted"), target, scope="all" if legacy else "diffusion", progress=progress())
-        model, clip, vae = load_asset(asset, loader, target, load_components)
+        model, clip, vae = load_asset(asset, loader, target, load_components) if load_result else (None, None, None)
         report = {"operation": "load", "source": str(source.path), "weight_format": target,
-                  "architecture": type(model.model).__name__, "clip": clip is not None, "vae": vae is not None}
+                  "loaded": load_result, "architecture": type(model.model).__name__ if model is not None else None,
+                  "clip": clip is not None, "vae": vae is not None}
         return result((model, clip, vae, asset, asset.metadata, core.json_text(report)), report)
 
 

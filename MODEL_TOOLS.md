@@ -44,6 +44,12 @@ layer at a time rather than complete fp32 copies of all inputs. SVD still needs
 memory for the largest individual matrix. Temporary artifacts live under
 ComfyUI's temp directory in `ray_model_tools`; save anything you want to retain.
 
+In **Load Model As**, disable **Load result** and choose **Auto** or **Preserve**
+to read only the source headers and pass its file handle to Model Merge. This
+skips model initialization and preparatory weight conversions. Set the desired
+output precision in Model Merge. An explicit loader precision still converts
+the file even with Load result off. MODEL/CLIP/VAE outputs are empty in this mode.
+
 ## Precision and quantization
 
 Targets: fp32, fp16, bf16, FP8 E4M3 (raw or scaled), FP8 E5M2, native INT8 with
