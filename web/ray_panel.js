@@ -258,7 +258,8 @@ function isolateKeys(element) {
 
 export function installPanel(node, spec = {}) {
     injectStyles();
-    if (node._rayPanel) return node._rayPanel;
+    const panelKey = spec.settings ? "_raySettingsPanel" : "_rayPanel";
+    if (node[panelKey]) return node[panelKey];
     // ComfyUI stretches the element it is given to the height it reserves, so the panel content sits in a host
     // and is measured on its own; measuring the stretched element would feed its height back into itself.
     const host = el("div", "rp-host");
@@ -336,14 +337,15 @@ export function installPanel(node, spec = {}) {
     }
 
     function detectKind(widget, field) {
+        const type = widget._rayOrigType || widget.type;
         if (field.browse) return "path";
-        if (widget.type === "toggle") return "toggle";
-        if (widget.type === "customtext") return "textarea";
-        if (widget.type === "combo") {
+        if (type === "toggle") return "toggle";
+        if (type === "customtext") return "textarea";
+        if (type === "combo") {
             const values = valuesOf(widget);
             return values.length >= 2 && values.length <= 4 && values.every(v => String(v).length <= 9) ? "segment" : "select";
         }
-        if (widget.type === "number") {
+        if (type === "number") {
             if ((widget.linkedWidgets || []).some(w => w.name === "control_after_generate")) return "seed";
             const { min, max } = widget.options || {};
             return Number.isFinite(min) && Number.isFinite(max) && max - min <= 10 && precisionOf(widget) > 0 ? "slider" : "number";
@@ -596,7 +598,7 @@ export function installPanel(node, spec = {}) {
     }
     for (const section of spec.sections || []) addSection(section);
     // Anything the layout forgot is still editable, at the end.
-    const rest = (node.widgets || []).filter(w => !mentioned.has(w.name) && w.serialize !== false && w.type !== "button"
+    const rest = (spec.settings ? [] : node.widgets || []).filter(w => !mentioned.has(w.name) && w.serialize !== false && w.type !== "button"
         && !(w.element && w.type !== "customtext") && !String(w.type).startsWith("RAY_") && w.options?.serialize !== false);
     if (rest.length) addSection({ title: spec.sections?.length ? "More" : undefined, fields: rest.map(w => w.name) });
 
@@ -606,7 +608,7 @@ export function installPanel(node, spec = {}) {
         if (!row.widget) continue;
         const hiddenNow = !!row.widget.hidden;
         setWidgetHidden(node, row.widget, true);
-        row.widget.rayLogicHidden = hiddenNow;
+        row.widget.rayLogicHidden = spec.settings ? false : hiddenNow;
         row.widget.rayPanel = panel;
         for (const linked of row.widget.linkedWidgets || []) { setWidgetHidden(node, linked, true); linked.rayPanel = panel; linked.rayLogicHidden = true; }
     }
@@ -644,6 +646,7 @@ export function installPanel(node, spec = {}) {
     panel.height = height;
     const minWidth = spec.minWidth || 340;
     function fit() {
+        if (spec.settings) return;
         const h = height();
         // node.size is a typed array, not an Array.
         const hasSize = node.size && node.size.length >= 2;
@@ -662,7 +665,10 @@ export function installPanel(node, spec = {}) {
     }
     // Values also change from outside (control after generate, other extensions, a loaded workflow).
     const timer = setInterval(() => { if (root.isConnected) refresh(); }, 400);
-    function destroy() { clearInterval(timer); unregister(); }
+    function destroy() {
+        clearInterval(timer); unregister();
+        if (spec.settings) for (const row of rows) if (row.widget?.rayPanel === panel) delete row.widget.rayPanel;
+    }
 
     root.addEventListener("pointerdown", e => { if (e.button === 0 && e.target !== root) e.stopPropagation(); });
     // The legacy canvas insets a DOM widget by its margin on each side; keep it small and count it.
@@ -682,11 +688,54 @@ export function installPanel(node, spec = {}) {
         if (at < 0) at = list.findIndex(w => w.element && w.type !== "customtext");
         list.splice(at < 0 ? list.length : at, 0, domWidget);
     }
-    node._rayPanel = panel;
-    const unregister = registerLinkTargets(node, rows, refresh);
-    const removed = node.onRemoved;
-    node.onRemoved = function () { destroy(); return removed?.apply(this, arguments); };
+    node[panelKey] = panel;
+    const unregister = spec.settings ? () => {} : registerLinkTargets(node, rows, refresh);
+    if (!spec.settings) {
+        const removed = node.onRemoved;
+        node.onRemoved = function () { destroy(); return removed?.apply(this, arguments); };
+    }
     refresh();
     requestAnimationFrame(() => { lastHeight = -1; refresh(); });
     return panel;
+}
+
+// Secondary settings reuse the same native-widget editors as the graph panel.
+export function openPanelSettings(node, spec, title = "Ray settings") {
+    node._raySettingsClose?.();
+    const dialog = document.createElement("dialog");
+    dialog.className = "rp-dialog";
+    dialog.setAttribute("aria-label", title);
+    Object.assign(dialog.style, { width: "440px", maxWidth: "calc(100vw - 24px)", maxHeight: "85vh",
+        overflow: "auto", padding: "10px", background: "#000", color: "#eee", border: "1px solid #383838", borderRadius: "8px" });
+    const heading = el("h3", "rp-title", title);
+    const mount = el("div");
+    dialog.append(heading, mount);
+    document.body.append(dialog);
+    const panel = installPanel(node, { ...spec, mount, settings: true });
+    const done = el("button", "rp-input", "Done");
+    done.type = "button";
+    dialog.append(done);
+    let closed = false;
+    const close = () => {
+        if (closed) return;
+        closed = true;
+        panel.destroy();
+        delete node._raySettingsPanel;
+        delete node._raySettingsClose;
+        dialog.close();
+        dialog.remove();
+    };
+    done.onclick = close;
+    dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
+    dialog.addEventListener("click", event => { if (event.target === dialog) close(); });
+    for (const type of ["keydown", "keyup", "keypress"]) dialog.addEventListener(type, event => event.stopPropagation());
+    if (!node._raySettingsLifecycle) {
+        node._raySettingsLifecycle = true;
+        const removed = node.onRemoved;
+        node.onRemoved = function () { this._raySettingsClose?.(); return removed?.apply(this, arguments); };
+    }
+    node._raySettingsClose = close;
+    dialog.showModal();
+    done.focus();
+    return { dialog, panel, close };
 }

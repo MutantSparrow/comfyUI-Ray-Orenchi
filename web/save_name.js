@@ -141,18 +141,68 @@ export function listWidgets(graph, skip) {
     })).filter(n => n.widgets.length).sort((a, b) => Number(a.id) - Number(b.id) || a.id.localeCompare(b.id));
 }
 
-function widgetValue(graph, id, name) {
+export function widgetValue(graph, id, name) {
     const widget = nodeById(graph, id)?.widgets?.find(w => w.name === name);
     return usable(widget) ? widget.value : null;
 }
 
+// Shared by Save Image's name builder and Model Card's card name.
+export function createWidgetPicker(graph, skip, selected) {
+    injectStyles();
+    const picker = el("div", "ray-name-widgets");
+    const filter = el("input");
+    filter.type = "text"; filter.placeholder = "Filter nodes and widgets…";
+    filter.setAttribute("aria-label", "Filter widgets");
+    const list = el("div", "ray-name-list");
+    function render() {
+        list.replaceChildren();
+        const query = filter.value.trim().toLowerCase();
+        for (const group of listWidgets(graph, skip).filter(g => String(g.id) !== String(skip?.id))) {
+            const widgets = group.widgets.filter(w => !query || `${group.title} ${group.id} ${w.name} ${w.value}`.toLowerCase().includes(query));
+            if (!widgets.length) continue;
+            list.append(el("h4", "", `${group.title} · #${group.id}`));
+            for (const widget of widgets) {
+                const button = el("button"); button.type = "button";
+                button.append(el("span", "", widget.name), el("span", "", valueText(widget.value).slice(0, 80)));
+                button.title = `{widget:${group.id}.${widget.name}}`;
+                button.onclick = () => selected(button.title);
+                list.append(button);
+            }
+        }
+        if (!list.children.length) list.append(el("div", "ray-name-empty", "No widgets match."));
+    }
+    filter.addEventListener("input", render);
+    picker.append(filter, list);
+    render();
+    return picker;
+}
+
+export function displayWidgetValue(value, limit = VALUE_LIMIT) {
+    let text = valueText(value).normalize("NFC").replace(/[{}]/g, "_")
+        .replace(/[\p{Cc}\p{Cf}]/gu, "").replace(/\s+/gu, " ").trim();
+    if (/\.(safetensors|ckpt|pt|pth|bin|gguf)$/i.test(text)) {
+        text = text.replace(/\\/g, "/").split("/").pop().replace(/\.[^.]+$/, "");
+    }
+    return cut(text, limit);
+}
+
+export function renderDisplayName(parts, ctx) {
+    const text = parts.map(part => {
+        if (part[0] === "text") return part[1];
+        if (part[1] === "widget") return displayWidgetValue(ctx.widgets?.(part[2].node, part[2].widget), part[2].limit);
+        if (["date", "time", "datetime", "timestamp", "hash"].includes(part[1])) return piece(part, ctx);
+        throw new TemplateError(`{${part[1]}} is only available for filenames.`);
+    }).join("");
+    return cut(text.normalize("NFC").replace(/[\p{Cc}\p{Cf}]/gu, "").replace(/\s+/gu, " ").trim(), 512);
+}
+
 // Replaces {widget:ID.NAME} with the widget's current value before the prompt is sent, so the value is the one on
 // screen even when the widget is fed by a link. Anything that cannot be found is left for the server to try.
-export function resolveWidgetTokens(template, graph) {
+export function resolveWidgetTokens(template, graph, formatValue = cleanValue) {
     return String(template).replace(/\{widget:([^.{}|\s]+)\.([^.{}|\s]+)(?:\|(\d+))?\}/gi, (whole, id, name, limit) => {
         const node = nodeById(graph, id);
         const widget = node?.widgets?.find(w => w.name === name);
-        return usable(widget) ? cleanValue(widget.value, limit ? Math.min(200, Math.max(1, Number(limit))) : VALUE_LIMIT) : whole;
+        return usable(widget) ? formatValue(widget.value, limit ? Math.min(200, Math.max(1, Number(limit))) : VALUE_LIMIT) : whole;
     });
 }
 
@@ -191,7 +241,7 @@ function injectStyles() {
 .ray-name-preview { margin:8px 0 4px; padding:8px; border-radius:5px; background:#101214; font:12px ui-monospace,monospace; color:#e5b567; overflow-wrap:anywhere; min-height:2.6em; }
 .ray-name-preview[data-error="true"] { color:#ffb1aa; }
 .ray-name-note { margin:0 0 8px; font-size:10px; color:#8d9096; }
-.ray-name-widgets { margin:6px 0; border:1px solid #33363c; border-radius:5px; background:#15171a; }
+.ray-name-widgets { margin:6px 0; border:1px solid #33363c; border-radius:5px; background:#15171a; pointer-events:auto; }
 .ray-name-widgets input[type=text] { border:0; border-bottom:1px solid #33363c; border-radius:5px 5px 0 0; }
 .ray-name-list { max-height:190px; overflow-y:auto; padding:2px; }
 .ray-name-list h4 { margin:6px 6px 2px; font:600 10px system-ui; letter-spacing:.06em; text-transform:uppercase; color:#d43aa8; }
@@ -210,18 +260,19 @@ const el = (tag, className, text) => {
     return node;
 };
 
-export function openNameBuilder(node) {
+export function openNameBuilder(node, options = {}) {
     injectStyles();
     node._rayNameBuilder?.close();
-    const widget = node.widgets?.find(w => w.name === "filename_prefix");
+    const widgetName = options.widgetName || "filename_prefix";
+    const widget = node.widgets?.find(w => w.name === widgetName);
     if (!widget) return null;
     const graph = node.graph;
     const panel = el("div", "ray-name");
     panel.setAttribute("role", "dialog");
-    panel.setAttribute("aria-label", "Build filename");
-    const title = el("div", "ray-name-title", "Build filename");
+    panel.setAttribute("aria-label", options.title || "Build filename");
+    const title = el("div", "ray-name-title", options.title || "Build filename");
     title.title = "Drag to move";
-    const label = el("label", "", "File name (saved as name.png)");
+    const label = el("label", "", options.label || "File name (saved as name.png)");
     const input = el("input");
     input.type = "text"; input.spellcheck = false; input.autocomplete = "off";
     input.value = String(widget.value ?? "");
@@ -229,7 +280,7 @@ export function openNameBuilder(node) {
     const chips = el("div", "ray-name-chips");
     const preview = el("div", "ray-name-preview");
     preview.setAttribute("aria-live", "polite");
-    const note = el("p", "ray-name-note", "Spaces and characters a filename cannot hold become _. Nothing is overwritten: {counter} continues from the files in the folder, and otherwise -2, -3… is added.");
+    const note = el("p", "ray-name-note", options.note || "Spaces and characters a filename cannot hold become _. Nothing is overwritten: {counter} continues from the files in the folder, and otherwise -2, -3… is added.");
     const done = el("button", "ray-name-done", "Done");
     done.type = "button";
     const picker = el("div", "ray-name-widgets");
@@ -237,8 +288,8 @@ export function openNameBuilder(node) {
     panel.append(title, label, input, chips, picker, preview, note, done);
     document.body.append(panel);
 
-    const editable = !linked(node, "filename_prefix");
-    if (!editable) { input.disabled = true; note.textContent = "filename_prefix is driven by a link, so it cannot be edited here."; }
+    const editable = !linked(node, widgetName);
+    if (!editable) { input.disabled = true; note.textContent = `${widgetName} is driven by a link, so it cannot be edited here.`; }
 
     let counting = false;
     const begin = () => { if (!counting) { graph?.beforeChange?.(); counting = true; } };
@@ -249,14 +300,16 @@ export function openNameBuilder(node) {
         widget.callback?.(value, app.canvas, node, undefined, undefined);
         node.setDirtyCanvas?.(true, true);
         node._raySave?.sync?.();
+        node._rayPanel?.schedule?.();
         showPreview();
     }
     function showPreview() {
-        const text = input.value.trim() || DEFAULT_TEMPLATE;
+        const text = input.value.trim() || (options.defaultTemplate ?? DEFAULT_TEMPLATE);
         try {
             const parts = parseTemplate(text);
             const lookup = (id, name) => widgetValue(graph, id, name);
-            preview.textContent = `${renderStem(parts, { now: new Date(), index: 1, input: 1, widgets: lookup }, 1)}.png`;
+            const context = { now: new Date(), index: 1, input: 1, widgets: lookup };
+            preview.textContent = options.preview ? options.preview(parts, context) : `${renderStem(parts, context, 1)}.png`;
             preview.dataset.error = "false";
         } catch (error) {
             preview.textContent = error.message;
@@ -267,7 +320,7 @@ export function openNameBuilder(node) {
         if (!editable) return;
         const start = input.selectionStart ?? input.value.length, end = input.selectionEnd ?? start;
         const before = input.value.slice(0, start), after = input.value.slice(end);
-        const glue = before && !/[_\-\s]$/.test(before) ? "_" : "";
+        const glue = before && !/[_\-\s]$/.test(before) ? (options.separator ?? "_") : "";
         input.value = before + glue + text + after;
         const caret = (before + glue + text).length;
         input.setSelectionRange(caret, caret);
@@ -292,37 +345,20 @@ export function openNameBuilder(node) {
     chips.append(
         chip("Date", "{date}", "ISO date: 2026-10-16"), chip("Time", "{time}", "14-32-05 (colons are not allowed in filenames)"),
         chip("Date + time", "{datetime}", "2026-10-16T14-32-05"),
-        withDigits("Counter", "counter", 1, 12, 4, "The next unused number in the folder, zero-padded to this many digits"),
-        chip("Index", "{index}", "Position of the image in its batch, from 1"), chip("Input", "{input}", "1 or 2: which image input the file came from"),
+        ...(options.fileTokens === false ? [] : [
+            withDigits("Counter", "counter", 1, 12, 4, "The next unused number in the folder, zero-padded to this many digits"),
+            chip("Index", "{index}", "Position of the image in its batch, from 1"), chip("Input", "{input}", "1 or 2: which image input the file came from"),
+        ]),
         withDigits("Hash", "hash", 4, 32, 8, "Random hex characters, so two names can never clash"),
         widgetsButton,
     );
 
-    function renderPicker(filter = "") {
-        const f = filter.trim().toLowerCase();
-        const list = el("div", "ray-name-list");
-        const groups = listWidgets(graph, node).map(g => ({ ...g, widgets: g.widgets.filter(w => !f || `${g.title} ${g.id} ${w.name} ${w.value}`.toLowerCase().includes(f)) })).filter(g => g.widgets.length);
-        if (!groups.length) list.append(el("div", "ray-name-empty", "No widgets match."));
-        for (const g of groups) {
-            list.append(el("h4", "", `${g.title} · #${g.id}`));
-            for (const w of g.widgets) {
-                const b = el("button"); b.type = "button";
-                b.append(el("span", "", w.name), el("span", "", valueText(w.value).slice(0, 40)));
-                b.title = `{widget:${g.id}.${w.name}}`;
-                b.addEventListener("click", () => { picker.hidden = true; insert(`{widget:${g.id}.${w.name}}`); });
-                list.append(b);
-            }
-        }
-        return list;
-    }
     widgetsButton.addEventListener("click", () => {
         if (!picker.hidden) { picker.hidden = true; return; }
-        const filter = el("input"); filter.type = "text"; filter.placeholder = "Filter nodes and widgets…"; filter.setAttribute("aria-label", "Filter widgets");
-        let list = renderPicker();
-        filter.addEventListener("input", () => { const next = renderPicker(filter.value); list.replaceWith(next); list = next; });
-        picker.replaceChildren(filter, list);
+        const shared = createWidgetPicker(graph, node, token => { picker.hidden = true; insert(token); });
+        picker.replaceChildren(shared);
         picker.hidden = false;
-        filter.focus();
+        shared.querySelector("input").focus();
     });
     input.addEventListener("input", () => setTemplate(input.value));
     input.addEventListener("keydown", event => { event.stopPropagation(); if (event.key === "Enter") { event.preventDefault(); close(); } });

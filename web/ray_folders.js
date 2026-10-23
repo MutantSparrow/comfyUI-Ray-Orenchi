@@ -11,6 +11,7 @@ app.registerExtension({
             const result=created?.apply(this,arguments);this.color=this.bgcolor="#000000";
             if(!this.addDOMWidget)return result;
             this._rayFolders=createGallery(this);
+            this.widgets_start_y=0;
             for(const name of ["folder","name_filter","selected_files","settings_json"])setWidgetHidden(this,this.widgets?.find(w=>w.name===name),true);
             this.addDOMWidget("ray_folders_gallery","RAY_FOLDERS",this._rayFolders.root,{
                 serialize:false,hideOnZoom:false,margin:4,getMinHeight:()=>260,getHeight:()=>480,

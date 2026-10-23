@@ -6,7 +6,6 @@ et al., Pixelated Image Abstraction (2012); it is not a reproduction of the pape
 """
 from math import gcd
 import numpy as np
-from scipy.ndimage import gaussian_filter, maximum_filter, median_filter
 
 
 def native_grid_evidence(rgb):
@@ -113,6 +112,7 @@ def cell_geometry(shape,size):
 
 
 def reconstruct(rgb,size,oklab,make_palette,nearest_indices,seed=0):
+    from scipy.ndimage import median_filter
     if size==rgb.shape[:2]: return rgb.copy()
     # Structural palette is deliberately independent of the requested output
     # palette. It separates regions without imposing their final colors.
@@ -197,6 +197,7 @@ def abstract_image(rgb,size,oklab,nearest_indices,palette=None):
 
 
 def dither_regions(lab):
+    from scipy.ndimage import gaussian_filter, maximum_filter
     """Only coherent source ramps qualify, not flat fields or random texture.
 
     Compare signed local slopes against their absolute magnitude: noise and

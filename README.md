@@ -1,6 +1,6 @@
 # comfyUI-Ray-Orenchi
 
-16 ComfyUI custom nodes for retro image effects, pixel art, local vision-language
+17 ComfyUI custom nodes for retro image effects, pixel art, local vision-language
 inference, prompt tooling and analog-console controls. Find them under the
 **👑 Ray** category in the add-node menu.
 
@@ -21,6 +21,7 @@ inference, prompt tooling and analog-console controls. Find them under the
 | | **Folder Captioner** | Caption a range of images in a folder with a full VLM; aligned text, image and path lists |
 | **🔧 Tools** | **Folders** | Browse and select local images, videos and audio; native media lists, prompts and paths |
 | | **Save Image** | Save PNGs or preview them, with a two-image comparison slider and folder picker |
+| | **Model Card** | Generate a visual model benchmark, full card, reduced preview, source batch and Markdown report |
 | | **TXT Folder** | Read text files as prompts, with matching save prefixes |
 | | **Metadata Inspector** | Read generation metadata from an image, or embed it into one |
 | | **Prompt Scraper** | One node for prompts from a local image folder, PromptDexter or CivitAI |

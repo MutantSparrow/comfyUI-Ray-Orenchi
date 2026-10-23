@@ -9,15 +9,13 @@ import logging
 import numpy as np
 import torch
 import torch.nn.functional as F
-from sklearn.cluster import MiniBatchKMeans
-from threadpoolctl import threadpool_limits
-try:
+if __package__:
     from .ray_pixel_structure import reconstruct, detect_size, abstract_image, dither_regions, distinct_palette, clean_clusters
-except ImportError:
+else:
     from ray_pixel_structure import reconstruct, detect_size, abstract_image, dither_regions, distinct_palette, clean_clusters
-try:
+if __package__:
     from ._common import normalize_image
-except ImportError:
+else:
     from _common import normalize_image
 
 
@@ -35,11 +33,11 @@ def oklab(rgb):
                                   [-.0040720468, .4505937099, -.8086757660]], dtype=np.float32)
 
 
-try:
+if __package__:
     from .ray_pixel_palette import build_palette, cie_lab
     from .ray_pixel_families import family_indices, family_features
     from .ray_pixel_mapping import mapping_space
-except ImportError:
+else:
     from ray_pixel_palette import build_palette, cie_lab
     from ray_pixel_families import family_indices, family_features
     from ray_pixel_mapping import mapping_space
@@ -51,6 +49,13 @@ def exact_size(h, w, longest):
     unit_h, unit_w = h // g, w // g
     k = max(1, min(g, int(np.floor(longest / max(unit_h, unit_w) + .5))))
     return unit_h * k, unit_w * k
+
+
+def approximate_size(h, w, longest):
+    """Honor the requested long edge, rounding the other edge to whole pixels."""
+    edge = max(1, int(np.floor(longest + .5)))
+    return (max(1, int(np.floor(h * edge / max(h, w) + .5))),
+            max(1, int(np.floor(w * edge / max(h, w) + .5))))
 
 
 def nearest_indices(colors, palette_lab):
@@ -237,9 +242,9 @@ class RayPixelArtDetector:
     FUNCTION = "process"
     RETURN_TYPES = ("IMAGE", "IMAGE")
     RETURN_NAMES = ("image", "preview")
-    OUTPUT_TOOLTIPS = ("Pixel-resolution image with the exact source aspect ratio.",
+    OUTPUT_TOOLTIPS = ("Pixel-resolution image: exact source grid for repair, rounded aspect ratio for illustration/photo.",
                        "Nearest-neighbor preview, or labeled method comparison when color grid is enabled.")
-    DESCRIPTION = "Repair a pixel grid or abstract an illustration/photo. Preserve exact aspect ratio, select perceptual colors and optionally dither or outline."
+    DESCRIPTION = "Repair an exact pixel grid or convert an illustration/photo at the requested resolution with a rounded aspect ratio. Select perceptual colors and optionally dither or outline."
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -247,7 +252,7 @@ class RayPixelArtDetector:
             "image": ("IMAGE", {"tooltip": "Connect the source image or batch."}),
             "input_kind": (["repair_pixel_art", "illustration_photo"], {"tooltip": "Recover an existing pixel grid, or abstract an illustration/photo into a smaller set of readable regions."}),
             "mode": (["manual_resize", "auto_pixel_size", "pixel_size"], {"default": "manual_resize", "tooltip": "Choose target size, detected grid size, or source pixels per output pixel."}),
-            "target_resolution": ("INT", {"default": 128, "min": 1, "max": 4096, "tooltip": "Choose the longest side; snap to the nearest exact-aspect integer resolution. Also used when auto detection finds no grid."}),
+            "target_resolution": ("INT", {"default": 128, "min": 1, "max": 4096, "tooltip": "Longest side. Repair snaps to the exact aspect-ratio lattice without upscaling; illustration/photo uses this edge and rounds the other dimension to the nearest pixel. Also the auto-detection fallback."}),
             "pixel_size": ("INT", {"default": 8, "min": 1, "max": 128, "tooltip": "Choose source pixels per output pixel in pixel_size mode."}),
             "sampling": (["grid_snap", "nearest", "area"], {"tooltip": "Use structure reconstruction for repair, region abstraction for illustration/photo, nearest for crisp sampling, or area for averaging."}),
             "reduce_palette": ("BOOLEAN", {"default": True, "tooltip": "Reduce colors and enable palette-based dithering. A connected palette always takes precedence."}),
@@ -282,7 +287,7 @@ class RayPixelArtDetector:
         longest = target_resolution
         if mode == "pixel_size":
             longest = max(h, w) / pixel_size
-        size = exact_size(h, w, longest)
+        size = (exact_size if input_kind == "repair_pixel_art" else approximate_size)(h, w, longest)
         if mode == "auto_pixel_size" and input_kind == "repair_pixel_art":
             predictions=[]
             for rgb in batch:
@@ -292,7 +297,7 @@ class RayPixelArtDetector:
             size=exact_size(h, w, float(np.median(predictions)))
         elif mode == "auto_pixel_size":
             logging.info("[Ray Pixel Art] Illustration/photo uses target_resolution; it has no assumed pixel grid.")
-        if max(size) != round(longest) and mode != "auto_pixel_size":
+        if input_kind == "repair_pixel_art" and max(size) != round(longest) and mode != "auto_pixel_size":
             logging.info("[Ray Pixel Art] Exact aspect ratio: requested longest side %s, using %sx%s.", longest, size[1], size[0])
         palette = None
         if palette_image is not None:

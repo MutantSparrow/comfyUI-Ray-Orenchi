@@ -2,7 +2,7 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { ICONS, ensurePanelStyles, linkChip, registerLinkTargets } from "./ray_panel.js";
 import { browseInto, notify } from "./browse_common.js";
-import { options, fuzzyMatch, colorSignature, matchesAnalysis, analysisScore, nsfwScore, promptText } from "./folders_filters.js";
+import { options, searchFilenames, colorSignature, matchesAnalysis, analysisScore, nsfwScore, promptText } from "./folders_filters.js";
 import { settingsPopup } from "./folders_settings.js";
 import { styles } from "./folders.css.js";
 import { cachedAnalysis, storeAnalysis } from "./folders_cache.js";
@@ -37,16 +37,18 @@ export function createGallery(node) {
     const lifecycle=new AbortController();
     let scanRequest,folder="",rootToken="",items=[],visible=[],opts=options(widget(node,"settings_json")?.value);
     let selected=new Set(),resolved=null,lastNative="",lastScan="",dead=false,scanSerial=0,analysisSerial=0,counts={},message="Choose a folder to browse.";
-    let tooltip,timer,hovered,hoverInfo,shift=false,viewerClose,menuClose,popupClose,debounce,resizeFrame,filterFrame;
+    let tooltip,timer,hovered,hoverInfo,shift=false,viewerClose,menuClose,popupClose,promptClose,deleteClose,debounce,resizeFrame,filterFrame;
     let reading=false,hydrating=false,pendingCount=0,scrolling=false,scrollTimer;
+    let searchRequest,searchTimer,searchSerial=0,searchQuery="",searchHideNoPrompt=false,searching=false,searchChecked=0,searchError="",searchStage="names";
+    let textMatches=new Set(),searchPending=new Set();
     const meta=new Map(),analysis=new Map(),tiles=new Map();
     const thumbnails=createThumbnailCache(),jobs=new Map(),unavailable=new Map();let allowed=new Set();
     const cacheKey=item=>folder+"\0"+item.id+":"+item.revision;
-    const root=element("div","ray-folders"),folderRow=element("div","rf-row"),filterRow=element("div","rf-row");
+    const root=element("div","ray-folders"),controls=element("div","rf-controls"),folderRow=element("div","rf-row"),filterRow=element("div","rf-row");
     const path=element("input"),filter=element("input");
     path.type=filter.type="text";path.spellcheck=filter.spellcheck=false;
     path.setAttribute("aria-label","Folder");path.placeholder="Choose a folder…";
-    filter.setAttribute("aria-label","Filename filter");filter.placeholder="Fuzzy filename filter…";
+    filter.setAttribute("aria-label","Filename or prompt filter");filter.placeholder="Fuzzy filename or prompt filter…";
     const browse=element("button","rf-icon");browse.type="button";browse.innerHTML=ICONS.folder;browse.title="Browse folder";browse.setAttribute("aria-label",browse.title);
     const refresh=element("button","rf-icon");refresh.type="button";refresh.innerHTML=ICONS.refresh;refresh.title="Refresh folder";refresh.setAttribute("aria-label",refresh.title);
     const cog=element("button","rf-icon");cog.type="button";cog.innerHTML=COG;cog.title="Folders settings";cog.setAttribute("aria-label",cog.title);
@@ -60,7 +62,7 @@ export function createGallery(node) {
     loading.append(element("span","rf-spinner"),loadingText);loading.hidden=true;
     const more=element("button","rf-more","Load more");more.type="button";more.hidden=true;
     more.title="Check the next visible files without scanning the whole folder";more.onclick=()=>render();
-    viewport.append(grid,loading);root.append(folderRow,filterRow,status,viewport,more,total);
+    controls.append(folderRow,filterRow,status);viewport.append(grid,loading);root.append(controls,viewport,more,total);
     const unregister=registerLinkTargets(node,[{name:"folder",element:folderRow},{name:"name_filter",element:filterRow}],()=>sync());
 
     function readSelection() {
@@ -70,11 +72,60 @@ export function createGallery(node) {
         } catch {selected=new Set();}
     }
     function storeSelection() {
-        const files=selected.size?items.filter(i=>selected.has(i.id)&&fuzzyMatch(i.name,currentFilter())&&matchesAnalysis(i,opts,analysis.get(cacheKey(i)))).map(i=>i.id):[];
+        const files=selected.size?items.filter(i=>selected.has(i.id)&&matchesText(i)&&matchesAnalysis(i,opts,analysis.get(cacheKey(i)))).map(i=>i.id):[];
         change(node,"selected_files",JSON.stringify({folder,files}));
     }
     function currentFolder() {return linked(node,"folder")?(resolved?.folder||""):String(widget(node,"folder")?.value||"");}
     function currentFilter() {return linked(node,"name_filter")?(resolved?.name_filter||""):String(widget(node,"name_filter")?.value||"");}
+    function matchesText(item) {return (!searchQuery&&(!opts.hide_no_prompt||item.kind!=="image"))||textMatches.has(item.id);}
+    function cancelSearch() {++searchSerial;clearTimeout(searchTimer);searchRequest?.abort();searching=false;}
+    function prepareSearch() {
+        cancelSearch();searchQuery=currentFilter().trim();searchError="";searchChecked=0;searchStage="names";
+        searchHideNoPrompt=opts.hide_no_prompt;
+        textMatches=new Set();searchPending=new Set();
+        if(!searchQuery&&!searchHideNoPrompt)return;
+        searchPending=new Set(items.map(item=>item.id));
+        if(!searchPending.size||!rootToken)return;
+        searching=true;
+        const serial=searchSerial,query=searchQuery,hideNoPrompt=searchHideNoPrompt,token=rootToken,listing=items;
+        searchRequest=new AbortController();const signal=searchRequest.signal;
+        searchTimer=setTimeout(()=>searchFiles(serial,query,hideNoPrompt,token,listing,signal),220);
+    }
+    async function searchFiles(serial,query,hideNoPrompt,token,listing,signal) {
+        let lastPaint=0;
+        try {
+            const names=await searchFilenames(listing,query,signal,checked=>{
+                if(!dead&&serial===searchSerial){searchChecked=checked;updateStatus();}
+            });
+            if(dead||serial!==searchSerial)return;
+            const nameMatches=new Set(names.matches),files=[];textMatches=new Set();
+            for(const item of listing) {
+                if(nameMatches.has(item.id)&&(!hideNoPrompt||item.kind!=="image"))textMatches.add(item.id);
+                else files.push(item.id);
+            }
+            searchPending=new Set(files);
+            searchChecked=textMatches.size;searchStage="prompts";
+            applyFilters();
+            for(let offset=0;offset<files.length;offset+=128) {
+                const batch=files.slice(offset,offset+128);
+                const result=await request("/ray/folders/search",{root:token,files:batch,query,hide_no_prompt:hideNoPrompt},signal);
+                if(dead||serial!==searchSerial)return;
+                for(const id of result.matches)textMatches.add(id);
+                for(const id of batch)searchPending.delete(id);
+                searchChecked+=batch.length;
+                if(performance.now()-lastPaint>120||offset+batch.length===files.length) {
+                    const firstResults=!visible.length;
+                    applyFilters(!!opts.colors.length||opts.nsfw!=="all");if(firstResults&&visible.length)render();
+                    lastPaint=performance.now();
+                }
+            }
+        } catch(error) {
+            if(dead||serial!==searchSerial||error.name==="AbortError")return;
+            searchError="Prompt filtering incomplete · refresh to retry";status.title=error.message;
+        } finally {
+            if(!dead&&serial===searchSerial){searching=false;applyFilters(true);updateStatus();}
+        }
+    }
     function pending(item) {
         if(item.kind==="audio"||unavailable.has(cacheKey(item)))return false;
         const info=analysis.get(cacheKey(item));
@@ -96,8 +147,10 @@ export function createGallery(node) {
         status.textContent=message||`${visible.length-pendingCount} / ${items.length} files · ${selected.size} selected`;
         if(!message&&(opts.colors.length||opts.nsfw!=="all"))status.textContent+=` · ${analysis.size} analyzed${pendingCount?` · ${pendingCount} pending · scroll to check more`:""}`;
         if(!message&&unavailable.size)status.textContent+=` · ${unavailable.size} unavailable`;
+        if(!message&&searching)status.textContent+=` · ${searchStage} ${searchChecked.toLocaleString()} / ${items.length.toLocaleString()} checked`;
+        if(!message&&searchError)status.textContent+=` · ${searchError}`;
         const busy=reading||hydrating||jobs.size>0;
-        status.classList.toggle("rf-busy",busy);viewport.setAttribute("aria-busy",String(busy));
+        status.classList.toggle("rf-busy",busy||searching);viewport.setAttribute("aria-busy",String(busy||searching));
         loading.hidden=!hydrating;
         loadingText.textContent="Checking saved selections…";
         more.hidden=busy||![...tiles.values()].some(tile=>tile.dataset.waiting==="true");
@@ -113,9 +166,9 @@ export function createGallery(node) {
         if(document.activeElement!==filter)filter.value=currentFilter();
         const native=JSON.stringify([currentFolder(),currentFilter(),opts]);
         const scanKey=JSON.stringify([currentFolder(),opts.types,opts.sort,opts.descending,opts.recursive]);
-        if(force||scanKey!==lastScan){lastScan=scanKey;scanRequest?.abort();++scanSerial;resetTiles();showLoading();clearTimeout(debounce);debounce=setTimeout(load,force?0:180);}
-        else if(native!==lastNative){resetTiles();applyFilters();}
-        lastNative=native;
+        const nativeChanged=native!==lastNative;lastNative=native;
+        if(force||scanKey!==lastScan){lastScan=scanKey;scanRequest?.abort();++scanSerial;cancelSearch();resetTiles();showLoading();clearTimeout(debounce);debounce=setTimeout(load,force?0:180);}
+        else if(nativeChanged){if(currentFilter().trim()!==searchQuery||opts.hide_no_prompt!==searchHideNoPrompt)prepareSearch();resetTiles();applyFilters();}
     }
     async function load() {
         const value=currentFolder().trim();
@@ -131,7 +184,7 @@ export function createGallery(node) {
             if(data.warnings?.length)status.title=data.warnings.join("\n");
             const existing=new Set(items.map(i=>i.id));selected=new Set([...selected].filter(id=>existing.has(id)));
             hydrating=!!selected.size&&(!!opts.colors.length||opts.nsfw!=="all");
-            storeSelection();applyFilters();
+            prepareSearch();storeSelection();applyFilters();
             if(hydrating) {
                 await Promise.all([...selected].map(async id=>{
                     const item=items.find(i=>i.id===id);if(!item)return;
@@ -146,7 +199,7 @@ export function createGallery(node) {
     function applyFilters(fromAnalysis=false) {
         visible=[];pendingCount=0;const available=new Set();
         for(const item of items) {
-            if(!fuzzyMatch(item.name,currentFilter()))continue;
+            if(!matchesText(item))continue;
             const waiting=pending(item);
             if(waiting||matchesAnalysis(item,opts,analysis.get(cacheKey(item)))) {
                 visible.push(item);if(waiting)pendingCount++;else available.add(item.id);
@@ -155,7 +208,7 @@ export function createGallery(node) {
         // A file hidden by an active filter must not silently remain in the output selection.
         for(const id of selected)if(!available.has(id)){
             const item=items.find(i=>i.id===id);
-            if(!item||!pending(item)||!fuzzyMatch(item.name,currentFilter()))selected.delete(id);
+            if(!item||(!searchPending.has(id)&&(!pending(item)||!matchesText(item))))selected.delete(id);
         }
         // Pending/unclassified media is not eligible for workflow output while a visual filter is active.
         storeSelection();
@@ -309,6 +362,91 @@ export function createGallery(node) {
         const close=()=>{abort.abort();media.onerror=null;if(media.pause)media.pause();media.removeAttribute("src");media.load?.();backdrop.remove();viewerClose=null;};
         viewerClose=close;backdrop.onclick=close;closeOnEscape(close,abort.signal);
     }
+    async function copyPrompt(item) {
+        const info=await details(item);if(dead)return;
+        const prompts=[...new Set((info.prompts||[]).filter(text=>typeof text==="string"&&text.trim()))]
+            .map(text=>promptText({prompts:[text]},opts));
+        if(prompts.length===1){await navigator.clipboard.writeText(prompts[0]);return;}
+        if(!prompts.length)return;
+        promptClose?.();hideTooltip();
+        const abort=new AbortController(),backdrop=element("div","rf-backdrop"),picker=element("div","rf-prompt-picker");
+        const previous=tiles.get(item.id)||document.activeElement;
+        const close=()=>{
+            abort.abort();backdrop.remove();if(promptClose===close)promptClose=null;
+            if(!dead&&previous?.isConnected)previous.focus?.({preventScroll:true});
+        };
+        promptClose=close;
+        picker.setAttribute("role","dialog");picker.setAttribute("aria-modal","true");picker.setAttribute("aria-label","Choose a prompt to copy");
+        picker.style.setProperty("--rf-prompt-columns",Math.ceil(Math.sqrt(prompts.length)));
+        const cards=prompts.map(text=>{
+            const card=element("button","rf-prompt-card");card.type="button";card.append(element("span","",text));
+            card.onclick=async event=>{
+                event.stopPropagation();card.disabled=true;
+                try {await navigator.clipboard.writeText(text);close();}
+                catch(error){if(backdrop.isConnected)notify(error.message);}
+                finally{card.disabled=false;}
+            };
+            picker.append(card);return card;
+        });
+        backdrop.onclick=close;
+        backdrop.onkeydown=event=>{
+            event.stopPropagation();
+            if(event.key!=="Tab")return;
+            const first=cards[0],last=cards[cards.length-1];
+            if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+            else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+        };
+        backdrop.onkeyup=event=>event.stopPropagation();
+        backdrop.append(picker);document.body.append(backdrop);closeOnEscape(close,abort.signal);
+        cards[0].focus({preventScroll:true});
+    }
+    function confirmDelete(item) {
+        deleteClose?.();hideTooltip();
+        const token=rootToken,sourceFolder=folder,key=cacheKey(item),abort=new AbortController();
+        const backdrop=element("div","rf-backdrop"),panel=element("section","rf-delete-dialog"),error=element("p","rf-delete-error");
+        panel.setAttribute("role","dialog");panel.setAttribute("aria-modal","true");panel.setAttribute("aria-label","Delete asset?");
+        panel.append(element("h3","","Delete asset?"),element("p","rf-delete-name",item.id),element("p","","Move this asset to the Recycle Bin / Trash. You can restore it there."),error);
+        error.setAttribute("role","alert");error.hidden=true;
+        const actions=element("div","rf-actions"),cancel=element("button","","Cancel"),remove=element("button","rf-danger","Delete asset");
+        cancel.type=remove.type="button";
+        let busy=false;
+        const previous=tiles.get(item.id)||document.activeElement;
+        const close=(force=false)=>{
+            if(busy&&!force)return;
+            abort.abort();backdrop.remove();if(deleteClose===destroy)deleteClose=null;
+            if(!dead&&previous?.isConnected)previous.focus?.({preventScroll:true});
+        };
+        const destroy=()=>close(true);deleteClose=destroy;
+        cancel.onclick=()=>close();backdrop.onclick=event=>{if(event.target===backdrop)close();};
+        closeOnEscape(()=>close(),abort.signal);
+        backdrop.onkeydown=event=>{
+            event.stopPropagation();
+            if(event.key==="Tab"){
+                const buttons=[cancel,remove].filter(button=>!button.disabled);
+                if(!buttons.length){event.preventDefault();return;}
+                if(event.shiftKey&&document.activeElement===buttons[0]){event.preventDefault();buttons.at(-1).focus();}
+                else if(!event.shiftKey&&document.activeElement===buttons.at(-1)){event.preventDefault();buttons[0].focus();}
+            }
+        };
+        backdrop.onkeyup=event=>event.stopPropagation();
+        remove.onclick=async()=>{
+            if(busy||dead)return;
+            busy=true;cancel.disabled=remove.disabled=true;remove.textContent="Deleting…";error.hidden=true;
+            try {
+                if(folder!==sourceFolder||rootToken!==token)throw new Error("The folder changed. Close this dialog and refresh before deleting.");
+                await request("/ray/folders/delete",{root:token,file:item.id,revision:item.revision},lifecycle.signal);
+                close(true);if(dead||folder!==sourceFolder)return;
+                if(rootToken!==token){sync(true);return;}
+                selected.delete(item.id);items=items.filter(value=>value.id!==item.id);
+                counts[item.kind]=Math.max(0,(counts[item.kind]||0)-1);textMatches.delete(item.id);searchPending.delete(item.id);
+                resetTiles();thumbnails.remove(key);meta.delete(key);analysis.delete(key);unavailable.delete(key);
+                viewerClose?.();promptClose?.();applyFilters();viewport.focus({preventScroll:true});
+            } catch(failure) {
+                if(!dead&&backdrop.isConnected){error.textContent="Could not delete asset. "+failure.message;error.hidden=false;}
+            } finally {busy=false;cancel.disabled=remove.disabled=false;remove.textContent="Delete asset";}
+        };
+        actions.append(cancel,remove);panel.append(actions);backdrop.append(panel);document.body.append(backdrop);cancel.focus();
+    }
     async function showMenu(item,event) {
         hideTooltip();menuClose?.();
         const abort=new AbortController(),menu=element("div","rf-menu");
@@ -321,14 +459,16 @@ export function createGallery(node) {
                 const png=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));
                 await navigator.clipboard.write([new ClipboardItem({"image/png":png})]);
             },item.kind!=="image"],
-            ["Copy prompt",async()=>navigator.clipboard.writeText(promptText(await details(item),opts)),true],
+            ["Copy prompt",()=>copyPrompt(item),true],
             ["Copy ComfyUI workflow",async()=>navigator.clipboard.writeText(JSON.stringify((await details(item)).workflow,null,2)),true],
         ];
-        const buttons=actions.map(([label,action,disabled])=>{
-            const button=element("button","",label);button.disabled=disabled;
+        actions.push(["Delete asset",()=>confirmDelete(item),false,"rf-danger"]);
+        const buttons=actions.map(([label,action,disabled,cls])=>{
+            const button=element("button",cls,label);button.disabled=disabled;
             button.onclick=async()=>{close();try{await action();}catch(error){notify(error.message);}};menu.append(button);return button;
         });
-        Object.assign(menu.style,{left:Math.max(8,Math.min(event.clientX,window.innerWidth-210))+"px",top:Math.max(8,Math.min(event.clientY,window.innerHeight-120))+"px"});document.body.append(menu);
+        document.body.append(menu);
+        Object.assign(menu.style,{left:Math.max(8,Math.min(event.clientX,window.innerWidth-menu.offsetWidth-8))+"px",top:Math.max(8,Math.min(event.clientY,window.innerHeight-menu.offsetHeight-8))+"px"});
         document.addEventListener("pointerdown",e=>{if(!menu.contains(e.target))close();},{capture:true,signal:abort.signal});closeOnEscape(close,abort.signal);
         try {const info=await details(item);if(menu.isConnected){buttons[1].disabled=!info.has_prompt;buttons[2].disabled=!info.workflow;}}catch{}
     }
@@ -344,7 +484,14 @@ export function createGallery(node) {
     window.addEventListener("keyup",e=>{if(e.code==="Space")space=false;if(e.key==="Shift"){shift=false;updateTooltip();}},{capture:true,signal:lifecycle.signal});
     window.addEventListener("blur",()=>{space=shift=false;hideTooltip();},{signal:lifecycle.signal});
     root.addEventListener("pointerdown",e=>{if(e.button===0&&!space)e.stopPropagation();});
-    viewport.addEventListener("wheel",e=>{if(!e.ctrlKey&&!e.metaKey&&!space)e.stopPropagation();},{passive:true});
+    // Nodes 2.0 forwards wheel events during ancestor capture, before a widget's
+    // own handler runs. Claim only this viewport's plain scrolling at the window.
+    window.addEventListener("wheel",e=>{
+        if(e.ctrlKey||e.metaKey||space||!e.composedPath().includes(viewport))return;
+        e.preventDefault();e.stopPropagation();
+        const unit=e.deltaMode===1?16:e.deltaMode===2?viewport.clientHeight:1;
+        viewport.scrollTop+=e.deltaY*unit;
+    },{capture:true,passive:false,signal:lifecycle.signal});
     let lastScroll=0;
     viewport.addEventListener("scroll",()=>{
         if(viewport.scrollTop===lastScroll)return;
@@ -352,12 +499,18 @@ export function createGallery(node) {
         clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{scrolling=false;pump();},80);
         render();
     });
-    const observer=new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(render);});observer.observe(viewport);
+    let viewportWidth=-1,viewportHeight=-1;
+    const observer=new ResizeObserver(()=>{
+        const width=viewport.clientWidth,height=viewport.clientHeight;
+        if(width===viewportWidth&&height===viewportHeight)return;
+        viewportWidth=width;viewportHeight=height;
+        cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>render());
+    });observer.observe(viewport);
     const poll=setInterval(()=>{if(root.isConnected)sync();},400);
     queueMicrotask(()=>sync(true));
     return {root,sync,refresh:()=>sync(true),
         executed(data){resolved=data;sync(true);if(data.error)status.title=data.error;},
-        destroy(){dead=true;scanRequest?.abort();resetTiles();thumbnails.clear();lifecycle.abort();observer.disconnect();cancelAnimationFrame(resizeFrame);clearTimeout(filterFrame);clearTimeout(scrollTimer);clearInterval(poll);clearTimeout(debounce);hideTooltip();viewerClose?.();menuClose?.();popupClose?.();unregister();},
+        destroy(){dead=true;scanRequest?.abort();cancelSearch();resetTiles();thumbnails.clear();lifecycle.abort();observer.disconnect();cancelAnimationFrame(resizeFrame);clearTimeout(filterFrame);clearTimeout(scrollTimer);clearInterval(poll);clearTimeout(debounce);hideTooltip();viewerClose?.();menuClose?.();popupClose?.();promptClose?.();deleteClose?.();unregister();},
     };
 }
 

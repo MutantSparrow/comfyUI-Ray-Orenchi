@@ -1,0 +1,5 @@
+# Pixel Art reconstruction, palette analysis and conversion.
+scikit-learn
+threadpoolctl
+scipy
+opencv-python>=4.6

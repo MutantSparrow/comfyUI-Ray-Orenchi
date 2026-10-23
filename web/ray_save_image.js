@@ -74,7 +74,8 @@ function styles() {
 .ray-save-stage {position:relative;flex:1 1 0;min-height:0;overflow:hidden;border-radius:5px;background:#000}
 .ray-save-stage img {position:absolute;width:100%;height:100%;object-fit:contain;inset:0;pointer-events:none}
 .ray-save-overlay {position:absolute;inset:0;pointer-events:none;background:#000}
-.ray-save-divider {position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 2px #000;pointer-events:none}
+.ray-save-divider {position:absolute;top:0;bottom:0;width:12px;transform:translateX(-50%);cursor:ew-resize;touch-action:none;pointer-events:auto}
+.ray-save-divider::before {content:"";position:absolute;top:0;bottom:0;left:50%;width:2px;transform:translateX(-50%);background:#fff;box-shadow:0 0 2px #000;pointer-events:none}
 .ray-save-handle {position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#f5f3fa;color:#222;border-radius:12px;padding:8px 5px;white-space:nowrap;font:bold 13px system-ui;box-shadow:0 1px 5px #0008;cursor:ew-resize;touch-action:none}
 .ray-save-empty {position:absolute;inset:0;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;color:#8c8c8c;text-align:center;padding:24px;pointer-events:none}
 .ray-save-empty svg {width:52px;height:52px;fill:none;stroke:#5c5c5c;stroke-width:1.6;stroke-linejoin:round}
@@ -196,12 +197,12 @@ function build(node) {
         const rect = stage.getBoundingClientRect();
         if (rect.width) position((e.clientX - rect.left) / rect.width);
     }
-    // Only the handle takes pointer input; the rest of the preview is
-    // transparent to the mouse so the canvas keeps its menu, pan and zoom.
-    handle.onpointerdown = e => { if (spaceHeld || !comparing || e.button !== 0) return; activePointer = e.pointerId; handle.setPointerCapture(e.pointerId); drag(e); e.preventDefault(); };
-    handle.onpointermove = e => { if (activePointer === e.pointerId) drag(e); };
-    handle.onpointerup = handle.onpointercancel = e => { if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId); activePointer = null; };
-    handle.onlostpointercapture = () => { activePointer = null; };
+    // The full divider takes pointer input; the rest of the preview stays
+    // transparent so the canvas keeps its menu, pan and zoom.
+    divider.onpointerdown = e => { if (spaceHeld || !comparing || e.button !== 0 || activePointer !== null) return; activePointer = e.pointerId; divider.setPointerCapture(e.pointerId); handle.focus({preventScroll:true}); drag(e); e.preventDefault(); };
+    divider.onpointermove = e => { if (activePointer === e.pointerId) drag(e); };
+    divider.onpointerup = divider.onpointercancel = e => { if (activePointer !== e.pointerId) return; if (divider.hasPointerCapture(e.pointerId)) divider.releasePointerCapture(e.pointerId); activePointer = null; };
+    divider.onlostpointercapture = e => { if (activePointer === e.pointerId) activePointer = null; };
     handle.onkeydown = e => {
         if (!comparing) return;
         const values = {ArrowLeft: fraction - .02, ArrowRight: fraction + .02, Home: 0, End: 1};

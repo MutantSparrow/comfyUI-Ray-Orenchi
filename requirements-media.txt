@@ -1,0 +1,2 @@
+# Folders video/audio metadata and posters (normally supplied by ComfyUI).
+av>=17.0.0

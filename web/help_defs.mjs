@@ -12,6 +12,22 @@
 // backticks. A node without an entry still gets its DESCRIPTION as summary.
 
 export const RAY_HELP_DEFS = {
+    RayModelCard: {
+        summary: "Connect MODEL, CLIP and VAE to generate a complete visual model benchmark. Outputs the full black card, a reduced preview, source images in card order, and a Markdown report as text.",
+        sections: [{ heading: "Benchmark config", bullets: [
+            "Leave config disconnected to run 66 images across eleven categories. Copy Config copies that exact editable template; paste it into a multiline string node and connect it to config.",
+            "Start categories with +CATEGORY. Entries use caption::positive prompt|negative prompt; caption and negative are optional. Blank lines are ignored. There are no comments or global negative prompts.",
+            "Escape delimiters with \\|, \\::, \\+, \\= and \\\\. Only a leading + or = has structural meaning. Errors include config line numbers and happen before sampling.",
+            "Card name is an editable, connectable STRING field above the generation controls. Its { } button opens Save Image's name builder with a live preview, dates, times, hashes and widget values such as unet_name, ckpt_name or seed. Spaces are preserved; loader widget paths/extensions are removed.",
+            "An optional =TITLE in the config overrides Card name. Blank names fall back to MODEL CARD. Name templates and existing widget selections survive workflow reload.",
+        ] }, { heading: "Generation and layout", bullets: [
+            "Categories run top to bottom, prompts left to right. The largest category sets the column count; shorter categories reserve empty cells. Captions wrap to two lines, then truncate with an ellipsis; the report keeps complete prompts.",
+            "Fixed repeats the initial seed. Increment/decrement advance before each image: initial 100 produces 101, 102, 103 with increment. Seeds wrap at 64 bits. Randomize chooses each image seed independently; all actual seeds are reported. The native seed control also updates the starting seed between queued runs.",
+            "Settings controls generation width/height, card width, maximum preview width, embedded guidance and run safeguards. Card height is automatic; preview is resized from the completed card.",
+            "Use the supplied model's normal sampler/CFG settings. Auto guidance applies the Settings guidance value to models declaring an embedding. Set supplies it explicitly; Disabled keeps native conditioning. MODEL patches such as shift/renorm belong upstream. V1 benchmarks image generation.",
+            "Source images remain in memory. The run count and estimated CPU output budget are checked before generation and can be raised in Settings. Model/VRAM memory is additional. A failed or interrupted run never emits a completed partial card.",
+        ] }],
+    },
     // ── ✨ VFX ─────────────────────────────────────────────────────────
     RayCRT: {
         summary: "Simulates a CRT display on an image: phosphor mask, scanlines, halation and bloom, NTSC chroma bleed, barrel curvature, vignette and glass reflection.",
@@ -35,14 +51,14 @@ export const RAY_HELP_DEFS = {
     },
 
     RayPixelArtDetector: {
-        summary: "Repairs enlarged or damaged pixel art, or abstracts an illustration or photo into pixel art, keeping the exact source aspect ratio.",
+        summary: "Repairs enlarged or damaged pixel art on its exact grid, or converts illustrations/photos at a requested size with rounded aspect preservation.",
         sections: [{
             heading: "Notes",
             bullets: [
                 "Use `repair_pixel_art` for existing pixel grids and `illustration_photo` for region abstraction.",
                 "`palette_strategy` builds the palette; `palette_mapping` assigns pixels to it. A connected `palette_image` overrides generated palettes (up to 256 exact colors).",
                 "Dithering is limited to smooth ramps; flat fills, texture and strong edges are protected. Start with `none`.",
-                "Exact aspect ratio can limit feasible sizes (for example 1001×667 cannot shrink exactly).",
+                "Repair preserves the exact aspect lattice, which can limit resizing. Illustration/photo fixes the long edge to the target and rounds the other dimension (1001×667 becomes 128×85 at target 128).",
             ],
         }],
     },
@@ -134,13 +150,14 @@ export const RAY_HELP_DEFS = {
 
     // ── 💬 LLM ─────────────────────────────────────────────────────────
     RayVLMFolder: {
-        summary: "Captions every image in a folder range with a local vision-language model on the GPU, returning aligned lists of captions, images and source paths.",
+        summary: "Captions every image in a folder range with a local vision-language model on the GPU, returning captions and paths with optional original-size images.",
         sections: [{
             heading: "Notes",
             bullets: [
                 "The folder icon next to **Folder of images** opens your system's folder dialog and fills in the path. You can still type or paste one.",
                 "Connect a full generative VLM `CLIP` (such as Qwen3-VL from `CLIPLoader`, type `qwen_image`) to `clip`; text-only encoders cannot caption.",
-                "Files are sorted by relative path. Use `start_index` and `limit` to process large folders in chunks; output images are held in RAM.",
+                "Files are sorted by relative path and captioned one at a time. `return_images` is off by default; enable it to decode the image output after all captioning finishes. Returned images still occupy RAM, so use `start_index` and `limit` to bound that output.",
+                "`cleanup_every` releases transient objects and unused ComfyUI VRAM caches every N captions (default 16). Low-memory cleanup also runs when available CPU RAM or VRAM falls below 512 MiB.",
                 "Supports JPEG, PNG, WebP, BMP, TIFF and GIF (first frame). Requires a GPU.",
             ],
         }],
@@ -152,6 +169,8 @@ export const RAY_HELP_DEFS = {
             heading: "Notes",
             bullets: [
                 "Load a full Qwen3-VL 4B or 8B checkpoint with CLIPLoader (type `qwen_image`, or `krea2`). The same CLIP can also feed image conditioning.",
+                "Penalty defaults are neutral: repetition 1.0, presence 0.0. Select the explicit anti_loop preset for presence 1.5, or set custom penalties. Saved custom penalty values remain effective.",
+                "Fast Qwen3-VL initialization is validated for ComfyUI 0.42.x; incompatible private APIs use native generation. Other Qwen families also use their native generator.",
                 "See FAST_VLM.md for measurements and constraints.",
             ],
         }],
@@ -184,7 +203,8 @@ export const RAY_HELP_DEFS = {
                 "The picture fills the node: resize the node to enlarge it. Image sizes and the save status sit on the picture, and with several images the arrows at the bottom right step through the pairs.",
                 "The **{ }** button next to **Filename prefix** opens a panel to build the name from tokens: `{date}`, `{time}`, `{counter}`, `{index}`, `{input}`, `{hash}` and `{widget:ID.NAME}` (the value of any widget in the workflow). The file is saved as exactly `<name>.png`.",
                 "Spaces and characters a filename cannot hold are replaced with `_`, and nothing is ever overwritten: `{counter}` moves on to the next free number, otherwise `-2`, `-3`… is added.",
-                "Right-click → Save without metadata omits workflow data; Open image location in Explorer opens the last save folder (Windows host).",
+                "Leave `metadata` unconnected to keep ComfyUI's default embedded metadata. Connect a STRING to replace it with that exact text in PNG `parameters`, including empty text.",
+                "Right-click → Save without metadata omits all embedded metadata, including connected custom text; ComfyUI's global metadata-disable option does too. Open image location in Explorer opens the last save folder (Windows host).",
                 "Files are 8-bit PNGs at input resolution, alpha included.",
             ],
         }],

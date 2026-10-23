@@ -3,7 +3,11 @@ export function styles() {
     const style=document.createElement("style");style.id="ray-folders-style";
     style.textContent=`
 .dom-widget:has(> .ray-folders){pointer-events:none!important}
-.ray-folders{box-sizing:border-box;position:relative;width:100%;min-width:0;height:100%;display:flex;flex-direction:column;gap:6px;padding:6px;background:#000;color:#eee;font:12px system-ui;color-scheme:dark;overflow:hidden;pointer-events:none;border-radius:8px}
+.ray-folders{box-sizing:border-box;position:relative;width:100%;min-width:0;min-height:0;height:100%;contain:size layout;display:flex;flex-direction:column;gap:6px;padding:6px;color:#eee;font:12px system-ui;color-scheme:dark;overflow:hidden;pointer-events:none;border-radius:8px}
+.rf-controls{display:flex;flex-direction:column;gap:6px;min-width:0;min-height:100px;padding-right:92px;flex-shrink:0}
+.lg-node:has(.ray-folders) [data-testid^="node-body-"]{position:relative}
+.lg-node:has(.ray-folders) [data-testid^="node-body-"]>:has(>div>.lg-slot--output){position:absolute;top:4px;left:0;right:0;z-index:2;pointer-events:none}
+.lg-node:has(.ray-folders) .lg-slot{pointer-events:auto}
 .ray-folders *,.rf-settings *{box-sizing:border-box}
 .ray-folders button,.ray-folders input,.rf-backdrop button,.rf-backdrop select,.rf-backdrop input{font:inherit;color:inherit;color-scheme:dark}
 .ray-folders button,.rf-backdrop button{background:#171717;border:1px solid #383838;border-radius:5px;cursor:pointer;pointer-events:auto}
@@ -40,6 +44,11 @@ export function styles() {
 .rf-kind{position:absolute;right:4px;top:4px;padding:2px 4px;background:#000b;border-radius:3px;color:#ddd;font-size:9px}
 .rf-selected{position:absolute;left:4px;top:4px;padding:1px 4px;border-radius:8px;background:#b9a4fa;color:#111;font-size:10px}
 .rf-backdrop{position:fixed;inset:0;z-index:100000;background:#0009;display:grid;place-items:center;color:#eee;font:12px system-ui}
+.rf-prompt-picker{display:grid;grid-template-columns:repeat(var(--rf-prompt-columns),minmax(0,1fr));grid-template-rows:repeat(var(--rf-prompt-columns),minmax(0,1fr));gap:18px;width:min(90vw,86vh);height:min(90vw,86vh);pointer-events:none}
+.rf-prompt-picker .rf-prompt-card{box-sizing:border-box;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;min-width:0;min-height:0;padding:16px;border:1px solid #333;border-radius:4px;background:#000;color:#eee;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;overscroll-behavior:contain;font:13px/1.5 system-ui;pointer-events:auto}
+.rf-prompt-card>span{display:block;flex:0 0 auto;min-width:0}
+.rf-prompt-picker .rf-prompt-card:hover{background:#000;border-color:#999}
+.rf-prompt-picker .rf-prompt-card:focus-visible{outline:2px solid #b9a4fa;outline-offset:3px}
 .rf-settings{box-sizing:border-box;width:min(430px,92vw);max-height:85vh;overflow:auto;background:#101010;border:1px solid #444;border-radius:10px;padding:18px;box-shadow:0 12px 50px #0009;color-scheme:dark}
 .rf-settings h3{font-size:15px;margin:0 0 16px}.rf-settings p{color:#999;font-size:11px;line-height:1.5}
 .rf-setting{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:11px 0;min-height:24px}.rf-setting>span{flex:0 0 145px;color:#bbb}
@@ -47,9 +56,11 @@ export function styles() {
 .rf-checks{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.rf-checks label{display:flex;align-items:center;gap:3px}.rf-checks input[type=range]{width:125px}.rf-checks output{min-width:28px}
 .rf-swatches{display:flex;flex-wrap:wrap;gap:5px}.rf-swatches button{width:20px;height:20px;padding:0;border-radius:50%;border:2px solid transparent}.rf-swatches button[aria-pressed=true]{border-color:#fff;box-shadow:0 0 0 1px #b9a4fa}
 .rf-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.rf-actions button{padding:6px 16px}
+.rf-delete-dialog{box-sizing:border-box;width:min(420px,92vw);max-height:85vh;overflow:auto;padding:18px;border:1px solid #444;border-radius:10px;background:#101010;box-shadow:0 12px 50px #0009}.rf-delete-dialog h3{margin:0 0 12px;font-size:15px}.rf-delete-dialog p{line-height:1.5;color:#bbb}.rf-delete-dialog .rf-delete-name{color:#eee;overflow-wrap:anywhere;white-space:pre-wrap}.rf-delete-dialog .rf-delete-error{color:#ff9999}.rf-delete-dialog .rf-danger{color:#ff9999;border-color:#794040}
 .rf-tooltip{position:fixed;z-index:100002;max-width:min(440px,80vw);max-height:45vh;overflow:hidden;pointer-events:none;white-space:pre-wrap;background:#111f;color:#ddd;border:1px solid #555;border-radius:6px;padding:9px 11px;box-shadow:0 4px 20px #0009;font:11px/1.5 system-ui}
 .rf-viewer{width:75vw;height:75vh;display:flex;align-items:center;justify-content:center;background:#050505;border:1px solid #444;border-radius:8px;overflow:hidden}.rf-viewer img,.rf-viewer video{max-width:100%;max-height:100%;object-fit:contain}.rf-viewer audio{width:80%}
 .rf-menu{position:fixed;z-index:100003;min-width:190px;padding:4px;background:#171717;color:#eee;border:1px solid #555;border-radius:6px;box-shadow:0 8px 24px #0009;font:12px system-ui}.rf-menu button{display:block;width:100%;padding:8px 12px;text-align:left;border:0;background:transparent;color:inherit;cursor:pointer}.rf-menu button:hover{background:#333}.rf-menu button:disabled{opacity:.4;cursor:default}
+.rf-menu button.rf-danger{color:#ff9999;border-top:1px solid #444;margin-top:4px}
 `;
     document.head.append(style);
 }

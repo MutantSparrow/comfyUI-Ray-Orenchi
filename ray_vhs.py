@@ -599,6 +599,8 @@ def apply_vhs(
     if osd:
         image = _burn_in_osd(image, osd, osd_color, 1.0 - fade, base)
     source = image
+    if p == VHSParams(p.label, 0, 0, 0, 0, 0, 0):
+        return image
 
     x = rgb_to_yuv(image).permute(0, 3, 1, 2).contiguous().float()
     B, _, H, W = x.shape

@@ -5,7 +5,7 @@ four bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
 - `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck, Fader Bank), all sharing one list of 31 styles.
-- `👑 Ray/🔧 Tools` — prompt scraper, metadata inspector, TXT folder, Save Image.
+- `👑 Ray/🔧 Tools` — prompt scraper, metadata inspector, TXT folder, Save Image, Model Card.
 - `👑 Ray/💬 LLM` — local vision-language inference and folder captioning.
 
 Every node is black, body and title bar alike, so it reads the same under any
@@ -522,10 +522,11 @@ the inference device must be a GPU. The checkpoint must fit the available resour
 |---|---|
 | `image_1` | Required IMAGE batch. |
 | `image_2` | Optional IMAGE batch; enables comparison. |
+| `metadata` | Optional STRING socket. Unconnected keeps the default ComfyUI prompt/workflow and extra PNG metadata. Connected replaces it with the exact string in the PNG `parameters` field; an empty string also replaces the defaults. |
 | `save_image` | `none`, `1` (default), `2`, or `both`; presented as compact segmented buttons. |
 | `directory` | Blank for ComfyUI output (shown as `/output`), relative to output, or an absolute destination. The folder button opens your system's folder dialog; the ▾ in the field recalls the last three save folders. |
 | `filename_prefix` | The file's name without the extension, built from text and tokens such as `{date}` and `{counter}`. See Filename builder below. |
-| `save_without_metadata` | Right-click toggle; removes prompt/workflow PNG text metadata. Defaults to false. |
+| `save_without_metadata` | Right-click toggle; omits all PNG text metadata, including connected `metadata`. Defaults to false. ComfyUI's global metadata-disable option also takes precedence. |
 
 Saving happens on execution. Selecting 2 without image_2 gives an actionable
 error; Both with only image_1 saves that input. Preview-only mode writes only to
@@ -572,3 +573,88 @@ the next destination or run preview-only. Explorer opens on the Windows ComfyUI 
 Resizable local media gallery with folder browsing, fuzzy filename search, multi-selection, prompt extraction, color/NSFW filters, viewers and drag-to-Load-Image. Both folder and name filter accept STRING inputs. All five outputs are optional ComfyUI lists: `images` (IMAGE), `videos` (VIDEO), `audio` (AUDIO), `prompt` (STRING), `paths` (STRING). Native dimensions/sample rates are preserved. With no selection, paths outputs the folder and media lists are empty. Refreshes on every workflow run, including when no outputs are connected.
 
 See [FOLDERS.md](FOLDERS.md) for settings, output pairing, error recovery and interactions.
+
+---
+
+## 🔧 Ray's Tools: Model Card (`RayModelCard`)
+
+Connect **MODEL**, **CLIP** and **VAE**, choose the model's usual generation settings,
+and run. The node generates a full benchmark internally. Leave the optional
+**config** STRING socket disconnected for the built-in **66-image, eleven-category**
+benchmark. **Copy Config** copies that exact default; paste it into a multiline
+text node, edit it and connect it to customize the benchmark.
+
+| Output | Type | Contents |
+|:--|:--|:--|
+| `model_card` | IMAGE | Completed black model card at the requested width; height is automatic |
+| `preview` | IMAGE | High-quality downscale of the completed card, capped by preview width |
+| `images` | IMAGE | All source generations as one batch, in card order |
+| `report` | STRING | Markdown text with runtime, exact config, settings, positions, prompts, negatives and actual seeds |
+
+Runtime is shown as `HH:MM:SS.ss` and seconds. It measures this node's validation,
+image generation/decoding, card rendering and IMAGE output conversion. Queue time
+and upstream node execution are excluded.
+
+### Config
+
+```text
+=MY MODEL.v1
++PEOPLE
+Portrait::portrait of a woman in soft window light|blurry, cartoon
+an elderly man wearing glasses
++ANIMALS
+Owl::owl perched on a branch, wildlife photograph
+```
+
+`=title` is optional and wins over **Card name**. `+CATEGORY`
+starts a category. Each remaining line is `caption::positive|negative`; omit the
+caption to display the positive prompt, and omit `|negative` for an empty negative.
+Blank lines and surrounding whitespace are ignored. There are no comments or
+global negative prompts. Every category must contain a prompt; duplicate titles
+and empty titles/captions/prompts are errors.
+
+Escape literal delimiters with `\|`, `\::`, `\+`, `\=` and `\\`. Only a leading
+unescaped `+` or `=` declares structure. The first unescaped `|` splits the negative;
+the first unescaped `::` before it splits the caption. Unknown or dangling escapes
+produce a line-numbered error before any generation starts.
+
+### Settings and behavior
+
+**Card name** sits above the generation controls as an editable, connectable STRING
+widget. Its **{ }** button opens Save Image's draggable name builder with a live
+preview, date/time/hash tokens and a widget picker for values such as `unet_name`,
+`ckpt_name` or a sampler seed. Combine tokens with your own text; spaces are kept.
+Loader widget paths/extensions are removed. The workflow keeps the template and
+resolves current widget values when queued. Title priority is config `=title`,
+Card name, then `MODEL CARD` when blank. Existing name selections survive reload.
+
+**Settings** contains source image width/height, card width, maximum preview width,
+embedded guidance and run safeguards.
+
+Generation runs categories top to bottom and prompts left to right. The largest
+category sets the column count; shorter rows leave aligned black cells. Thumbnails
+preserve the source aspect ratio. Captions have two fixed lines and ellipsis
+truncation; complete prompts remain in the report. Fonts use local Impact/condensed
+bold and sans-serif fonts with a Pillow fallback.
+
+**Fixed** repeats the initial seed. **Increment** and **decrement** advance before
+each image: initial seed 100 with increment generates 101, 102, 103, and so on.
+Seeds wrap at unsigned 64-bit boundaries. **Randomize** chooses an independent seed
+for each image. Every actual seed is recorded. The native ComfyUI seed control also
+updates the initial seed between queued runs.
+
+Sampling, model management, text encoding and decoding use ComfyUI facilities.
+Latent channels, dimensions and spatial scale come from the connected MODEL;
+single-frame image formats used by Qwen Image, Krea 2 and Anima are supported.
+SDXL, Flux/Flux 2/Klein/Flux 3, MOSS and Z-Image use the same native path. Availability
+depends on the installed ComfyUI and compatible MODEL/CLIP/VAE. **Auto** embedded
+guidance applies to models declaring `guidance_embed`; **Set** supplies the Settings
+value explicitly; **Disabled** keeps native conditioning unchanged. Apply shift,
+renorm and other MODEL patches upstream. V1 focuses on image generation.
+
+The default safeguards are 256 images and an estimated 4096 MiB CPU output/compositing
+budget; raise them deliberately for large runs. Model/VRAM memory is additional.
+All config/settings/size checks precede sampling. Failed generations identify the
+category, caption, index and config line; cancellation propagates normally. A failed
+run never emits a completed partial card. Source images and report stay in memory;
+connect Save Image or another output node when you want to save them.

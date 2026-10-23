@@ -13,8 +13,10 @@ from comfy.cli_args import args
 
 try:
     from . import filename_template as names
+    from .route_security import require_local
 except ImportError:
     import filename_template as names
+    from route_security import require_local
 
 
 def destination_path(value):
@@ -44,9 +46,12 @@ class RaySaveImage:
                 "save_image": (["none", "1", "2", "both"], {"default": "1", "tooltip": "Choose which input batches to save; none only previews."}),
                 "directory": ("STRING", {"default": "", "tooltip": "Choose an absolute folder, or a path relative to ComfyUI output. Blank uses output."}),
                 "filename_prefix": ("STRING", {"default": names.DEFAULT_TEMPLATE, "tooltip": "The file name, without the extension: text and {tokens} such as {date}, {counter}, {hash}, {index}, {input} and {widget:ID.NAME}. Spaces and characters a filename cannot hold are replaced, and nothing is overwritten. Use the Build filename button."}),
-                "save_without_metadata": ("BOOLEAN", {"default": False, "tooltip": "Omit prompt and workflow metadata from saved PNGs."}),
+                "save_without_metadata": ("BOOLEAN", {"default": False, "tooltip": "Omit all embedded metadata from saved PNGs, including connected custom metadata."}),
             },
-            "optional": {"image_2": ("IMAGE", {"tooltip": "Connect another image or batch to enable slider comparison."})},
+            "optional": {
+                "image_2": ("IMAGE", {"tooltip": "Connect another image or batch to enable slider comparison."}),
+                "metadata": ("STRING", {"forceInput": True, "tooltip": "Optional text to embed verbatim as PNG parameters instead of the ComfyUI prompt and workflow. Unconnected keeps the default metadata; connected empty text replaces it with an empty value."}),
+            },
             "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO", "node_id": "UNIQUE_ID"},
         }
 
@@ -60,7 +65,8 @@ class RaySaveImage:
                    "with the Build filename button. Existing files are never overwritten.")
 
     def save(self, image_1, save_image="1", directory="", filename_prefix=names.DEFAULT_TEMPLATE,
-             save_without_metadata=False, image_2=None, prompt=None, extra_pnginfo=None, node_id=None):
+             save_without_metadata=False, image_2=None, prompt=None, extra_pnginfo=None, node_id=None,
+             metadata=None):
         if save_image not in ("none", "1", "2", "both"):
             raise ValueError("Save Image must be none, 1, 2, or both.")
         if save_image == "2" and image_2 is None:
@@ -75,13 +81,16 @@ class RaySaveImage:
             output.mkdir(parents=True, exist_ok=True)
         temp = Path(folder_paths.get_temp_directory()) / "ray_save_image"
         temp.mkdir(parents=True, exist_ok=True)
-        metadata = None
+        pnginfo = None
         if selected and not save_without_metadata and not args.disable_metadata:
-            metadata = PngInfo()
-            if prompt is not None:
-                metadata.add_text("prompt", json.dumps(prompt))
-            for key, value in (extra_pnginfo or {}).items():
-                metadata.add_text(key, json.dumps(value))
+            pnginfo = PngInfo()
+            if metadata is not None:
+                pnginfo.add_text("parameters", metadata)
+            else:
+                if prompt is not None:
+                    pnginfo.add_text("prompt", json.dumps(prompt))
+                for key, value in (extra_pnginfo or {}).items():
+                    pnginfo.add_text(key, json.dumps(value))
         previews, saved = [[], []], []
         for number, batch in enumerate((image_1, image_2), 1):
             if batch is None:
@@ -97,7 +106,7 @@ class RaySaveImage:
                     target, stream = names.create_unique(
                         output, parts, {"now": now, "index": index + 1, "input": number, "widgets": widgets}, ".png")
                     with stream:
-                        image.save(stream, format="PNG", pnginfo=metadata, compress_level=4)
+                        image.save(stream, format="PNG", pnginfo=pnginfo, compress_level=4)
                     saved.append(str(target))
                 preview_name = f"{token}.png"
                 # Temp previews never embed workflows or local destination paths.
@@ -126,6 +135,7 @@ def register_routes():
 
     @PromptServer.instance.routes.post("/ray/save-image/open-location")
     async def open_location(request):
+        require_local(request)
         if request.content_type != "application/json":
             return web.json_response({"error": "Expected a JSON request."}, status=415)
         try:
