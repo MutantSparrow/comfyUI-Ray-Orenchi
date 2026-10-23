@@ -5,16 +5,18 @@ ModelMergeTools app and its FastAPI server are not required.
 
 | Node | Purpose |
 | --- | --- |
-| Load Model As | Select a checkpoint/diffusion model, or browse to a safetensors file/sharded directory. Auto detects the loader. |
-| Convert Model | Convert a file or connected MODEL into another storage format. |
-| Save Model | Save the effective model, including active merge and LoRA patches, with optional CLIP/VAE and metadata. |
-| Metadata Load / Edit | Read model metadata or a JSON sidecar into an editable table and raw JSON editor. |
-| Metadata Save | Save a structured JSON sidecar, or apply metadata to a model copy without changing tensor bytes. |
-| Model Merge | LERP, SLERP, TIES, DARE-Linear, DARE-TIES, DELLA, DELLA-TIES, Breadcrumbs, Breadcrumbs-TIES. |
-| Model Inspector | Header-only tensor listing, dtype distribution, byte counts, and architecture detection. |
-| Model Compare | Compare names, shapes and dtypes before merging. |
-| LoRA Bake | Bake an adapter using ComfyUI's adapter mappings and supported LoRA variants. |
-| LoRA Extract | SVD extraction from finetuned minus base, including convolution weights. |
+| [Load Model As](screenshots/RayModelLoadAs.png) | Select a checkpoint/diffusion model, or browse to a safetensors file/sharded directory. Auto detects the loader. |
+| [Convert Model](screenshots/RayModelConvert.png) | Convert a file or connected MODEL into another storage format. |
+| [Save Model](screenshots/RayModelSave.png) | Save the effective model, including active merge and LoRA patches, with optional CLIP/VAE and metadata. |
+| [Metadata Load / Edit](screenshots/RayModelMetadata.png) | Read model metadata or a JSON sidecar into an editable table and raw JSON editor. |
+| [Metadata Save](screenshots/RayModelMetadataSave.png) | Save a structured JSON sidecar, or apply metadata to a model copy without changing tensor bytes. |
+| [Model Merge](screenshots/RayModelMerge.png) | LERP, SLERP, TIES, DARE-Linear, DARE-TIES, DELLA, DELLA-TIES, Breadcrumbs, Breadcrumbs-TIES. |
+| [Model Inspector](screenshots/RayModelInspector.png) | Header-only tensor listing, dtype distribution, byte counts, and architecture detection. |
+| [Model Compare](screenshots/RayModelCompare.png) | Compare names, shapes and dtypes before merging. |
+| [LoRA Bake](screenshots/RayLoraBake.png) | Bake an adapter using ComfyUI's adapter mappings and supported LoRA variants. |
+| [LoRA Extract](screenshots/RayLoraExtract.png) | SVD extraction from finetuned minus base, including convolution weights. |
+
+Node names in the table link to their default Nodes 2.0 screenshot. The [node reference](NODES.md) embeds every image.
 
 ## Connections and file-only processing
 

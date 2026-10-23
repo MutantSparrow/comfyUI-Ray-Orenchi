@@ -1,5 +1,7 @@
 # Node Documentation
 
+Every node below includes its default **Nodes 2.0** view: full title, controls, and input/output ports. Images live in [screenshots/](screenshots/README.md). Any node change requires refreshing its image.
+
 All nodes live under `👑 Ray/` in the ComfyUI add-node menu, split across
 five bucket sub-categories:
 
@@ -16,6 +18,8 @@ they load; a color you set on a node yourself is kept.
 ---
 
 ## ✨ Ray's VFX: CRT (`RayCRT`)
+
+![✨ Ray's VFX: CRT — default Nodes 2.0 state](screenshots/RayCRT.png)
 
 **Purpose.** Image-space CRT display effect. Simulates phosphor mask (aperture / shadow / slot), scanline beam, halation + bloom, NTSC chroma bleed, barrel curvature, vignette, and reflection gloss. Multiple SOTA-inspired presets covering classic monitors and gaming consoles.
 
@@ -34,6 +38,8 @@ they load; a color you set on a node yourself is kept.
 ---
 
 ## ✨ Ray's VFX: Offset Print (`RayOffsetPrint`)
+
+![✨ Ray's VFX: Offset Print — default Nodes 2.0 state](screenshots/RayOffsetPrint.png)
 
 **Purpose.** Image-space CMYK / duotone offset print simulation. Per-plate halftone screen at SWOP angles, plate misregistration, dot gain, ink bleed, paper substrate (tint + grain + texture), optional sepia / vignette / posterize.
 
@@ -55,6 +61,8 @@ they load; a color you set on a node yourself is kept.
 ---
 
 ## ✨ Ray's VFX: Pixel Art (`RayPixelArtDetector`)
+
+![✨ Ray's VFX: Pixel Art — default Nodes 2.0 state](screenshots/RayPixelArtDetector.png)
 
 **Purpose.** Repair an existing pixel grid or abstract illustrations/photos into readable regions. Preserve exact aspect ratio, fit perceptual palettes and optionally add restrained dithering or colored outlines.
 
@@ -178,6 +186,8 @@ The plate passes the pointer through in normal mode too, so you can drag any ana
 
 ## 🎛️ Ray's Analog: Control (`RayKnob`)
 
+![🎛️ Ray's Analog: Control (Knob / Slider) — default Nodes 2.0 state](screenshots/RayKnob.png)
+
 **Purpose.** Analog-style float control, either a rotary knob or a slider, themed after studio hardware. Drag rotates a knob face or moves a slider cap; outputs both an `INT` (quantized by `clamp`) and a raw `FLOAT` so it plugs into either side without a converter. The node keeps its original `RayKnob` ID, so existing workflows load unchanged.
 
 **Category:** `👑 Ray/🎛️ Analog`
@@ -208,6 +218,8 @@ The plate passes the pointer through in normal mode too, so you can drag any ana
 
 ## 🎛️ Ray's Analog: Switch (`RaySwitch`)
 
+![🎛️ Ray's Analog: Switch — default Nodes 2.0 state](screenshots/RaySwitch.png)
+
 **Purpose.** Boolean toggle widget in any of the 31 shared styles, nine of them hand-drawn for it. Rockers and illuminated keys show their active state; lever handles point up for ON, and horizontal paddles/sliders move toward the ON label.
 
 **Category:** `👑 Ray/🎛️ Analog`
@@ -222,6 +234,8 @@ The plate passes the pointer through in normal mode too, so you can drag any ana
 ---
 
 ## 🎛️ Ray's Analog: Button Deck (`RayButtonDeck`)
+
+![🎛️ Ray's Analog: Button Deck — default Nodes 2.0 state](screenshots/RayButtonDeck.png)
 
 **Purpose.** A bank of analog push buttons that replaces a dropdown. Enter one value per line; each line becomes a button, and the pressed button's text comes out as a `STRING`. Styled after retro console hardware, in the same family as the Control and Switch.
 
@@ -257,6 +271,8 @@ Pressing a button plays its latch sound, followed by a softer release as the pre
 
 ## 🎛️ Ray's Analog: Fader Bank (`RayFaderBank`)
 
+![🎛️ Ray's Analog: Fader Bank — default Nodes 2.0 state](screenshots/RayFaderBank.png)
+
 **Purpose.** A bank of vertical faders, like a small mixing desk: two to ten in a row, in up to four rows (forty faders). Each fader outputs a float from 0 to 1, and the whole bank comes out as a list too. Good for blend weights, strengths and anything else you want to balance by eye.
 
 **Category:** `👑 Ray/🎛️ Analog`
@@ -282,6 +298,8 @@ Pressing a button plays its latch sound, followed by a softer release as the pre
 ---
 
 ## 🔧 Ray's Tools: Prompt Scraper (`RayPromptFetcher`)
+
+![🔧 Ray's Tools: Prompt Scraper — default Nodes 2.0 state](screenshots/RayPromptFetcher.png)
 
 **Purpose.** One node, three prompt sources. A `scraper_mode` dropdown picks between `Local Folder`, `PromptDexter`, and `CivitAI`; the frontend hides widgets that don't belong to the active mode. Outputs are harmonized to the local-scraper shape `(prompt_single, prompt_multiline, image, image_path)` so any mode is drop-in compatible with downstream wiring.
 
@@ -346,6 +364,8 @@ Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.
 
 ## 🔧 Ray's Tools: Metadata Inspector (`RayMetaInspect`)
 
+![🔧 Ray's Tools: Metadata Inspector — default Nodes 2.0 state](screenshots/RayMetaInspect.png)
+
 **Purpose.** Read or write image generation metadata. Two modes:
 
 - `Inspect` — parses every known chunk (A1111 `parameters`, ComfyUI `prompt` / `workflow` graph, EXIF UserComment, sidecar text) and exposes the extracted fields as separate STRING outputs plus the raw JSON blob.
@@ -378,6 +398,8 @@ In `Inspect`, connect a **Load Image** node to `image` and the node reads the me
 
 ## ✨ Ray's VFX: Film Stock (`RayFilmStock`)
 
+![✨ Ray's VFX: Film Stock — default Nodes 2.0 state](screenshots/RayFilmStock.png)
+
 **Purpose.** Analytical film-stock emulation. Applies a per-stock tonal curve + color response, optional grain and halation, and (optionally) layers a real graded look from a `.cube` / `.3dl` LUT or Photoshop / Lightroom `.xmp` develop-setting file.
 
 **Category:** `👑 Ray/✨ VFX`
@@ -398,6 +420,8 @@ In `Inspect`, connect a **Load Image** node to `image` and the node reads the me
 ---
 
 ## ✨ Ray's VFX: VHS / Tape (`RayVHS`)
+
+![✨ Ray's VFX: VHS / Tape — default Nodes 2.0 state](screenshots/RayVHS.png)
 
 **Purpose.** Videotape degradation modeled as a signal chain in YUV space, plus a VCR or camcorder on-screen display (OSD) that is burned into the picture rather than laid over it. The stages follow the path a tape signal takes: soft luma with deck sharpening halos, low-bandwidth colour that smears and lags behind the picture, cross-colour rainbows around fine detail, smooth line-level time-base wobble with tracking bands and a bent top edge, the torn head-switching band at the bottom, streaky tape noise, and dropouts.
 
@@ -450,6 +474,8 @@ Each slider defaults to `-1.0` (meaning "use the preset value") and `0..1` overr
 
 ## 🔧 Ray's Tools: TXT Folder (`RayTextFolder`)
 
+![🔧 Ray's Tools: TXT Folder — default Nodes 2.0 state](screenshots/RayTextFolder.png)
+
 **Category:** `👑 Ray/🔧 Tools`
 
 Read UTF-8 .txt files from one folder, alphabetically by filename; subfolders
@@ -476,7 +502,20 @@ Keep the sampler batch size at 1 for one image per file. Save Image saves
 each file under exactly that name (it adds `-2`, `-3`, … only if the name is
 taken). Use limit 3 for a small test, then -1 for the folder.
 
+## 💬 Ray's LLM: Fast Qwen3-VL Infer (`RayFastQwen3VL`)
+
+![💬 Ray's LLM: Fast Qwen3-VL Infer — default Nodes 2.0 state](screenshots/RayFastQwen3VL.png)
+
+**Purpose.** Caption an image using a full native Qwen3-VL CLIP already loaded in
+ComfyUI. Connect `clip` and `image`; output `text` contains the response to the
+instruction. Sampling, seed and repetition controls appear in the default panel.
+See [FAST_VLM.md](FAST_VLM.md) for supported models, loading and runtime behavior.
+
+---
+
 ## 💬 Ray's LLM: Folder Captioner (`RayVLMFolder`)
+
+![💬 Ray's LLM: Folder Captioner — default Nodes 2.0 state](screenshots/RayVLMFolder.png)
 
 **Category:** `👑 Ray/💬 LLM`
 
@@ -516,6 +555,8 @@ the inference device must be a GPU. The checkpoint must fit the available resour
 
 
 ## 🔧 Ray's Tools: Save Image (`RaySaveImage`)
+
+![🔧 Ray's Tools: Save Image — default Nodes 2.0 state](screenshots/RaySaveImage.png)
 
 **Category:** `👑 Ray/🔧 Tools`. Output node; no output sockets.
 
@@ -571,6 +612,8 @@ the next destination or run preview-only. Explorer opens on the Windows ComfyUI 
 
 ## 📁 Ray - Folders (`RayFolders`)
 
+![📁 Ray - Folders — default Nodes 2.0 state](screenshots/RayFolders.png)
+
 Resizable local media gallery with folder browsing, fuzzy filename search, multi-selection, prompt extraction, color/NSFW filters, viewers and drag-to-Load-Image. Both folder and name filter accept STRING inputs. All five outputs are optional ComfyUI lists: `images` (IMAGE), `videos` (VIDEO), `audio` (AUDIO), `prompt` (STRING), `paths` (STRING). Native dimensions/sample rates are preserved. With no selection, paths outputs the folder and media lists are empty. Refreshes on every workflow run, including when no outputs are connected.
 
 See [FOLDERS.md](FOLDERS.md) for settings, output pairing, error recovery and interactions.
@@ -578,6 +621,8 @@ See [FOLDERS.md](FOLDERS.md) for settings, output pairing, error recovery and in
 ---
 
 ## 🔧 Ray's Tools: Model Card (`RayModelCard`)
+
+![🔧 Ray's Tools: Model Card — default Nodes 2.0 state](screenshots/RayModelCard.png)
 
 Connect **MODEL**, **CLIP** and **VAE**, choose the model's usual generation settings,
 and run. The node generates a full benchmark internally. Leave the optional
@@ -659,3 +704,103 @@ All config/settings/size checks precede sampling. Failed generations identify th
 category, caption, index and config line; cancellation propagates normally. A failed
 run never emits a completed partial card. Source images and report stay in memory;
 connect Save Image or another output node when you want to save them.
+
+---
+
+## 🧰 Ray's Model Tools: Load Model As (`RayModelLoadAs`)
+
+![🧰 Ray's Model Tools: Load Model As — default Nodes 2.0 state](screenshots/RayModelLoadAs.png)
+
+**Purpose.** Load a checkpoint or diffusion model with automatic loading or an explicit storage format. Accepts a model selection, path, or `model_data` handle; returns MODEL, CLIP, VAE, model data, metadata, and a report.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Convert Model (`RayModelConvert`)
+
+![🧰 Ray's Model Tools: Convert Model — default Nodes 2.0 state](screenshots/RayModelConvert.png)
+
+**Purpose.** Convert connected model weights or a safetensors source to another supported precision or quantization. Optional loading returns usable ComfyUI components alongside the file handle and report.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Save Model (`RayModelSave`)
+
+![🧰 Ray's Model Tools: Save Model — default Nodes 2.0 state](screenshots/RayModelSave.png)
+
+**Purpose.** Save effective weights, including active patches, to a safetensors file. Accepts optional CLIP, VAE, source model data, and structured metadata; returns a model-data handle and the saved path.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Metadata Load / Edit (`RayModelMetadata`)
+
+![🧰 Ray's Model Tools: Metadata Load / Edit — default Nodes 2.0 state](screenshots/RayModelMetadata.png)
+
+**Purpose.** Load model metadata or a JSON sidecar into an editable table and raw JSON editor. Optional metadata/model-data connections can supply the source; returns structured metadata and JSON text.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Metadata Save (`RayModelMetadataSave`)
+
+![🧰 Ray's Model Tools: Metadata Save — default Nodes 2.0 state](screenshots/RayModelMetadataSave.png)
+
+**Purpose.** Save structured metadata as a JSON sidecar or embed it into a model copy while preserving the original tensor bytes. Returns the saved path.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Model Merge (`RayModelMerge`)
+
+![🧰 Ray's Model Tools: Model Merge — default Nodes 2.0 state](screenshots/RayModelMerge.png)
+
+**Purpose.** Merge compatible model sources with LERP, SLERP, TIES, DARE, DELLA, or Breadcrumbs variants. Includes component selection, seeded controls, block weights, and optional loading of the result.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Model Inspector (`RayModelInspector`)
+
+![🧰 Ray's Model Tools: Model Inspector — default Nodes 2.0 state](screenshots/RayModelInspector.png)
+
+**Purpose.** Inspect tensor names, shapes, dtypes, parameter counts, and architecture clues from a model source. The default panel is empty until a source is inspected; returns report text and metadata.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Model Compare (`RayModelCompare`)
+
+![🧰 Ray's Model Tools: Model Compare — default Nodes 2.0 state](screenshots/RayModelCompare.png)
+
+**Purpose.** Compare the tensor structures of two model sources before merging. Returns a report of differences in names, shapes and dtypes, plus a boolean indicating structural compatibility.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: LoRA Bake (`RayLoraBake`)
+
+![🧰 Ray's Model Tools: LoRA Bake — default Nodes 2.0 state](screenshots/RayLoraBake.png)
+
+**Purpose.** Bake a supported LoRA adapter into a model or checkpoint source using ComfyUI's mappings. Returns effective components, a model-data handle, metadata, and a report.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: LoRA Extract (`RayLoraExtract`)
+
+![🧰 Ray's Model Tools: LoRA Extract — default Nodes 2.0 state](screenshots/RayLoraExtract.png)
+
+**Purpose.** Extract a LoRA from the difference between finetuned and base checkpoints using SVD, with rank, alpha and precision controls. Returns the saved path, a LoRA-data handle, and a report.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.

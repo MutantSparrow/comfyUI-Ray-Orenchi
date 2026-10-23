@@ -1,0 +1,816 @@
+{
+  "schema": 1,
+  "nodes": {
+    "RayButtonDeck": {
+      "file": "RayButtonDeck.png",
+      "display_name": "🎛️ Ray's Analog: Button Deck",
+      "title": "🎛️ Ray's Analog: Button Deck",
+      "inputs": [],
+      "outputs": [
+        "value"
+      ],
+      "default_widgets": {
+        "selected": ""
+      },
+      "width_css_px": 400,
+      "height_css_px": 310,
+      "source_fingerprint": "4670cfade1704b5360fe025a02d3467be0559599668ed73a39345cf51d10e9f5",
+      "sha256": "259fc0887d3d8861a1c1d641f7d26eedf44bdcca91271da1e5c7cb4a4721c48b",
+      "captured_at": "2026-10-23T10:53:06.755Z"
+    },
+    "RayCRT": {
+      "file": "RayCRT.png",
+      "display_name": "✨ Ray's VFX: CRT",
+      "title": "✨ Ray's VFX: CRT",
+      "inputs": [
+        "image"
+      ],
+      "outputs": [
+        "image"
+      ],
+      "default_widgets": {
+        "preset": "trinitron_aperture",
+        "curvature": true,
+        "intensity": 1,
+        "scanline_strength": 1,
+        "mask_strength": 1
+      },
+      "width_css_px": 340,
+      "height_css_px": 319,
+      "source_fingerprint": "46ac4b45af05e4ba47eb5360978174604537f64b990883048ecf2161d196ba30",
+      "sha256": "65305f0ed6de4844e8ab6961d226286b96e478e63ecb352517819820c53a522c",
+      "captured_at": "2026-10-23T10:56:29.305Z"
+    },
+    "RayFaderBank": {
+      "file": "RayFaderBank.png",
+      "display_name": "🎛️ Ray's Analog: Fader Bank",
+      "title": "🎛️ Ray's Analog: Fader Bank",
+      "inputs": [],
+      "outputs": [
+        "values",
+        "fader_1",
+        "fader_2",
+        "fader_3",
+        "fader_4"
+      ],
+      "default_widgets": {
+        "faders": 4,
+        "fader_1": 0.5,
+        "fader_2": 0.5,
+        "fader_3": 0.5,
+        "fader_4": 0.5,
+        "fader_5": 0.5,
+        "fader_6": 0.5,
+        "fader_7": 0.5,
+        "fader_8": 0.5,
+        "fader_9": 0.5,
+        "fader_10": 0.5,
+        "rows": 1,
+        "fader_11": 0.5,
+        "fader_12": 0.5,
+        "fader_13": 0.5,
+        "fader_14": 0.5,
+        "fader_15": 0.5,
+        "fader_16": 0.5,
+        "fader_17": 0.5,
+        "fader_18": 0.5,
+        "fader_19": 0.5,
+        "fader_20": 0.5,
+        "fader_21": 0.5,
+        "fader_22": 0.5,
+        "fader_23": 0.5,
+        "fader_24": 0.5,
+        "fader_25": 0.5,
+        "fader_26": 0.5,
+        "fader_27": 0.5,
+        "fader_28": 0.5,
+        "fader_29": 0.5,
+        "fader_30": 0.5,
+        "fader_31": 0.5,
+        "fader_32": 0.5,
+        "fader_33": 0.5,
+        "fader_34": 0.5,
+        "fader_35": 0.5,
+        "fader_36": 0.5,
+        "fader_37": 0.5,
+        "fader_38": 0.5,
+        "fader_39": 0.5,
+        "fader_40": 0.5
+      },
+      "width_css_px": 291.875,
+      "height_css_px": 514.796875,
+      "source_fingerprint": "9b21a60ef0749981f39662e668c62e3bbdf13cf4ce23db9c76a4da12d8ef1698",
+      "sha256": "401b4e03c02d37776eaac5ccdb924a950be0125c0c1ec1d22cdc41dcc67a747a",
+      "captured_at": "2026-10-23T10:53:08.778Z"
+    },
+    "RayFastQwen3VL": {
+      "file": "RayFastQwen3VL.png",
+      "display_name": "💬 Ray's LLM: Fast Qwen3-VL Infer",
+      "title": "💬 Ray's LLM: Fast Qwen3-VL Infer",
+      "inputs": [
+        "clip",
+        "image"
+      ],
+      "outputs": [
+        "text"
+      ],
+      "default_widgets": {
+        "max_tokens": 256,
+        "temperature": 0,
+        "top_p": 0.9,
+        "top_k": 40,
+        "seed": 42,
+        "control_after_generate": "randomize",
+        "mode": "fast",
+        "sync_interval": 8,
+        "thinking": false,
+        "repetition_penalty": 1,
+        "presence_penalty": 0,
+        "repeat_guard": true,
+        "generation_preset": "custom"
+      },
+      "width_css_px": 400,
+      "height_css_px": 757.984375,
+      "source_fingerprint": "a8b550f0526921d7fe4e510484c6637d76629b04653cf47a71a9add7802e1f79",
+      "sha256": "413b3043d53b39a8056bdff9c35d2b43473ddd350fdcd0cd32f700c7220d57d0",
+      "captured_at": "2026-10-23T10:53:14.722Z"
+    },
+    "RayFilmStock": {
+      "file": "RayFilmStock.png",
+      "display_name": "✨ Ray's VFX: Film Stock",
+      "title": "✨ Ray's VFX: Film Stock",
+      "inputs": [
+        "image"
+      ],
+      "outputs": [
+        "image"
+      ],
+      "default_widgets": {
+        "preset": "Kodak Portra 400",
+        "intensity": 1,
+        "grain_amount": 1,
+        "halation_amount": 1,
+        "expose_stops": 0,
+        "seed": -1,
+        "control_after_generate": "randomize",
+        "assets_folder": "",
+        "asset_file": "(none)"
+      },
+      "width_css_px": 340,
+      "height_css_px": 469,
+      "source_fingerprint": "65ff2e118600a027eda8a4f2d38c6618e45585ed4c979b77eb52519baf7253f9",
+      "sha256": "e8b201b0eb685e364a3babc2a63803b2258fb50ab4d310be8a960b6aad7f921a",
+      "captured_at": "2026-10-23T10:53:20.564Z"
+    },
+    "RayFolders": {
+      "file": "RayFolders.png",
+      "display_name": "📁 Ray - Folders",
+      "title": "📁 Ray - Folders",
+      "inputs": [],
+      "outputs": [
+        "images",
+        "videos",
+        "audio",
+        "prompt",
+        "paths"
+      ],
+      "default_widgets": {
+        "folder": "",
+        "name_filter": "",
+        "selected_files": "{\"folder\":\"\",\"files\":[]}",
+        "settings_json": "{}"
+      },
+      "width_css_px": 460,
+      "height_css_px": 600,
+      "source_fingerprint": "fffe1fb29037fba62fdd54ae7dd425cc0a067cfa557e186816a3dc3c02f0a0a6",
+      "sha256": "1758ebd40abe96df62a7c5ccfca574250efd8399cf7ea6c91c3dc013c7d5f83a",
+      "captured_at": "2026-10-23T10:52:55.039Z"
+    },
+    "RayKnob": {
+      "file": "RayKnob.png",
+      "display_name": "🎛️ Ray's Analog: Control (Knob / Slider)",
+      "title": "🎛️ Ray's Analog: Control (Knob / Slider)",
+      "inputs": [],
+      "outputs": [
+        "int",
+        "float"
+      ],
+      "default_widgets": {
+        "min_value": -100,
+        "max_value": 100,
+        "clamp": 0,
+        "allow_negative": true,
+        "knob_value": 0
+      },
+      "width_css_px": 364.953125,
+      "height_css_px": 512.796875,
+      "source_fingerprint": "827c4074c4cf12d5e1033601750fc4328c9013600d1e71fe648ba471c84a970b",
+      "sha256": "a375bfa79a6235f7cf5afee252f674719812a30791d448bf35dab30a65b6b383",
+      "captured_at": "2026-10-23T10:53:02.904Z"
+    },
+    "RayLoraBake": {
+      "file": "RayLoraBake.png",
+      "display_name": "🧰 Ray's Model Tools: LoRA Bake",
+      "title": "🧰 Ray's Model Tools: LoRA Bake",
+      "inputs": [
+        "model",
+        "clip",
+        "vae",
+        "model_data"
+      ],
+      "outputs": [
+        "model",
+        "clip",
+        "vae",
+        "model_data",
+        "metadata",
+        "report"
+      ],
+      "default_widgets": {
+        "lora_name": "Select a file or use path…",
+        "strength_model": 1,
+        "strength_clip": 1,
+        "weight_format": "preserve",
+        "load_result": true,
+        "path": "",
+        "lora_path": ""
+      },
+      "width_css_px": 470,
+      "height_css_px": 548,
+      "source_fingerprint": "19b8d48302d60a70c107ee7b96584ec674eabe8e266833db08045a895ce39aeb",
+      "sha256": "13384138c94b1e121828aca496ac5775c51a4ba9219393153c37f4e9554bf148",
+      "captured_at": "2026-10-23T10:52:51.216Z"
+    },
+    "RayLoraExtract": {
+      "file": "RayLoraExtract.png",
+      "display_name": "🧰 Ray's Model Tools: LoRA Extract",
+      "title": "🧰 Ray's Model Tools: LoRA Extract",
+      "inputs": [
+        "finetuned_model",
+        "base_model",
+        "finetuned_clip",
+        "base_clip",
+        "finetuned_data",
+        "base_data"
+      ],
+      "outputs": [
+        "saved_path",
+        "lora_data",
+        "report"
+      ],
+      "default_widgets": {
+        "filename_prefix": "model_tools/Ray_Extracted_LoRA",
+        "rank": 16,
+        "alpha": 0,
+        "components": "diffusion",
+        "weight_format": "bf16",
+        "include_embeddings": false,
+        "finetuned_path": "",
+        "base_path": "",
+        "output_path": ""
+      },
+      "width_css_px": 470,
+      "height_css_px": 635,
+      "source_fingerprint": "43d7f6968e46598ac489d58cf9c3147d14b29830615e8db7a91fd65c3c9638a2",
+      "sha256": "c84599ea3e5df3ec12553336f774768e903629556020237fc0f8e48f4e224029",
+      "captured_at": "2026-10-23T10:52:53.119Z"
+    },
+    "RayMetaInspect": {
+      "file": "RayMetaInspect.png",
+      "display_name": "🔧 Ray's Tools: Metadata Inspector",
+      "title": "🔧 Ray's Tools: Metadata Inspector",
+      "inputs": [
+        "image"
+      ],
+      "outputs": [
+        "prompt_positive",
+        "prompt_negative",
+        "seed",
+        "steps",
+        "cfg",
+        "sampler",
+        "model",
+        "loras_json",
+        "width",
+        "height",
+        "raw_metadata_json",
+        "image"
+      ],
+      "default_widgets": {
+        "mode": "Inspect",
+        "path": ""
+      },
+      "width_css_px": 340,
+      "height_css_px": 427,
+      "source_fingerprint": "d4f53e892c32805dcc9e68e5bc8c6ca8549b66b570ca81d66922245c9bb15538",
+      "sha256": "b0aa49cc86417d03edd40812b16c89196bdfb168b87c069fb252555ad8b5f175",
+      "captured_at": "2026-10-23T10:53:18.610Z"
+    },
+    "RayModelCard": {
+      "file": "RayModelCard.png",
+      "display_name": "🔧 Ray's Tools: Model Card",
+      "title": "🔧 Ray's Tools: Model Card",
+      "inputs": [
+        "model",
+        "clip",
+        "vae",
+        "config"
+      ],
+      "outputs": [
+        "model_card",
+        "preview",
+        "images",
+        "report"
+      ],
+      "default_widgets": {
+        "seed": 0,
+        "control_after_generate": "fixed",
+        "seed_mode": "fixed",
+        "steps": 20,
+        "cfg": 7,
+        "sampler_name": "euler",
+        "scheduler": "normal",
+        "denoise": 1,
+        "image_width": 1024,
+        "image_height": 1024,
+        "card_width": 3000,
+        "preview_width": 1000,
+        "card_name": "",
+        "guidance_mode": "auto",
+        "guidance": 3.5,
+        "max_images": 256,
+        "memory_limit_mb": 4096
+      },
+      "width_css_px": 340,
+      "height_css_px": 469,
+      "source_fingerprint": "cf64091ee9a0fd4cec535c31b4d11016fc18ab408417bb3155456cbc96de50e9",
+      "sha256": "533c91ee480bca10355e23719e5f8b8ac8b3069f129cfced3e5cc70c1808ec40",
+      "captured_at": "2026-10-23T10:52:33.747Z"
+    },
+    "RayModelCompare": {
+      "file": "RayModelCompare.png",
+      "display_name": "🧰 Ray's Model Tools: Model Compare",
+      "title": "🧰 Ray's Model Tools: Model Compare",
+      "inputs": [
+        "model_a",
+        "model_b",
+        "data_a",
+        "data_b"
+      ],
+      "outputs": [
+        "report",
+        "structurally_compatible"
+      ],
+      "default_widgets": {
+        "path_a": "",
+        "path_b": "",
+        "components": "diffusion"
+      },
+      "width_css_px": 470,
+      "height_css_px": 372,
+      "source_fingerprint": "3cbc07ad7104355342f21cc78bc32437c2d475c58ee5ad0e7a06463584404e97",
+      "sha256": "adfb60de15eac00d17cf37b16aa80c51ba3a3d3b31d8328938a26c435c024e98",
+      "captured_at": "2026-10-23T10:52:49.311Z"
+    },
+    "RayModelConvert": {
+      "file": "RayModelConvert.png",
+      "display_name": "🧰 Ray's Model Tools: Convert Model",
+      "title": "🧰 Ray's Model Tools: Convert Model",
+      "inputs": [
+        "model",
+        "clip",
+        "vae",
+        "model_data"
+      ],
+      "outputs": [
+        "model",
+        "clip",
+        "vae",
+        "model_data",
+        "metadata",
+        "report"
+      ],
+      "default_widgets": {
+        "weight_format": "bf16",
+        "components": "diffusion",
+        "load_result": true,
+        "path": ""
+      },
+      "width_css_px": 470,
+      "height_css_px": 427,
+      "source_fingerprint": "20582395e909058403b1cdc5743688ab410dcb56a1c8535d69658f97a19c1f5f",
+      "sha256": "8f2faceb4814c5b6a41619bec6b93425f7a9c027f9dff969870a261145da3e6a",
+      "captured_at": "2026-10-23T10:52:37.680Z"
+    },
+    "RayModelInspector": {
+      "file": "RayModelInspector.png",
+      "display_name": "🧰 Ray's Model Tools: Model Inspector",
+      "title": "🧰 Ray's Model Tools: Model Inspector",
+      "inputs": [
+        "model",
+        "model_data"
+      ],
+      "outputs": [
+        "report",
+        "metadata"
+      ],
+      "default_widgets": {
+        "path": "",
+        "max_rows": 5000
+      },
+      "width_css_px": 470,
+      "height_css_px": 279,
+      "source_fingerprint": "fcf3aabb98b4418b8e7790f5d4bfd10a0ac68d45d87e6288425c3a4c61b150ff",
+      "sha256": "124936ff5b8af64ec210276be063cc70fdcf570f033b2676f651e6f93e65531a",
+      "captured_at": "2026-10-23T10:52:47.355Z"
+    },
+    "RayModelLoadAs": {
+      "file": "RayModelLoadAs.png",
+      "display_name": "🧰 Ray's Model Tools: Load Model As",
+      "title": "🧰 Ray's Model Tools: Load Model As",
+      "inputs": [
+        "model_data"
+      ],
+      "outputs": [
+        "model",
+        "clip",
+        "vae",
+        "model_data",
+        "metadata",
+        "report"
+      ],
+      "default_widgets": {
+        "model_name": "Select a file or use path…",
+        "weight_format": "auto",
+        "loader": "auto",
+        "load_components": true,
+        "path": ""
+      },
+      "width_css_px": 470,
+      "height_css_px": 461,
+      "source_fingerprint": "5b1e232ecfbd37466af0a5883350dadc66e810bec3e2fe0e04ff895a3b1df7cd",
+      "sha256": "cb71536a77e17600dec62db0ba01ff472bbd7b481c19abdeadea4ed18d536d27",
+      "captured_at": "2026-10-23T10:52:35.746Z"
+    },
+    "RayModelMerge": {
+      "file": "RayModelMerge.png",
+      "display_name": "🧰 Ray's Model Tools: Model Merge",
+      "title": "🧰 Ray's Model Tools: Model Merge",
+      "inputs": [
+        "model_a",
+        "model_b",
+        "base_model",
+        "clip_a",
+        "clip_b",
+        "base_clip",
+        "vae_a",
+        "data_a",
+        "data_b",
+        "base_data"
+      ],
+      "outputs": [
+        "model",
+        "clip",
+        "vae",
+        "model_data",
+        "metadata",
+        "report"
+      ],
+      "default_widgets": {
+        "strategy": "LERP",
+        "weight_a": 0.5,
+        "weight_format": "bf16",
+        "components": "diffusion",
+        "mismatch": "forbid",
+        "seed": 0,
+        "control_after_generate": "randomize",
+        "density": 0.5,
+        "lambda": 1,
+        "top_trim": 0.1,
+        "bottom_trim": 0.01,
+        "load_result": true,
+        "path_a": "",
+        "path_b": "",
+        "base_path": ""
+      },
+      "width_css_px": 470,
+      "height_css_px": 821.1875,
+      "source_fingerprint": "4747148efce2d11cfe7395b4ca923258320a605bda2eb57472004fcf8cd44fef",
+      "sha256": "aa140ab8935cd2f555697d68c5acb33b7bd092b5c42df42269a4cd7ebbb1615a",
+      "captured_at": "2026-10-23T10:52:45.425Z"
+    },
+    "RayModelMetadata": {
+      "file": "RayModelMetadata.png",
+      "display_name": "🧰 Ray's Model Tools: Metadata Load / Edit",
+      "title": "🧰 Ray's Model Tools: Metadata Load / Edit",
+      "inputs": [
+        "model_data",
+        "metadata"
+      ],
+      "outputs": [
+        "metadata",
+        "metadata_json"
+      ],
+      "default_widgets": {
+        "path": "",
+        "editor_source": ""
+      },
+      "width_css_px": 470,
+      "height_css_px": 245,
+      "source_fingerprint": "0c15a1b6df0f3da7cf7b81617561c766cff19e2b4259404939be6dcb3e1d58ce",
+      "sha256": "5c3c461697b2f389a09f0818e915fe3013c8606220d0535d285d0c20af9b7419",
+      "captured_at": "2026-10-23T10:52:41.555Z"
+    },
+    "RayModelMetadataSave": {
+      "file": "RayModelMetadataSave.png",
+      "display_name": "🧰 Ray's Model Tools: Metadata Save",
+      "title": "🧰 Ray's Model Tools: Metadata Save",
+      "inputs": [
+        "metadata"
+      ],
+      "outputs": [
+        "saved_path"
+      ],
+      "default_widgets": {
+        "mode": "json_sidecar",
+        "filename_prefix": "model_tools/Ray_Metadata",
+        "overwrite": false,
+        "source_model_path": "",
+        "output_path": ""
+      },
+      "width_css_px": 470,
+      "height_css_px": 433.1875,
+      "source_fingerprint": "90dc28a9c16010b835bfe533b16ecea63fdac24953d4b7fdcf760df2dbc4c15a",
+      "sha256": "9f3356319285dd55ce29b9b0dd69d946f9764e1a08e263c09302ddc69884eec4",
+      "captured_at": "2026-10-23T10:52:43.478Z"
+    },
+    "RayModelSave": {
+      "file": "RayModelSave.png",
+      "display_name": "🧰 Ray's Model Tools: Save Model",
+      "title": "🧰 Ray's Model Tools: Save Model",
+      "inputs": [
+        "model",
+        "clip",
+        "vae",
+        "model_data",
+        "metadata"
+      ],
+      "outputs": [
+        "model_data",
+        "saved_path"
+      ],
+      "default_widgets": {
+        "filename_prefix": "model_tools/Ray_Model",
+        "metadata_mode": "merge",
+        "overwrite": false,
+        "path": "",
+        "output_path": ""
+      },
+      "width_css_px": 470,
+      "height_css_px": 566.1875,
+      "source_fingerprint": "06e4dc372a7cc3f263f6291779f1c0ae020138ff2fac18fe3e63daa5aaddd6e2",
+      "sha256": "e0e68ad4396811c81fa29213872caa760d7d4521ff1f68e73fea0ac36fe1bcd3",
+      "captured_at": "2026-10-23T10:52:39.635Z"
+    },
+    "RayOffsetPrint": {
+      "file": "RayOffsetPrint.png",
+      "display_name": "✨ Ray's VFX: Offset Print",
+      "title": "✨ Ray's VFX: Offset Print",
+      "inputs": [
+        "image"
+      ],
+      "outputs": [
+        "image"
+      ],
+      "default_widgets": {
+        "preset": "old_newspaper",
+        "intensity": 1,
+        "ink_strength": 1,
+        "screen_strength": 1,
+        "paper_strength": 1,
+        "scale": 1,
+        "paper_color": "#ffffff",
+        "paper_color_mix": 0
+      },
+      "width_css_px": 340,
+      "height_css_px": 450,
+      "source_fingerprint": "a19871dea6c9f5f6f3d091f902d52a1775d2cd872b881bb3c03b058542b2bff5",
+      "sha256": "36334d489531b354ecbe1de480745ba8cf9aad3e373ebc1d2df0289a1bbcbec8",
+      "captured_at": "2026-10-23T10:52:58.944Z"
+    },
+    "RayPixelArtDetector": {
+      "file": "RayPixelArtDetector.png",
+      "display_name": "✨ Ray's VFX: Pixel Art",
+      "title": "✨ Ray's VFX: Pixel Art",
+      "inputs": [
+        "image",
+        "palette_image",
+        "foreground_mask"
+      ],
+      "outputs": [
+        "image",
+        "preview"
+      ],
+      "default_widgets": {
+        "input_kind": "repair_pixel_art",
+        "mode": "manual_resize",
+        "target_resolution": 128,
+        "pixel_size": 8,
+        "sampling": "grid_snap",
+        "reduce_palette": true,
+        "max_colors": 32,
+        "palette_style": "source",
+        "dither": "none",
+        "dither_strength": 0.7,
+        "outline": "none",
+        "palette_strategy": "color_families",
+        "protect_highlights": true,
+        "highlight_threshold": 90,
+        "color_grid": false,
+        "ramp_levels": 4,
+        "palette_allocation": "area_preserving",
+        "palette_mapping": "auto",
+        "seed": -1,
+        "control_after_generate": "randomize"
+      },
+      "width_css_px": 340,
+      "height_css_px": 694,
+      "source_fingerprint": "ad3dfe2c0f1413255162a21667d5c86dc4a219f91f92c82d2972d73807ff0825",
+      "sha256": "78e065fb4573d5fa3945820bd0d0e62e72c89c40fde00714f2ed8225f2697996",
+      "captured_at": "2026-10-23T10:53:00.949Z"
+    },
+    "RayPromptFetcher": {
+      "file": "RayPromptFetcher.png",
+      "display_name": "🔧 Ray's Tools: Prompt Scraper",
+      "title": "🔧 Ray's Tools: Prompt Scraper",
+      "inputs": [],
+      "outputs": [
+        "prompt_single",
+        "prompt_multiline",
+        "image",
+        "image_path"
+      ],
+      "default_widgets": {
+        "scraper_mode": "Local Folder",
+        "seed": -1,
+        "control_after_generate": "randomize",
+        "local__folder": "",
+        "local__recurse_subfolders": false,
+        "local__skip_no_prompt": false,
+        "local__prompt_best_try": false,
+        "dexter__category": "(any)",
+        "dexter__clear_cache": false,
+        "civitai__mode": "Blue (SFW)",
+        "civitai__base_model": "Any",
+        "civitai__period": "Week",
+        "civitai__sort": "Random",
+        "civitai__username": "",
+        "local__refresh_listing": false,
+        "dexter__timeout": 10,
+        "civitai__timeout": 15
+      },
+      "width_css_px": 340,
+      "height_css_px": 466,
+      "source_fingerprint": "8a17cac04fc82aa1471b4c828f24c734e852318c279de80b4b0ea7701ce009b7",
+      "sha256": "59444776e9d137bc8a060a06332109e58e494913efc64b08e892918ee1fb992c",
+      "captured_at": "2026-10-23T10:53:16.694Z"
+    },
+    "RaySaveImage": {
+      "file": "RaySaveImage.png",
+      "display_name": "🔧 Ray's Tools: Save Image",
+      "title": "🔧 Ray's Tools: Save Image",
+      "inputs": [
+        "image_1",
+        "image_2",
+        "metadata"
+      ],
+      "outputs": [],
+      "default_widgets": {
+        "save_image": "1",
+        "directory": "",
+        "filename_prefix": "Ray_{date}_{counter}",
+        "save_without_metadata": false
+      },
+      "width_css_px": 420,
+      "height_css_px": 510,
+      "source_fingerprint": "b764c140bb03c7a0ea2b3448622ba42e01ed85e2d4946fae06d45b7045319f52",
+      "sha256": "328b3f032c25d97f5371894b1aa395f2f0c7ca335f0d9c940d998a84660c39be",
+      "captured_at": "2026-10-23T10:52:31.772Z"
+    },
+    "RaySwitch": {
+      "file": "RaySwitch.png",
+      "display_name": "🎛️ Ray's Analog: Switch",
+      "title": "🎛️ Ray's Analog: Switch",
+      "inputs": [],
+      "outputs": [
+        "bool"
+      ],
+      "default_widgets": {
+        "state": false
+      },
+      "width_css_px": 270,
+      "height_css_px": 322.796875,
+      "source_fingerprint": "9d2c7426e3fcbead54fc69dea779061952c2eb672afb3ee0767bd9e5b6ac56be",
+      "sha256": "b7d9c80f0d2f05ddc1bbabd36cba1fc9fcf16b4b38fe99d728e135bf84522e59",
+      "captured_at": "2026-10-23T10:53:04.807Z"
+    },
+    "RayTextFolder": {
+      "file": "RayTextFolder.png",
+      "display_name": "🔧 Ray's Tools: TXT Folder",
+      "title": "🔧 Ray's Tools: TXT Folder",
+      "inputs": [],
+      "outputs": [
+        "prompt",
+        "filename_prefix"
+      ],
+      "default_widgets": {
+        "directory": "",
+        "start_index": 0,
+        "limit": -1,
+        "output_prefix": "RayKrea2_FromTXT"
+      },
+      "width_css_px": 340,
+      "height_css_px": 324,
+      "source_fingerprint": "d293cdad4faf10fb25636e2ca7d7b26186777d76298fe75e8717c0eca9f113ec",
+      "sha256": "baa00e8029cb675fd9fa8f81dd75e0fae83114297a7dca3fcff29a417fad55a6",
+      "captured_at": "2026-10-23T10:53:10.704Z"
+    },
+    "RayVHS": {
+      "file": "RayVHS.png",
+      "display_name": "✨ Ray's VFX: VHS / Tape",
+      "title": "✨ Ray's VFX: VHS / Tape",
+      "inputs": [
+        "image"
+      ],
+      "outputs": [
+        "image"
+      ],
+      "default_widgets": {
+        "preset": "Worn EP",
+        "chroma_blur": -1,
+        "head_switch": -1,
+        "tracking_jitter": -1,
+        "dropout_rate": -1,
+        "hiss": -1,
+        "yc_separation": -1,
+        "effect_fade": 0,
+        "osd_status": "Off",
+        "osd_status_corner": "TL",
+        "osd_stamp": "Off",
+        "osd_stamp_corner": "BR",
+        "osd_date": "",
+        "osd_color": "White",
+        "seed": -1,
+        "control_after_generate": "randomize"
+      },
+      "width_css_px": 340,
+      "height_css_px": 552,
+      "source_fingerprint": "4e2e304ee4b5024c606ebf297d153e6bb53381e244c2502508a274a6e547c813",
+      "sha256": "360253d434c285e757686adc9388a0a69e7cae6e8b0d1ea93d3d61ec04ea3f94",
+      "captured_at": "2026-10-23T10:53:22.561Z"
+    },
+    "RayVLMFolder": {
+      "file": "RayVLMFolder.png",
+      "display_name": "💬 Ray's LLM: Folder Captioner",
+      "title": "💬 Ray's LLM: Folder Captioner",
+      "inputs": [
+        "clip"
+      ],
+      "outputs": [
+        "text",
+        "image",
+        "image_path"
+      ],
+      "default_widgets": {
+        "folder": "",
+        "recurse_subfolders": false,
+        "start_index": 0,
+        "limit": -1,
+        "max_length": 1024,
+        "temperature": 0.25,
+        "top_k": 40,
+        "top_p": 0.9,
+        "min_p": 0.05,
+        "repetition_penalty": 1.05,
+        "seed": -1,
+        "control_after_generate": "randomize",
+        "thinking": false,
+        "return_images": false,
+        "cleanup_every": 16
+      },
+      "width_css_px": 400,
+      "height_css_px": 848.1875,
+      "source_fingerprint": "4cedc6820f0b79f6d7e397db73e6dcf3fae774b701dbcdcc4cfba637e22c0c11",
+      "sha256": "edafb50a8bbab6301f3e583fab27208ab0553313d91243b40ebe0fcc10716525",
+      "captured_at": "2026-10-23T10:53:12.689Z"
+    }
+  },
+  "renderer": "ComfyUI Nodes 2.0",
+  "device_scale_factor": 2,
+  "zoom": 1,
+  "padding_css_px": 24,
+  "comfyui_version": "0.42.0",
+  "frontend_version": "1.55.18",
+  "browser_version": "156.0.8078.4",
+  "platform": "win32"
+}

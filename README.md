@@ -63,6 +63,8 @@ the browser. After updating the pack, restart again so new and changed nodes loa
 ## Documentation
 
 [NODES.md](NODES.md) is the node-by-node reference for inputs, outputs and behavior.
+Every node includes a [default Nodes 2.0 screenshot](screenshots/README.md).
+Node changes require updating the corresponding image in the same change.
 
 [FOLDERS.md](FOLDERS.md) covers the media gallery, selection, filtering and outputs.
 
