@@ -7,6 +7,8 @@ committers. Name branches and commits after the actual change. Do not add tool,
 vendor, or generated-work attribution to branches, commit messages, co-author
 trailers, collaborators, documentation, or other project content. Preserve this
 rule in every future change.
+Never name the coding service, its vendor, or its chat product anywhere in the
+project, including functional provider labels and historical metadata.
 
 ## Screenshot maintenance
 
