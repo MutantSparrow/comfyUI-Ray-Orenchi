@@ -41,6 +41,12 @@ sections with the shared thin horizontal rule; hide empty sections and their
 separators together. Apply the same treatment to custom panels. Preserve compact
 analog modes and native input/output ports.
 
+Use the shared Ray panel path controls and icon helpers for browsing and navigation.
+Keep the established file/folder SVGs, compact button dimensions and spacing.
+Use the file dialog for sources and Save As for explicit output files; preserve
+cancellation and linked-input behavior. Keep output filters aligned with the
+node's current mode.
+
 ## Documentation audience
 
 README and node documentation are for end users. Describe features, controls,

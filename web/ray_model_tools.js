@@ -30,7 +30,7 @@ function styles() {
     if (document.getElementById("ray-model-tools-style")) return;
     const style = el("style"); style.id = "ray-model-tools-style";
     style.textContent = `.rmt{display:flex;flex-direction:column;gap:7px;min-width:0;width:100%;pointer-events:auto}
-    .rmt [hidden]{display:none!important}.rmt-toolbar{display:flex;gap:5px;flex-wrap:wrap}.rmt button{padding:5px 9px}.rmt input,.rmt textarea,.rmt select{background:#141414;color:#eee;border:1px solid #383838;border-radius:4px;padding:5px;font:12px system-ui;min-width:0}
+    .rmt [hidden]{display:none!important}.rmt-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.rmt button{height:28px;padding:4px 9px}.rmt input,.rmt textarea,.rmt select{background:#141414;color:#eee;border:1px solid #3a3a3a;border-radius:5px;padding:4px 9px;font:12px system-ui;min-width:0}
     .rmt input{width:100%}.rmt textarea{width:100%;resize:vertical;min-height:54px;max-height:240px;font:11px monospace}.rmt pre{font:11px monospace;white-space:pre-wrap;word-break:break-word;margin:0;max-height:240px;overflow:auto}
     .rmt-scroll{max-height:330px;overflow:auto;scrollbar-width:thin}.rmt-table{width:100%;border-collapse:collapse;font:11px system-ui;table-layout:fixed}.rmt-table th{text-align:left;color:#aaa;position:sticky;top:0;background:#080808}.rmt-table th:first-child{width:64%}.rmt-table th:nth-child(2){width:23%}.rmt-table th:nth-child(3){width:13%}.rmt-table td,.rmt-table th{padding:5px;border-bottom:1px solid #272727;vertical-align:top;overflow-wrap:anywhere}
     .rmt-row{display:grid;grid-template-columns:minmax(95px,1fr) minmax(120px,1.5fr) 52px;gap:5px;padding-bottom:7px;border-bottom:1px solid #252525}.rmt-key{display:flex;flex-direction:column;gap:5px}.rmt-row details{font-size:10px;color:#aaa}.rmt-message{color:#aaa;font-size:11px;white-space:pre-wrap}.rmt-error{color:#ff9292}.rmt-raw{min-height:180px!important}`;
@@ -154,6 +154,7 @@ export function createReport(node, id) {
         if (Array.isArray(report.rows)) {
             const filtered = filterTensors(report.rows, query, page); page = filtered.page;
             count.textContent = `${filtered.total} shown · page ${page + 1}/${filtered.pages}`;
+            previous.disabled = page === 0; next.disabled = page >= filtered.pages - 1;
             const table = el("table", undefined, "rmt-table"), head = el("thead"), tr = el("tr");
             for (const label of ["Tensor", "Shape", "Dtype"]) tr.append(el("th", label));
             head.append(tr); table.append(head);
@@ -184,7 +185,10 @@ export function createReport(node, id) {
         catch (error) { notify(error.message); }
     }));
     search.oninput = () => { query = search.value; page = 0; render(); };
-    paging.append(button("Previous", () => { page--; render(); }), count, button("Next", () => { page++; render(); }));
+    const previous = button("‹", () => { page--; render(); }), next = button("›", () => { page++; render(); });
+    previous.title = "Previous tensor page"; next.title = "Next tensor page";
+    previous.setAttribute("aria-label", previous.title); next.setAttribute("aria-label", next.title);
+    paging.append(previous, count, next);
     root.append(toolbar, summary, search, paging, content);
     watchHeight(node, root);
     node._rayModelToolsView = { show, root };
@@ -229,7 +233,13 @@ const SECTIONS = {
 const LABELS = {
     model_name: "Model", lora_name: "LoRA", lora_path: "LoRA file",
     strength_model: "Model strength", strength_clip: "CLIP strength", metadata_json: "Metadata (JSON)",
+    path: "Model file", path_a: "Model A file", path_b: "Model B file", base_path: "Base model file",
+    finetuned_path: "Fine-tuned model file", source_model_path: "Source model file", output_path: "Output file",
 };
+const MODEL_FILTERS = [["Safetensors", ["safetensors"]]];
+const INSPECT_FILTERS = [["Model files", ["safetensors", "gguf"]]];
+const METADATA_FILTERS = [["Models / metadata", ["safetensors", "json"]]];
+const outputExtension = (node, id) => id === "RayModelMetadataSave" && value(node, "mode") === "json_sidecar" ? "json" : "safetensors";
 
 export function installModelTools(node, id) {
     if (node._rayModelTools) return;
@@ -240,8 +250,20 @@ export function installModelTools(node, id) {
     const fields = native.map(w => {
         const field = { name: w.name, label: LABELS[w.name], full: /path|block_weights|metadata_json/.test(w.name) };
         if (/^(path|path_a|path_b|base_path|finetuned_path|lora_path|source_model_path)$/.test(w.name)) {
-            field.actions = [{ label: "…", title: `Browse ${w.name.replaceAll("_", " ")}`,
-                onClick: () => browseInto(node, w.name, { kind: "file", filters: [["Model / metadata", ["safetensors", "json", "gguf"]]] }) }];
+            const metadata = id === "RayModelMetadata";
+            if (metadata) field.label = "Model / metadata file";
+            field.browse = { kind: "file", title: `Choose ${field.label.toLowerCase()}`,
+                filters: metadata ? METADATA_FILTERS : id === "RayModelInspector" ? INSPECT_FILTERS : MODEL_FILTERS };
+            field.placeholder = metadata ? "Model file, folder or metadata JSON" : "Model file or folder";
+            if (w.name === "lora_path") field.placeholder = "Path to a LoRA file";
+            else if (w.name === "source_model_path") field.placeholder = "Path to a model file";
+            else field.actions = [{ icon: "folder", title: "Choose a model folder",
+                onClick: () => browseInto(node, w.name, { kind: "folder", title: "Choose a model folder" }) }];
+        }
+        if (w.name === "output_path") {
+            field.browse = n => ({ kind: "save", title: "Choose output file",
+                filters: [[outputExtension(n, id) === "json" ? "Metadata JSON" : "Safetensors", [outputExtension(n, id)]]] });
+            field.placeholder = "Automatic filename in the output folder";
         }
         if (id === "RayModelMerge" && ["density", "lambda", "top_trim", "bottom_trim", "seed"].includes(w.name)) {
             field.when = n => mergeFields(String(value(n, "strategy")))[w.name];

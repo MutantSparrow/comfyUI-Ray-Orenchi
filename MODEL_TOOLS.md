@@ -24,6 +24,14 @@ handle to a safetensors file; use it between file operations and Save Model.
 **metadata** is a structured connection shared by metadata and save nodes.
 Reports are also available as STRING outputs.
 
+Use the file icon beside a source path to choose a model or metadata file.
+Where available, the folder icon chooses a model directory, including sharded models.
+The file icon beside **Output file** opens Save As; Metadata Save switches
+between JSON and safetensors according to its mode. Leave Output file blank to
+use the filename prefix and ComfyUI output folder. Choosing a path does not
+write a file; run the node to save it, with **overwrite** controlling replacement
+of an existing file.
+
 A connected MODEL takes priority over model_data and path inputs. Operations on
 a live MODEL export its effective weights through ComfyUI's save API first.
 Connect CLIP/VAE when those components need to travel with it. A MODEL alone

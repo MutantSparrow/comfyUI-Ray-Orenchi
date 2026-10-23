@@ -485,10 +485,14 @@ export function installPanel(node, spec = {}) {
         if (kind === "path") {
             const wrap = el("div", "rp-control");
             wrap.style.flex = "1 1 0";
-            const input = textInput(widget, { placeholder: field.placeholder ?? (field.browse?.kind === "file" ? "Path to a file" : "Path to a folder"), ...field });
-            const { kind: pick = "folder", title, filters } = field.browse || {};
-            const browse = iconButton(pick === "file" ? "file" : "folder", pick === "file" ? "Choose a file" : "Choose a folder", async () => {
+            const options = () => (typeof field.browse === "function" ? field.browse(node) : field.browse) || {};
+            const pick = options().kind || "folder";
+            const input = textInput(widget, { placeholder: field.placeholder ?? (pick === "folder" ? "Path to a folder" : "Path to a file"), ...field });
+            const browse = iconButton(pick === "folder" ? "folder" : "file",
+                pick === "save" ? "Choose a save file" : pick === "file" ? "Choose a file" : "Choose a folder", async () => {
+                if (linkOf(node, widget.name)) return;
                 try {
+                    const { kind: pick = "folder", title, filters } = options();
                     const picked = await browsePath(pick, String(widget.value ?? ""), { title, filters });
                     if (picked) write(widget, picked);
                 } catch (error) { notify(error.message); }
