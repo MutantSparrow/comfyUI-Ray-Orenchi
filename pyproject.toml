@@ -44,5 +44,5 @@ package-dir = {ray_orenchi = "."}
 include-package-data = false
 
 [tool.setuptools.package-data]
-ray_orenchi = ["web/**/*", "web/*"]
+ray_orenchi = ["web/**/*", "web/*", "MODEL_TOOLS.md", "examples/*.json"]
 "ray_orenchi.ray_pixel_fixer" = ["LICENSE*", "NOTICE.md"]

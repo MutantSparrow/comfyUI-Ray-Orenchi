@@ -32,6 +32,16 @@ import importlib
 _NODE_MODULES = {
     "RaySaveImage":        "ray_save_image",
     "RayModelCard":        "ray_model_card",
+    "RayModelLoadAs":      "ray_model_tools",
+    "RayModelConvert":     "ray_model_tools",
+    "RayModelSave":        "ray_model_tools",
+    "RayModelMetadata":    "ray_model_tools",
+    "RayModelMetadataSave": "ray_model_tools",
+    "RayModelMerge":       "ray_model_tools",
+    "RayModelInspector":   "ray_model_tools",
+    "RayModelCompare":     "ray_model_tools",
+    "RayLoraBake":          "ray_model_tools",
+    "RayLoraExtract":       "ray_model_tools",
     "RayFolders":          "ray_folders",
     "RayCRT":              "ray_crt",
     "RayOffsetPrint":      "ray_offset_print",
@@ -56,6 +66,7 @@ _ROUTE_MODULES = (
     "film_stock_routes",
     "browse_routes",
     "folders_routes",
+    "model_tools_routes",
 )
 
 # Choose the import mode before importing. Dependency failures must keep their
@@ -101,6 +112,16 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayTextFolder":       "🔧 Ray's Tools: TXT Folder",
     "RaySaveImage":        "🔧 Ray's Tools: Save Image",
     "RayModelCard":        "🔧 Ray's Tools: Model Card",
+    "RayModelLoadAs":      "🧰 Ray's Model Tools: Load Model As",
+    "RayModelConvert":     "🧰 Ray's Model Tools: Convert Model",
+    "RayModelSave":        "🧰 Ray's Model Tools: Save Model",
+    "RayModelMetadata":    "🧰 Ray's Model Tools: Metadata Load / Edit",
+    "RayModelMetadataSave": "🧰 Ray's Model Tools: Metadata Save",
+    "RayModelMerge":       "🧰 Ray's Model Tools: Model Merge",
+    "RayModelInspector":   "🧰 Ray's Model Tools: Model Inspector",
+    "RayModelCompare":     "🧰 Ray's Model Tools: Model Compare",
+    "RayLoraBake":          "🧰 Ray's Model Tools: LoRA Bake",
+    "RayLoraExtract":       "🧰 Ray's Model Tools: LoRA Extract",
     "RayFolders":          "📁 Ray - Folders",
 }
 

@@ -1,6 +1,6 @@
 # comfyUI-Ray-Orenchi
 
-17 ComfyUI custom nodes for retro image effects, pixel art, local vision-language
+27 ComfyUI custom nodes for retro image effects, pixel art, local vision-language
 inference, prompt tooling and analog-console controls. Find them under the
 **👑 Ray** category in the add-node menu.
 
@@ -25,6 +25,13 @@ inference, prompt tooling and analog-console controls. Find them under the
 | | **TXT Folder** | Read text files as prompts, with matching save prefixes |
 | | **Metadata Inspector** | Read generation metadata from an image, or embed it into one |
 | | **Prompt Scraper** | One node for prompts from a local image folder, PromptDexter or CivitAI |
+| **🧰 Model Tools** | **Load Model As / Convert Model / Save Model** | Load, convert and save effective model weights, with native FP8/INT8/ConvRot support |
+| | **Metadata Load / Edit / Metadata Save** | Editable model metadata table, structured JSON sidecars, and lossless tensor-block copies |
+| | **Model Merge** | Nine seeded merge strategies, component selection and block weights |
+| | **Model Inspector / Model Compare** | Tensor tables, architecture detection and structural comparison |
+| | **LoRA Bake / LoRA Extract** | Bake supported adapters or extract low-rank checkpoint differences |
+
+See [MODEL_TOOLS.md](MODEL_TOOLS.md) for formats, examples and file-only workflows.
 
 Nodes are named *Ray's &lt;Group&gt;: &lt;Node&gt;* in the menu. Select any Ray node and click the
 **?** in its selection toolbar for built-in help: what it does, every input and output,

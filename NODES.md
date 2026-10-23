@@ -1,12 +1,13 @@
 # Node Documentation
 
 All nodes live under `👑 Ray/` in the ComfyUI add-node menu, split across
-four bucket sub-categories:
+five bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
 - `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck, Fader Bank), all sharing one list of 31 styles.
 - `👑 Ray/🔧 Tools` — prompt scraper, metadata inspector, TXT folder, Save Image, Model Card.
 - `👑 Ray/💬 LLM` — local vision-language inference and folder captioning.
+- `👑 Ray/🧰 Model Tools` — model loading/conversion/saving, metadata editing, merging, inspection/comparison, LoRA baking/extraction. See [MODEL_TOOLS.md](MODEL_TOOLS.md).
 
 Every node is black, body and title bar alike, so it reads the same under any
 ComfyUI theme. Workflows saved with the old colored title bars turn black when
