@@ -612,9 +612,9 @@ the next destination or run preview-only. Explorer opens on the Windows ComfyUI 
 
 ![🔧 Ray's Tools: Folders](screenshots/RayFolders.png)
 
-Resizable local media gallery with folder browsing, fuzzy filename search, multi-selection, prompt extraction, color/NSFW filters, viewers and drag-to-Load-Image. Both folder and name filter accept STRING inputs. All five outputs are optional ComfyUI lists: `images` (IMAGE), `videos` (VIDEO), `audio` (AUDIO), `prompt` (STRING), `paths` (STRING). Native dimensions/sample rates are preserved. With no selection, paths outputs the folder and media lists are empty. Refreshes on every workflow run, including when no outputs are connected.
+Resizable local media gallery with folder browsing, fuzzy filename search, multi-selection, prompt extraction, color/NSFW filters, viewers and drag-to-Load-Image. Both folder and name filter accept STRING inputs. All five outputs are optional ComfyUI lists: `images` (IMAGE), `videos` (VIDEO), `audio` (AUDIO), `prompt` (STRING), `paths` (STRING). Native dimensions/sample rates are preserved. With no selection, paths outputs the folder and media lists are empty. The gallery refreshes after the workflow finishes, so newly saved outputs appear, including when no outputs are connected.
 
-See [FOLDERS.md](FOLDERS.md) for settings, output pairing, error recovery and interactions.
+Selected media feed the current workflow as usual. Connected folder and filter values appear when that run finishes. The refresh button rescans immediately.
 
 ---
 

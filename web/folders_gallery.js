@@ -39,6 +39,7 @@ export function createGallery(node) {
     let selected=new Set(),resolved=null,lastNative="",lastScan="",dead=false,scanSerial=0,analysisSerial=0,counts={},message="Choose a folder to browse.";
     let tooltip,timer,hovered,hoverInfo,shift=false,viewerClose,menuClose,popupClose,promptClose,deleteClose,debounce,resizeFrame,filterFrame;
     let reading=false,hydrating=false,pendingCount=0,scrolling=false,scrollTimer;
+    let workflowRunning=false,pendingExecution=null;
     let searchRequest,searchTimer,searchSerial=0,searchQuery="",searchHideNoPrompt=false,searching=false,searchChecked=0,searchError="",searchStage="names";
     let textMatches=new Set(),searchPending=new Set();
     const meta=new Map(),analysis=new Map(),tiles=new Map();
@@ -508,10 +509,24 @@ export function createGallery(node) {
         viewportWidth=width;viewportHeight=height;
         cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>render());
     });observer.observe(viewport);
+    api.addEventListener("execution_start",()=>{workflowRunning=true;pendingExecution=null;},{signal:lifecycle.signal});
+    // ComfyUI sends the terminal null only after every output node has finished.
+    // Keep linked values pending too, so polling cannot trigger an earlier scan.
+    api.addEventListener("executing",event=>{
+        if(event.detail!==null)return;
+        workflowRunning=false;
+        if(pendingExecution)resolved=pendingExecution;
+        pendingExecution=null;
+        sync(true);
+        if(resolved?.error)status.title=resolved.error;
+    },{signal:lifecycle.signal});
     const poll=setInterval(()=>{if(root.isConnected)sync();},400);
     queueMicrotask(()=>sync(true));
     return {root,sync,refresh:()=>sync(true),
-        executed(data){resolved=data;sync(true);if(data.error)status.title=data.error;},
+        executed(data){
+            if(workflowRunning){pendingExecution=data;return;}
+            resolved=data;sync(true);if(data.error)status.title=data.error;
+        },
         destroy(){dead=true;scanRequest?.abort();cancelSearch();resetTiles();thumbnails.clear();lifecycle.abort();observer.disconnect();cancelAnimationFrame(resizeFrame);clearTimeout(filterFrame);clearTimeout(scrollTimer);clearInterval(poll);clearTimeout(debounce);hideTooltip();viewerClose?.();menuClose?.();popupClose?.();promptClose?.();deleteClose?.();unregister();},
     };
 }
