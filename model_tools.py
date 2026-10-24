@@ -2,7 +2,8 @@
 
 Merge mathematics adapted from Ray's Apache-2.0 ModelMergeTools. ComfyUI and
 comfy-kitchen are used through their public Python APIs, never copied here.
-Tensor operations stream one layer at a time; files are committed atomically.
+Tensor operations stream one layer at a time or retain their output in RAM;
+files are committed atomically.
 """
 from __future__ import annotations
 
@@ -14,7 +15,8 @@ from pathlib import Path
 import shutil
 import struct
 import tempfile
-from dataclasses import dataclass
+from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass, field
 from collections import Counter
 
 import torch
@@ -222,6 +224,51 @@ class TensorWriter:
         return False
 
 
+def save_tensors(tensors, destination, metadata=None, overwrite=False):
+    """Write RAM-backed weights once, with the final metadata, then publish."""
+    from safetensors.torch import save_file
+    destination = clean_path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if not tensors:
+        raise ValueError("No tensors were produced; no file was saved.")
+    if destination.exists() and not overwrite:
+        raise FileExistsError(f"Output already exists: {destination}")
+    fd, tmp = tempfile.mkstemp(prefix=".ray-", suffix=".safetensors", dir=destination.parent)
+    os.close(fd)
+    try:
+        save_file(tensors, tmp, metadata=embedded_metadata(metadata))
+        read_header(tmp)
+        commit_file(tmp, destination, overwrite)
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+    return str(destination)
+
+
+class MemoryTensorWriter:
+    """Own independent CPU tensors; no intermediate model or payload file."""
+    def __init__(self, metadata):
+        self.metadata = embedded_metadata(metadata)
+        self.header, self.tensors = {}, {}
+
+    def add(self, key, tensor):
+        if key in self.header:
+            raise ValueError(f"Duplicate output tensor: {key}")
+        if tensor.dtype not in DTYPE_NAMES:
+            raise ValueError(f"Unsupported output dtype {tensor.dtype}: {key}")
+        self.tensors[key] = tensor.detach().to(device="cpu").clone(memory_format=torch.contiguous_format)
+        self.header[key] = {"dtype": DTYPE_NAMES[tensor.dtype], "shape": list(tensor.shape)}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is not None:
+            self.tensors.clear()
+        elif not self.tensors:
+            raise ValueError("No tensors were produced.")
+        return False
+
+
 def side_tensor(key):
     return key.rsplit(".", 1)[-1] in SENTINELS or key.endswith(SIDE_SUFFIXES)
 
@@ -253,6 +300,7 @@ def canonical(key):
 
 class TensorSource:
     def __init__(self, path):
+        self._handles = {}
         self.path = clean_path(path)
         if self.path.is_dir():
             indexes = sorted(self.path.glob("*.safetensors.index.json"))
@@ -293,8 +341,24 @@ class TensorSource:
             raise ValueError("Ambiguous diffusion-model prefixes in source.")
 
     def raw(self, key):
+        if self.index[key] in self._handles:
+            return self._handles[self.index[key]].get_tensor(key)
         with safe_open(str(self.index[key]), framework="pt", device="cpu") as f:
             return f.get_tensor(key)
+
+    @contextmanager
+    def opened(self):
+        """Reuse mmap handles for weights, scales and markers throughout a merge."""
+        if self._handles:
+            yield self
+            return
+        try:
+            with ExitStack() as stack:
+                for path in set(self.index.values()):
+                    self._handles[path] = stack.enter_context(safe_open(str(path), framework="pt", device="cpu"))
+                yield self
+        finally:
+            self._handles.clear()
 
     def config(self, key):
         layer = layer_name(key)
@@ -451,10 +515,24 @@ def convert(source, destination, fmt, scope="diffusion", progress=lambda *_: Non
     return ModelAsset(str(destination), meta)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class ModelAsset:
-    path: str
+    _path: str
     metadata: dict
+    tensors: dict | None = field(default=None, repr=False, compare=False)
+
+    def __init__(self, path, metadata, tensors=None):
+        object.__setattr__(self, "_path", str(path))
+        object.__setattr__(self, "metadata", metadata)
+        object.__setattr__(self, "tensors", tensors)
+
+    @property
+    def path(self):
+        # Existing file consumers continue to work. Save Model can use the RAM
+        # tensors directly and never needs this temporary file.
+        if self.tensors is not None and not Path(self._path).exists():
+            save_tensors(self.tensors, self._path, self.metadata)
+        return self._path
 
 
 def model_config(source):
@@ -631,7 +709,7 @@ def resize_tensor(t, shape, mode):
 
 def merge_models(a, b, destination, strategy="LERP", weight=.5, base=None, fmt="bf16",
                  scope="diffusion", mismatch="forbid", seed=0, density=.5, lam=1., top=.1,
-                 bottom=.01, block_weights=None, progress=lambda *_: None):
+                 bottom=.01, block_weights=None, progress=lambda *_: None, fast_merge=False):
     a, b = TensorSource(a), TensorSource(b)
     base = TensorSource(base) if base else None
     if strategy not in STRATEGIES or not 0 <= weight <= 1:
@@ -657,7 +735,11 @@ def merge_models(a, b, destination, strategy="LERP", weight=.5, base=None, fmt="
     meta = output_metadata(a, "merge", strategy=strategy, weight_a=weight, seed=int(seed), scope=scope,
                            base=str(base.path) if base else None, density=density, lam=lam, top=top, bottom=bottom,
                            mismatch=mismatch, block_weights=weights, source_a=str(a.path), source_b=str(b.path))
-    with TensorWriter(destination, meta) as writer:
+    with ExitStack() as stack:
+        for source in (a, b, base):
+            if source is not None:
+                stack.enter_context(source.opened())
+        writer = stack.enter_context(MemoryTensorWriter(meta) if fast_merge else TensorWriter(destination, meta))
         for i, key in enumerate(a.keys):
             progress(i, len(a.keys))
             ck = canonical(key)
@@ -707,7 +789,8 @@ def merge_models(a, b, destination, strategy="LERP", weight=.5, base=None, fmt="
                     output_key = ck[len("diffusion_model."):]
                 b.copy(writer, key, output_key)
         finish_markers(a, writer)
-    return ModelAsset(str(destination), meta), check
+    progress(len(a.keys), len(a.keys))
+    return ModelAsset(str(destination), meta, writer.tensors if fast_merge else None), check
 
 
 def extract_lora(finetuned, base, destination, rank=16, alpha=0., scope="diffusion",

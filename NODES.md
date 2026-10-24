@@ -761,7 +761,7 @@ For a file-only merge, turn **Load result** off and leave the format on **Auto**
 
 ![🧰 Ray's Model Tools: Model Merge](screenshots/RayModelMerge.png)
 
-**Purpose.** Merge compatible models connected to A, B and any required base, using MODEL or model-data inputs. Supports LERP, SLERP, TIES, DARE, DELLA, or Breadcrumbs variants, component selection, seeded controls, block weights, and optional loading of the result.
+**Purpose.** Merge compatible models connected to A, B and any required base, using MODEL or model-data inputs. Supports LERP, SLERP, TIES, DARE, DELLA, or Breadcrumbs variants, component selection, seeded controls, block weights, and optional loading of the result. Fast merge holds the output in RAM to reduce disk writes; it can use substantial system memory. For a direct save, disable Load result and connect model_data to Save Model.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
 

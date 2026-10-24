@@ -20,7 +20,8 @@ ModelMergeTools app and its FastAPI server are not required.
 ## Connections and file-only processing
 
 MODEL, CLIP and VAE are normal ComfyUI connections. **model_data** is a Ray
-handle to a safetensors file; use it between file operations and Save Model.
+handle to safetensors weights, held in a file or in RAM after Fast merge; use it
+between model operations and Save Model.
 **metadata** is a structured connection shared by metadata and save nodes.
 Reports are also available as STRING outputs.
 
@@ -39,9 +40,10 @@ contains the diffusion model, not the full original checkpoint.
 
 For offline work, use paths or model_data and turn **load_result off**. Connect
 the resulting model_data to Save Model to persist it, or to Load Model As to
-load it later. File operations use CPU math and temporary disk storage, one
-layer at a time rather than complete fp32 copies of all inputs. SVD still needs
-memory for the largest individual matrix. Temporary artifacts live under
+load it later. File operations use CPU math one layer at a time rather than
+complete fp32 copies of all inputs. The regular merge uses temporary disk
+storage; Fast merge retains its complete output in RAM. SVD still needs memory
+for the largest individual matrix. Temporary artifacts live under
 ComfyUI's temp directory in `ray_model_tools`; save anything you want to retain.
 
 In **Load Model As**, disable **Load result** and choose **Auto** or **Preserve**
@@ -117,6 +119,21 @@ shared tensors to the larger size along each axis; Trim crops them to the smalle
 size.
 Padding/trimming cannot make unrelated architectures compatible. Matching
 structure does not establish that models share a compatible training base.
+
+**Fast merge** keeps the complete merged result in system RAM instead of writing
+an intermediate tensor payload and model file. Connect **model_data** to Save
+Model and disable **load_result** to write the weights once, directly with the
+final metadata. Enabling load_result also creates a temporary model file for
+ComfyUI's native loader. Other file-based consumers materialize a temporary file
+when needed. Fast merge uses the same CPU calculations, formats, seed and
+mismatch rules as the regular merge; it does not require additional VRAM.
+
+**Warning: high RAM usage.** Allow space for the whole output at its selected
+format, plus source mappings, decoded layers and calculation buffers. The result
+remains in RAM while ComfyUI caches it, including after saving. Insufficient RAM
+can cause paging that slows the merge down, or an allocation failure. Leave Fast
+merge off for lower RAM usage. Source files are kept open during either mode to
+avoid reopening them for every tensor and scale.
 
 LoRA Bake supports formats recognized by installed ComfyUI and reports matched
 layers. An explicit target format applies the new adapter in fp32 before the

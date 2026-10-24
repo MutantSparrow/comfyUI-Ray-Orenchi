@@ -254,8 +254,10 @@ class RayModelSave:
     def save(self, filename_prefix="model_tools/Ray_Model", metadata_mode="merge", overwrite=False,
              model=None, clip=None, vae=None, model_data=None, metadata=None, metadata_json="", path="", output_path=""):
         destination = save_path(filename_prefix, output_path, ".safetensors")
-        with source_path(model, model_data, path, clip, vae) as src:
-            original = core.TensorSource(src).metadata
+        with ExitStack() as stack:
+            memory = model_data if model is None and isinstance(model_data, core.ModelAsset) and model_data.tensors is not None else None
+            src = None if memory is not None else stack.enter_context(source_path(model, model_data, path, clip, vae))
+            original = memory.metadata if memory is not None else core.TensorSource(src).metadata
             supplied = core.metadata_fields(metadata)
             supplied.update(core.metadata_fields(metadata_json))
             if "_quantization_metadata" in supplied and supplied["_quantization_metadata"] != original.get("_quantization_metadata"):
@@ -265,7 +267,10 @@ class RayModelSave:
             if metadata_mode == "merge" and core.HISTORY in original:
                 meta[core.HISTORY] = original[core.HISTORY]
             meta = core.with_history(meta, "save")
-            core.rewrite_metadata(src, destination, meta, overwrite)
+            if memory is not None:
+                core.save_tensors(memory.tensors, destination, meta, overwrite)
+            else:
+                core.rewrite_metadata(src, destination, meta, overwrite)
         asset = core.ModelAsset(destination, core.embedded_metadata(meta))
         return result((asset, destination), {"operation": "save", "saved_path": destination})
 
@@ -327,7 +332,7 @@ class RayModelMetadataSave:
 
 
 class RayModelMerge:
-    DESCRIPTION = "Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's nine strategies. Task-vector strategies require a base_model or base_data connection. Intersect, Pad and Trim preserve tensors found in only one input; Pad/Trim also resize shared tensors."
+    DESCRIPTION = "Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's nine strategies. Task-vector strategies require a base_model or base_data connection. Intersect, Pad and Trim preserve tensors found in only one input; Pad/Trim also resize shared tensors. Fast merge keeps the entire result in RAM and avoids intermediate disk writes when passed to Save Model with load_result disabled. Warning: high RAM usage; insufficient memory can cause paging or failure."
     CATEGORY, FUNCTION = CATEGORY, "merge"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report")
@@ -343,7 +348,8 @@ class RayModelMerge:
             "optional": {"model_a": ("MODEL",), "model_b": ("MODEL",), "base_model": ("MODEL",),
                 "clip_a": ("CLIP",), "clip_b": ("CLIP",), "base_clip": ("CLIP",), "vae_a": ("VAE",),
                 "data_a": ("RAY_MODEL_DATA",), "data_b": ("RAY_MODEL_DATA",), "base_data": ("RAY_MODEL_DATA",),
-                "path_a": text(), "path_b": text(), "base_path": text(), "block_weights": text("{}", True)}}
+                "path_a": text(), "path_b": text(), "base_path": text(), "block_weights": text("{}", True),
+                "fast_merge": ("BOOLEAN", {"default": False, "tooltip": "High RAM usage: retain the entire merged model in system RAM until ComfyUI releases its cache. Disable load_result and connect model_data to Save Model to avoid intermediate disk writes. Insufficient RAM can cause paging or failure."})}}
 
     @classmethod
     def IS_CHANGED(cls, path_a="", path_b="", base_path="", **_):
@@ -352,7 +358,7 @@ class RayModelMerge:
     def merge(self, strategy="LERP", weight_a=.5, weight_format="bf16", components="diffusion", mismatch="forbid",
               seed=0, density=.5, top_trim=.1, bottom_trim=.01, load_result=True,
               model_a=None, model_b=None, base_model=None, clip_a=None, clip_b=None, base_clip=None, vae_a=None,
-              data_a=None, data_b=None, base_data=None, path_a="", path_b="", base_path="", block_weights="{}", **kwargs):
+              data_a=None, data_b=None, base_data=None, path_a="", path_b="", base_path="", block_weights="{}", fast_merge=False, **kwargs):
         if model_a is None and data_a is None and not path_a.strip():
             raise ValueError("Connect Model A to model_a or data_a.")
         if model_b is None and data_b is None and not path_b.strip():
@@ -364,9 +370,10 @@ class RayModelMerge:
             base = stack.enter_context(source_path(base_model, base_data, base_path, base_clip)) if needs_base and (base_model or base_data or base_path.strip()) else None
             asset, check = core.merge_models(a, b, cache_path("merged"), strategy, weight_a, base, weight_format,
                 components, mismatch, seed, density, kwargs.get("lambda", 1.), top_trim, bottom_trim,
-                block_weights, progress())
+                block_weights, progress(), fast_merge=fast_merge)
         loaded = load_asset(asset, dtype=weight_format) if load_result else (None, None, None)
-        report = {"operation": "merge", "strategy": strategy, "weight_a": weight_a, "seed": seed, "comparison": check}
+        report = {"operation": "merge", "strategy": strategy, "weight_a": weight_a, "seed": seed,
+                  "fast_merge": fast_merge, "comparison": check}
         return result((*loaded, asset, asset.metadata, core.json_text(report)), report)
 
 

@@ -33,7 +33,7 @@ function styles() {
     .rmt [hidden]{display:none!important}.rmt-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.rmt button{height:28px;padding:4px 9px}.rmt input,.rmt textarea,.rmt select{background:#141414;color:#eee;border:1px solid #3a3a3a;border-radius:5px;padding:4px 9px;font:12px system-ui;min-width:0}
     .rmt input{width:100%}.rmt textarea{width:100%;resize:vertical;min-height:54px;max-height:240px;font:11px monospace}.rmt pre{font:11px monospace;white-space:pre-wrap;word-break:break-word;margin:0;max-height:240px;overflow:auto}
     .rmt-scroll{max-height:330px;overflow:auto;scrollbar-width:thin}.rmt-table{width:100%;border-collapse:collapse;font:11px system-ui;table-layout:fixed}.rmt-table th{text-align:left;color:#aaa;position:sticky;top:0;background:#080808}.rmt-table th:first-child{width:64%}.rmt-table th:nth-child(2){width:23%}.rmt-table th:nth-child(3){width:13%}.rmt-table td,.rmt-table th{padding:5px;border-bottom:1px solid #272727;vertical-align:top;overflow-wrap:anywhere}
-    .rmt-row{display:grid;grid-template-columns:minmax(95px,1fr) minmax(120px,1.5fr) 52px;gap:5px;padding-bottom:7px;border-bottom:1px solid #252525}.rmt-key{display:flex;flex-direction:column;gap:5px}.rmt-row details{font-size:10px;color:#aaa}.rmt-message{color:#aaa;font-size:11px;white-space:pre-wrap}.rmt-error{color:#ff9292}.rmt-raw{min-height:180px!important}`;
+    .rmt-row{display:grid;grid-template-columns:minmax(95px,1fr) minmax(120px,1.5fr) 52px;gap:5px;padding-bottom:7px;border-bottom:1px solid #252525}.rmt-key{display:flex;flex-direction:column;gap:5px}.rmt-row details{font-size:10px;color:#aaa}.rmt-message{color:#aaa;font-size:11px;white-space:pre-wrap}.rmt-error{color:#ff9292}.rmt-warning{color:#edbc78;font-size:12px;line-height:1.5;margin:0}.rmt-raw{min-height:180px!important}`;
     document.head.append(style);
 }
 
@@ -215,7 +215,7 @@ const SECTIONS = {
     RayModelMerge: [
         ["Merge", "strategy", "weight_a", "components", "mismatch"],
         ["Algorithm", "density", "lambda", "top_trim", "bottom_trim", "seed"],
-        ["Block weights", "block_weights"], ["Output", "weight_format", "load_result"],
+        ["Block weights", "block_weights"], ["Output", "weight_format", "fast_merge", "load_result"],
     ],
     RayModelInspector: [["Source", "path"], ["Inspection", "max_rows"]],
     RayModelCompare: [["Sources", "path_a", "path_b"], ["Comparison", "components"]],
@@ -298,6 +298,18 @@ export function installModelTools(node, id) {
     const sections = SECTIONS[id].map(([title, ...names]) => ({
         title, fields: names.map(name => byName.get(name)).filter(Boolean),
     }));
+    if (id === "RayModelMerge") {
+        const output = sections.find(section => section.title === "Output");
+        const toggle = output.fields.findIndex(field => field.name === "fast_merge");
+        if (toggle >= 0) output.fields.splice(toggle + 1, 0, {
+            when: n => !!value(n, "fast_merge"),
+            custom: () => {
+                const warning = el("p", "High RAM usage: keeps the entire merged model in system memory until ComfyUI releases its cache. Insufficient RAM can cause paging or failure. Disable Load result when only saving to avoid an extra model load and temporary file.", "rmt-warning");
+                warning.setAttribute("role", "note");
+                return warning;
+            },
+        });
+    }
     sections.push({ title: id === "RayModelMetadata" ? "Metadata" : "Report", fields: [{ custom }] });
     installPanel(node, { skip: hidden, minWidth: 470, sections });
 }
