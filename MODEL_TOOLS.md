@@ -5,8 +5,8 @@ ModelMergeTools app and its FastAPI server are not required.
 
 | Node | Purpose |
 | --- | --- |
-| [Queued Model Loader](screenshots/RayQueuedModelLoader.png) | Queue the same workflow once per selected diffusion model, with native automatic precision. |
-| [Load Model As](screenshots/RayModelLoadAs.png) | Choose a safetensors checkpoint/diffusion model with the file picker. Auto detects the loader. |
+| [Queued Model Loader](screenshots/RayQueuedModelLoader.png) | Process a native model list in one workflow execution, with automatic precision and per-sample offloading. |
+| [Load Model As](screenshots/RayModelLoadAs.png) | Select a checkpoint/diffusion model from searchable folders. Auto detects the loader. |
 | [Convert Model](screenshots/RayModelConvert.png) | Convert a file or connected MODEL into another storage format. |
 | [Save Model](screenshots/RayModelSave.png) | Save the effective model, including active merge and LoRA patches, with optional CLIP/VAE and metadata. |
 | [Metadata Load / Edit](screenshots/RayModelMetadata.png) | Read model metadata or a JSON sidecar into an editable table and raw JSON editor. |
@@ -22,35 +22,54 @@ ModelMergeTools app and its FastAPI server are not required.
 ## Queued model comparisons
 
 Replace a native Load Diffusion Model with **Queued Model Loader** and connect its
-single MODEL output to the same destination. Choose a model from the registered
-diffusion model suggestions, type its name/path, or use the file icon. Press **+**
-to add rows and use each row's trash icon to remove it. **Run** queues one complete
-workflow per model, in row order, including while another job is running. One row
-behaves like a normal loader. Precision and supported quantization use ComfyUI's
-native defaults independently for each file; there is no shared precision override.
+single MODEL output to the same destination. Select a registered diffusion model
+from the dropdown. Folders open into their subfolders; typing in the filter searches
+full paths across every subfolder. Clear the filter to return to the folder tree. Press **+**
+beside the Models heading to add rows and use each row's trash icon to remove it. **Run** submits one workflow
+with a native MODEL list in row order. Standard downstream nodes process one model
+at a time. Three models and a single prompt/latent produce three results together
+in that execution's preview. Precision and supported quantization use ComfyUI's
+native defaults independently for each file.
 
-Each sweep captures the workflow once, including sampler seeds. Seed controls
-advance once per sweep, rather than per model. Conventional `seed`/`noise_seed`
-values of -1 are resolved once. Keep other random nodes deterministic, including
-wildcards and random input selectors; arbitrary server-side randomness and live
-network sources cannot be frozen by the loader. For Model Card, use Fixed,
-Increment or Decrement seed mode. Text encoders, VAE, LoRAs and sampling settings
-stay as wired, so choose compatible diffusion models.
+The image outputs are a native ComfyUI list. To pass a single tensor batch to a
+later node, connect **Rebatch Images** after VAE Decode and set **batch_size** to
+the total image count (for example, 3 for three one-image model results). Images
+must have matching dimensions. Preview/Save Image can show all list results
+directly. A per-model latent batch of two images produces six images for three
+models. Saved workflows retain the complete selection.
 
-Jobs appear individually in ComfyUI's queue/history and can be cancelled there.
-Each job's saved workflow contains only its actual model; the editable canvas keeps
-your full selection. Model files are checked before submission. If submission is
-interrupted, the error reports how many jobs were already accepted. Native loaders
-still determine whether model contents and quantization are supported at execution.
+Singleton prompts, seeds, conditioning and other inputs are reused for every
+model, and seed-after-run controls advance once. Native lists of equal length
+are paired by index; this is not a Cartesian product of model and prompt lists.
+Keep custom random nodes deterministic. For Model Card, use Fixed, Increment or
+Decrement seed mode. Text encoders, VAE, LoRAs and sampling settings stay as wired,
+so choose compatible diffusion models.
 
-Use one multi-row loader per sweep, on the main canvas. Other loaders may each
-select one model. A linked first model is supported with a single row; unlink it
-to add rows. Direct API clients must submit one `model_name` per job and set
-`queued_models` to `[]`; the multi-model queue action runs in the ComfyUI frontend.
+Every file path is validated before loading weights. There is one queue/history
+entry and one cancellation action. The same backend behavior works with direct
+API calls and subgraphs: `model_name` is the first file and `queued_models` is a
+JSON array of additional filenames. Refresh ComfyUI after updating from the older
+queue-based implementation.
+
+### Model memory
+
+The loader uses ComfyUI's native ModelPatcher objects. After each sampler call it
+explicitly unloads that diffusion model and its clones through native memory
+management, including on error or cancellation. This also applies after a LoRA
+or model patch creates a downstream clone. Other unrelated loaded models are
+preserved. A subsequent sampler can reload the same model normally.
+
+With native **DynamicVRAM**, weights remain backed by their source files and
+unloading releases GPU allocations and native RAM weight buffers. With legacy
+model loading, VRAM is offloaded to CPU but weights can remain in ComfyUI's
+execution cache, so system RAM must accommodate the selected models. The loader
+does not change the server's memory mode. Custom samplers must honor ComfyUI's
+native sampling wrappers for explicit per-sample cleanup; otherwise native
+memory-pressure handling still applies.
 
 ### Optional Spectrum acceleration
 
-The small **Loader options** button opens a **Spectrum** switch, off by default.
+The top-right **Loader options cog** opens a **Spectrum** switch, off by default.
 When enabled, each loaded model automatically selects an installed adapter:
 
 | Model family | Required optional node pack |
@@ -88,7 +107,14 @@ between model operations and Save Model.
 Reports are also available as STRING outputs.
 
 Use the file icon beside a source path to choose a model or metadata file.
-The file icon beside **Output file** opens Save As; Metadata Save switches
+**Save Model** takes its source from **model** or **model_data**. Choose an
+**Output folder**, then set **filename_prefix** without an extension; the file is
+saved as `<filename_prefix>.safetensors`, without a counter. Blank folders use
+ComfyUI output and relative folders are resolved inside it. The default folder
+is `output/model_tools`. Spaces and unsupported filename characters become
+underscores. Connect **metadata** from Metadata Load / Edit for custom fields.
+
+For Metadata Save and LoRA Extract, the file icon beside **Output file** opens Save As; Metadata Save switches
 between JSON and safetensors according to its mode. Leave Output file blank to
 use the filename prefix and ComfyUI output folder. Choosing a path does not
 write a file; run the node to save it, with **overwrite** controlling replacement
@@ -99,7 +125,8 @@ a live MODEL export its effective weights through ComfyUI's save API first.
 Connect CLIP/VAE when those components need to travel with it. A MODEL alone
 contains the diffusion model, not the full original checkpoint.
 
-For offline work, use paths or model_data and turn **load_result off**. Connect
+For offline work, connect paths or **model_data**. The tools initialize inference
+models automatically when MODEL, CLIP or VAE outputs are used. Connect
 the resulting model_data to Save Model to persist it, or to Load Model As to
 load it later. File operations use CPU math one layer at a time rather than
 complete fp32 copies of all inputs. The regular merge uses temporary disk
@@ -107,11 +134,13 @@ storage; Fast merge retains its complete output in RAM. SVD still needs memory
 for the largest individual matrix. Temporary artifacts live under
 ComfyUI's temp directory in `ray_model_tools`; save anything you want to retain.
 
-In **Load Model As**, disable **Load result** and choose **Auto** or **Preserve**
-to read only the source headers and pass its file handle to Model Merge. This
-skips model initialization and preparatory weight conversions. Set the desired
-output precision in Model Merge. An explicit loader precision still converts
-the file even with Load result off. MODEL/CLIP/VAE outputs are empty in this mode.
+In **Load Model As**, select a registered diffusion model or checkpoint from the
+folder dropdown. Its filter searches filenames and full paths across subfolders.
+Existing saved paths and connected source inputs remain supported.
+Choose **Auto** or **Preserve** and connect only **model_data** to read the source
+headers and pass its handle to Model Merge. Set the final precision in Model
+Merge. An explicit loader precision still converts the file. Connecting an
+inference output loads the model automatically.
 
 ## Precision and quantization
 
@@ -147,6 +176,9 @@ the source path requires reloading the editor before applying old edits.
 Integer JSON values beyond JavaScript's safe range must stay as text in the
 editor; the backend can preserve such sidecars directly without editing them.
 
+Use **+** beside the Metadata heading to add a field and each row's trash icon to
+remove it. **Load / Edit** and **Table / JSON** stay beside the metadata editor.
+
 Sidecars use `{"schema":"ray.model-metadata/v1","metadata":{...}}` and preserve
 JSON structures. Safetensors headers require string values: explicitly typed
 JSON values are JSON-encoded when embedded. Embedded strings are never
@@ -156,22 +188,32 @@ recipes that describe tensor storage are retained and cannot be replaced by an
 unrelated recipe. Save Model merges source metadata by default; replace is an
 explicit option. Operations append recipes to `ray.model_tools.history`.
 
-Saves use a counter under `output/model_tools` by default. An explicit output
-path must include the extension. Files are published atomically and are not
-overwritten unless the node's overwrite option is enabled.
+Metadata Save and LoRA Extract use a counter under `output/model_tools` by
+default; an explicit output path must include the extension. Save Model uses its
+folder and prefix directly. Files are published atomically. An existing filename
+is an error unless **overwrite** is enabled.
 
 ## Merging and extraction
 
 Connect Model Merge's **model_a** and **model_b**, or use **data_a** and
 **data_b** for file handles. Connect **base_model** or **base_data** when the
 chosen strategy needs a base. Choose source files in the upstream loader nodes.
+Select the Model Merge node and open its **? Help** for a brief purpose,
+strengths and limitations of every strategy. Hover a control for its settings,
+units and applicable strategies.
 
 Weight A=1 selects A for LERP/SLERP; Weight A=0 selects B. Task-vector methods
 require an explicit compatible base. DARE/DELLA use a per-tensor seed derived
 from the supplied seed and tensor name. The density/lambda/trim controls appear
-only for methods that use them. **block_weights** is a JSON map of tensor
-prefixes to A ratios; the longest matching prefix wins. Unselected components
+only for methods that use them. Connect a STRING containing a JSON map of tensor
+prefixes to A ratios to **block_weights**, for example `{"diffusion_model.blocks.0.":0.7}`.
+The longest matching prefix wins. Leave it disconnected to use Weight A throughout. Unselected components
 pass through from A.
+
+Breadcrumbs and Breadcrumbs-TIES remove the smallest and largest absolute task
+deltas using **bottom_trim** and **top_trim**. Percentiles are computed over the
+whole tensor, including layers larger than 16,777,216 elements; large layers
+still require temporary CPU memory for sorting and merge calculations.
 
 **Forbid** is the default and requires matching tensor names and shapes.
 **Intersect**, **Pad** and **Trim** preserve tensors found in only one input
@@ -183,8 +225,8 @@ structure does not establish that models share a compatible training base.
 
 **Fast merge** keeps the complete merged result in system RAM instead of writing
 an intermediate tensor payload and model file. Connect **model_data** to Save
-Model and disable **load_result** to write the weights once, directly with the
-final metadata. Enabling load_result also creates a temporary model file for
+Model, with the inference outputs unused, to write weights once with the final
+metadata. Using MODEL, CLIP or VAE also creates a temporary model file for
 ComfyUI's native loader. Other file-based consumers materialize a temporary file
 when needed. Fast merge uses the same CPU calculations, formats, seed and
 mismatch rules as the regular merge; it does not require additional VRAM.
@@ -195,6 +237,16 @@ remains in RAM while ComfyUI caches it, including after saving. Insufficient RAM
 can cause paging that slows the merge down, or an allocation failure. Leave Fast
 merge off for lower RAM usage. Source files are kept open during either mode to
 avoid reopening them for every tensor and scale.
+Enabling Fast merge opens a compact RAM warning. **REVERT** turns the toggle
+off; **CONFIRM** keeps it on. Both close the popup. Escape also reverts it.
+
+**merge_name** is a STRING output ready to connect to Save Model's
+**filename_prefix**. A live preview follows connected source selections and merge
+controls. Names use `Base-…_A-…_B-…_STRATEGY_A%-B%_PRECISION_SETTINGS_DATETIME`;
+LERP and SLERP omit Base. Source directories and extensions are removed, long
+source names are shortened, and the settings fingerprint distinguishes changes
+to block weights and algorithm options. The execution output uses the resolved
+sources and execution time; computed upstream values may become known only then.
 
 LoRA Bake supports formats recognized by installed ComfyUI and reports matched
 layers. An explicit target format applies the new adapter in fp32 before the
@@ -215,8 +267,9 @@ from logical parameter counts.
 ## LoRA QKV Loader
 
 Connect a **MODEL** to **LoRA QKV Loader**, then connect its **MODEL** output to
-the sampler. Choose a LoRA from the filename suggestions or use its file button.
-Use **+** to add rows and **trash** to remove them. Each row has its own
+the sampler. Select a registered LoRA from the dropdown. Folders preserve their
+subfolder tree; typing in the filter searches full paths across every subfolder.
+Use **+** beside the LoRAs heading to add rows and **trash** to remove them. Each row has its own
 **Strength**: 1 uses the trained effect, 0 skips the row, and negative values
 reverse the adapter contribution. Drag the number left or right to adjust it,
 hold Shift for finer steps, or click to type a value. LoRAs are applied from top
@@ -249,7 +302,8 @@ your source model files before running them.
 
 * Load Model As → MODEL to sampler; CLIP/VAE to their normal destinations.
 * Model Merge → model_data to Save Model, metadata from Metadata Load / Edit
-  to the same Save Model node. Disable load_result for a file-only merge.
+  to the same Save Model node. Connect **merge_name** to **filename_prefix** for
+  automatic naming. Use only model_data for a file-only merge.
 * Metadata Load / Edit → Metadata Save (json_sidecar) to keep a reusable recipe.
 * Metadata Load / Edit → Metadata Save (model_copy) to update an existing file
   while preserving its tensor block exactly.

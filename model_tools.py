@@ -643,6 +643,22 @@ def compare_models(a, b, scope="diffusion"):
             "note": "Matching shapes are necessary but do not guarantee semantic merge compatibility."}
 
 
+def _linear_quantile(flat, q):
+    """Exact linear percentile without quantile's 2**24-element limit."""
+    if flat.numel() <= 2**24:
+        return torch.quantile(flat, q)
+    # Keep the full-tensor sort used by quantile, but calculate its rank in
+    # Python double precision so float32 cannot round away large indices.
+    ordered = flat.sort().values
+    rank = float(q) * (flat.numel() - 1)
+    index = math.floor(rank)
+    lower = ordered[index]
+    fraction = rank - index
+    if fraction == 0:
+        return lower.clone()
+    return lower.lerp(ordered[index + 1], fraction)
+
+
 def blend(a, b, weight, strategy, base=None, density=.5, lam=1., top=.1, bottom=.01, generator=None):
     """Ray's nine strategies; fresh buffers keep all input branches immutable."""
     w, v = float(weight), 1. - float(weight)
@@ -681,9 +697,9 @@ def blend(a, b, weight, strategy, base=None, density=.5, lam=1., top=.1, bottom=
             return t * (torch.rand(t.shape, generator=generator) < probs) / probs.clamp_min(1e-3)
         if strategy.startswith("Breadcrumbs"):
             flat = t.abs().flatten()
-            lower = torch.quantile(flat, bottom) if bottom else flat.min()
-            upper = torch.quantile(flat, 1 - top) if top else flat.max()
-            return t * ((t.abs() >= lower) & (t.abs() <= upper))
+            lower = _linear_quantile(flat, bottom) if bottom else flat.min()
+            upper = _linear_quantile(flat, 1 - top) if top else flat.max()
+            return t * ((flat >= lower) & (flat <= upper)).reshape(t.shape)
         return t
     da, db = sparsify(da), sparsify(db)
     if strategy == "TIES" or strategy.endswith("-TIES"):

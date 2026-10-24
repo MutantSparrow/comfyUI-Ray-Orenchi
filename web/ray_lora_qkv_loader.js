@@ -1,13 +1,9 @@
 import { app } from "../../scripts/app.js";
-import { api } from "../../scripts/api.js";
 import { applyBucketTint, setWidgetHidden } from "./_common.js";
 import { installPanel, iconButton, linkChip, linkOf, registerLinkTargets } from "./ray_panel.js";
-import { browsePath, notify } from "./browse_common.js";
+import { createModelPicker } from "./model_picker.js";
 
 const ID = "RayLoraQKVLoader", PLACEHOLDER = "Select a LoRA…";
-let loraNames;
-const availableLoras = () => loraNames ||= api.fetchApi("/models/loras")
-    .then(response => response.ok ? response.json() : []).catch(() => []);
 const widget = (node, name) => node.widgets?.find(item => item.name === name);
 const el = (tag, className, text) => {
     const item = document.createElement(tag);
@@ -21,20 +17,15 @@ function installLoader(node, definition) {
     applyBucketTint(node, "Tools");
     const first = widget(node, "lora_name"), strength = widget(node, "strength"), rest = widget(node, "additional_loras");
     for (const item of [first, strength, rest]) setWidgetHidden(node, item, true);
-    const root = el("div", "rlq-loras"), list = el("div"), choices = el("datalist");
-    choices.id = `ray-loras-${crypto.randomUUID()}`;
-    availableLoras().then(names => {
-        for (const name of names) {
-            const option = el("option"); option.value = name; choices.append(option);
-        }
-    });
+    const root = el("div", "rlq-loras"), list = el("div");
     for (const item of [root, list]) Object.assign(item.style, { display: "flex", flexDirection: "column", gap: "6px" });
     const controls = el("div", "rp-control");
     const add = iconButton("plus", "Add LoRA", () => write([...read(), { name: "", strength: 1 }]));
     const extraChip = linkChip(node, "additional_loras", () => refresh());
-    controls.append(add, extraChip.element);
+    controls.append(extraChip.element);
     const status = el("div", "rp-status"); status.setAttribute("role", "status");
-    let signature = "", unregister = () => {}, scrub = null;
+    let signature = "", unregister = () => {}, scrub = null, pickers = [];
+    const controlId = `ray-loras-${crypto.randomUUID()}`;
 
     function read() {
         let extra;
@@ -61,40 +52,30 @@ function installLoader(node, definition) {
         add.disabled = extraLinked; extraChip.update();
         // Keep the captured input mounted throughout a drag, including panel updates.
         if (next === signature || scrub) return;
-        signature = next; unregister(); list.replaceChildren();
+        signature = next; unregister(); pickers.forEach(picker => picker.destroy()); pickers = []; list.replaceChildren();
         const rows = read(), targets = [];
         for (const [index, value] of rows.entries()) {
             if (index && extraLinked) break;
             const row = el("div", "rp-row rp-full"), label = el("label", "rp-label", `LoRA ${index + 1}`);
-            const control = el("div", "rp-control"), source = el("input", "rp-input");
-            source.value = value.name; source.placeholder = PLACEHOLDER;
-            source.setAttribute("list", choices.id); source.setAttribute("aria-label", `LoRA ${index + 1}`);
-            source.id = `${choices.id}-${index}`; label.htmlFor = source.id;
-            source.title = value.name || "Choose a registered LoRA or browse to a file";
-            source.onchange = () => { const rows = read(); rows[index].name = source.value; write(rows); };
-            const browse = iconButton("file", `Choose LoRA ${index + 1} file`, async () => {
-                try {
-                    const selected = await browsePath("file", source.value, { title: "Choose LoRA",
-                        filters: [["LoRA adapters", ["safetensors", "ckpt", "pt", "pth", "bin"]]] });
-                    if (selected) {
-                        const rows = read();
-                        if (rows[index]?.name === value.name && !(index === 0 && linkOf(node, "lora_name")) && !linkOf(node, "additional_loras")) {
-                            rows[index].name = selected; write(rows);
-                        }
-                    }
-                } catch (error) { notify(error.message); }
-            });
-            const remove = iconButton("minus", `Remove LoRA ${index + 1}`, () => {
+            const control = el("div", "rp-control");
+            const picker = createModelPicker({ group: "loras", label: `LoRA ${index + 1}`, value: value.name,
+                placeholder: PLACEHOLDER,
+                disabled: () => !!linkOf(node, index === 0 ? "lora_name" : "additional_loras"),
+                onSelect: selected => { const rows = read();
+                    if (rows[index]?.name === value.name) { rows[index].name = selected; write(rows); }
+                } });
+            pickers.push(picker); const source = picker.element;
+            source.id = `${controlId}-${index}`; label.htmlFor = source.id;
+            const remove = iconButton("remove", `Remove LoRA ${index + 1}`, () => {
                 const rows = read(); rows.splice(index, 1); write(rows);
             });
-            remove.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/></svg>';
             remove.disabled = extraLinked || (index === 0 && (sourceLinked || strengthLinked)) || (rows.length === 1 && !value.name);
-            control.append(source, browse, remove); row.append(label, control); list.append(row);
+            control.append(source, remove); row.append(label, control); list.append(row);
             const strengthRow = el("div", "rp-row rp-full"), strengthLabel = el("label", "rp-label", "Strength");
             const strengthControl = el("div", "rp-control"), number = el("div", "rp-number"), amount = el("input", "rp-input");
             amount.type = "number"; amount.min = "-100"; amount.max = "100"; amount.step = "0.01"; amount.value = value.strength;
             amount.setAttribute("aria-label", `LoRA ${index + 1} strength`);
-            amount.id = `${choices.id}-strength-${index}`; strengthLabel.htmlFor = amount.id;
+            amount.id = `${controlId}-strength-${index}`; strengthLabel.htmlFor = amount.id;
             const commit = candidate => {
                 const parsed = Number(candidate);
                 if (candidate === "" || !Number.isFinite(parsed) || Math.abs(parsed) > 100) {
@@ -143,7 +124,7 @@ function installLoader(node, definition) {
                 const sourceChip = linkChip(node, "lora_name", refresh), strengthChip = linkChip(node, "strength", refresh);
                 control.prepend(sourceChip.element); sourceChip.update();
                 strengthControl.prepend(strengthChip.element); strengthChip.update();
-                source.hidden = sourceLinked; browse.disabled = sourceLinked; number.style.display = strengthLinked ? "none" : "flex";
+                source.hidden = sourceLinked; number.style.display = strengthLinked ? "none" : "flex";
                 targets.push({ name: "lora_name", element: row }, { name: "strength", element: strengthRow });
             }
         }
@@ -151,15 +132,16 @@ function installLoader(node, definition) {
         unregister = registerLinkTargets(node, targets, refresh);
         node._rayPanel?.schedule();
     }
-    root.append(choices, list, controls, status);
+    root.append(list, controls, status);
     const panel = installPanel(node, { minWidth: 480, skip: ["lora_name", "strength", "additional_loras"],
+        headerActions: [add],
         sections: [{ title: "LoRAs", fields: [{ custom: () => root, update: refresh }] }] });
     const observer = new ResizeObserver(() => panel.schedule()); observer.observe(root);
     const removed = node.onRemoved;
     node.onRemoved = function () {
         if (scrub?.moved) node.graph?.afterChange?.();
         scrub = null;
-        observer.disconnect(); unregister(); return removed?.apply(this, arguments);
+        observer.disconnect(); unregister(); pickers.forEach(picker => picker.destroy()); return removed?.apply(this, arguments);
     };
     node._rayLoraQKV = { refresh, status }; refresh();
 }

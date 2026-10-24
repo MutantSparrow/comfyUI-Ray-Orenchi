@@ -63,7 +63,7 @@ class RayLoraQKVLoader:
     def INPUT_TYPES(cls):
         return {"required": {
             "model": ("MODEL",),
-            "lora_name": ("STRING", {"default": "", "tooltip": "Choose a registered LoRA or use the file button."}),
+            "lora_name": ("STRING", {"default": "", "tooltip": "Select a registered LoRA from the searchable folder dropdown. Search includes every subfolder."}),
             "strength": ("FLOAT", {"default": 1., "min": -100., "max": 100., "step": .01}),
             "additional_loras": ("STRING", {"default": "[]", "tooltip": "Additional LoRA rows with independent strengths, applied in order."}),
         }}

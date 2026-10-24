@@ -17,9 +17,9 @@
       },
       "width_css_px": 400,
       "height_css_px": 310,
-      "source_fingerprint": "33f3f169975f0669ff652d792d74861000cb45c95f0815a1bd0a45ace54c4d9c",
+      "source_fingerprint": "8c51bbc237a295337242d48e79c62129401b5f5c170fa9e2d9274b040871c420",
       "sha256": "259fc0887d3d8861a1c1d641f7d26eedf44bdcca91271da1e5c7cb4a4721c48b",
-      "captured_at": "2026-10-23T14:09:50.339Z"
+      "captured_at": "2026-10-24T20:19:29.750Z"
     },
     "RayCRT": {
       "file": "RayCRT.png",
@@ -44,9 +44,9 @@
       },
       "width_css_px": 340,
       "height_css_px": 319,
-      "source_fingerprint": "d279d27e6a1dea7fdcd51af2818fb3a074ea34b58c9f4debd2cdc486bd8f3887",
+      "source_fingerprint": "d3d4e8729a6b89605ecdaa97c9d1daba02f0cd4f9d9429fb4b885551ea1bc7c5",
       "sha256": "65305f0ed6de4844e8ab6961d226286b96e478e63ecb352517819820c53a522c",
-      "captured_at": "2026-10-23T14:09:40.607Z"
+      "captured_at": "2026-10-24T20:19:19.953Z"
     },
     "RayFaderBank": {
       "file": "RayFaderBank.png",
@@ -109,9 +109,9 @@
       },
       "width_css_px": 291.875,
       "height_css_px": 514.796875,
-      "source_fingerprint": "39d074fd7fc0efa8b858b787e38f68bad41e8309a257efb557521d147c21360d",
+      "source_fingerprint": "232b92f1ba0ebee8488538c6c7a1aca635073631b462c3b4adea51b7ecc6ce77",
       "sha256": "401b4e03c02d37776eaac5ccdb924a950be0125c0c1ec1d22cdc41dcc67a747a",
-      "captured_at": "2026-10-23T14:09:52.316Z"
+      "captured_at": "2026-10-24T20:19:31.724Z"
     },
     "RayFastQwen3VL": {
       "file": "RayFastQwen3VL.png",
@@ -146,9 +146,9 @@
       },
       "width_css_px": 400,
       "height_css_px": 728.984375,
-      "source_fingerprint": "130fb8d6070e84910b338c2ba40b42fc5aa4d21670da2d67c870019d8c423269",
-      "sha256": "1d9e32c556a5a26fbf6626c14085389ea9500de5de85ff9097f2a3eb19c5e00e",
-      "captured_at": "2026-10-23T14:09:58.450Z"
+      "source_fingerprint": "dbae49a190f8383ee29b5527de5e82cba3314ea683c4ccc9e276b32933550369",
+      "sha256": "260329d3d44cf1746dd187d2ea4dc3a3bf4eede025d8f21cf3731d677ecae8df",
+      "captured_at": "2026-10-24T20:19:37.792Z"
     },
     "RayFilmStock": {
       "file": "RayFilmStock.png",
@@ -178,9 +178,9 @@
       },
       "width_css_px": 340,
       "height_css_px": 469,
-      "source_fingerprint": "f532d96ef400cb5174b314fbc99c917c4af2654d8c7128ef3a2e31c33c79e0d5",
+      "source_fingerprint": "05aef12bfcfa880a98e9da89b9b24db8bd1cdfee90f6113846b8128b03226aca",
       "sha256": "e8b201b0eb685e364a3babc2a63803b2258fb50ab4d310be8a960b6aad7f921a",
-      "captured_at": "2026-10-23T14:10:04.414Z"
+      "captured_at": "2026-10-24T20:19:43.675Z"
     },
     "RayFolders": {
       "file": "RayFolders.png",
@@ -206,9 +206,9 @@
       },
       "width_css_px": 460,
       "height_css_px": 600,
-      "source_fingerprint": "c35e1754f7a957ec4f55335103153451925e370ac32b30bd829f750c7a63b7e9",
-      "sha256": "3b6e62f4723787ba441a2e961b92d5ed4f8b07e8ad193ed456b2d1d424e9327e",
-      "captured_at": "2026-10-23T16:25:24.474Z"
+      "source_fingerprint": "b8e66fa043f187d37aec1e900aaf7d5e98260e6d22de681449f45ec0b59fc1d3",
+      "sha256": "b2a255ba3a4f818d2a5a5363434ea2784f897eb33158ce99ed70ba52328643a7",
+      "captured_at": "2026-10-24T20:19:18.015Z"
     },
     "RayKnob": {
       "file": "RayKnob.png",
@@ -231,9 +231,9 @@
       },
       "width_css_px": 364.953125,
       "height_css_px": 512.796875,
-      "source_fingerprint": "aeec7455ca104bde4aeddefdf18020c21bcc5d87ee42a349d84955534535f34d",
+      "source_fingerprint": "5ac36cf0ab56da35ad4abc205afdd6b5cd74be9b0ce00d53f32577975f068e8b",
       "sha256": "a375bfa79a6235f7cf5afee252f674719812a30791d448bf35dab30a65b6b383",
-      "captured_at": "2026-10-23T14:09:46.509Z"
+      "captured_at": "2026-10-24T20:19:25.887Z"
     },
     "RayLoraBake": {
       "file": "RayLoraBake.png",
@@ -264,15 +264,14 @@
         "strength_model": 1,
         "strength_clip": 1,
         "weight_format": "preserve",
-        "load_result": true,
         "path": "",
         "lora_path": ""
       },
       "width_css_px": 470,
-      "height_css_px": 612,
-      "source_fingerprint": "aab96af536715026c03fb7f1844b0b59942d30ec48e487c6674736a61c8ff72f",
-      "sha256": "37576d65b615920c6c7aecccff80a042ca59fa4c70dcc777a21ee9317089b4ff",
-      "captured_at": "2026-10-24T10:05:21.274Z"
+      "height_css_px": 549,
+      "source_fingerprint": "f569fd4bd1fabcf41999598a34c45e8ab3fe5d8207e5110969f77cd5b5fb587c",
+      "sha256": "e2b947a27cce00b1a5e1a31ccbbdfc95e50a6a0b5ff825be1ef0fbff42891c40",
+      "captured_at": "2026-10-24T20:40:15.158Z"
     },
     "RayLoraExtract": {
       "file": "RayLoraExtract.png",
@@ -309,10 +308,34 @@
         "output_path": ""
       },
       "width_css_px": 470,
-      "height_css_px": 733,
-      "source_fingerprint": "43b8b6f9c81ada95e4a41d81e614b7b7cf3e5b2963719dea8d7edd9beef3449f",
-      "sha256": "ddac0082634e91927af8db9083a2192ec5c699b44dc7682b17384a23b569fe29",
-      "captured_at": "2026-10-24T10:05:23.212Z"
+      "height_css_px": 704,
+      "source_fingerprint": "514881904b39523f5d751a3bb428d41876c55fb1afc7d3a9df5df75e2fdc5932",
+      "sha256": "fbd39b30cab1bf330dc3d4a0302fb48475e15a460af7cc11abeb28a5de583f7d",
+      "captured_at": "2026-10-24T20:40:17.113Z"
+    },
+    "RayLoraQKVLoader": {
+      "file": "RayLoraQKVLoader.png",
+      "display_name": "🧰 Ray's Model Tools: LoRA QKV Loader",
+      "title": "🧰 Ray's Model Tools: LoRA QKV Loader",
+      "inputs": [
+        "model"
+      ],
+      "outputs": [
+        "MODEL"
+      ],
+      "sections": [
+        "LoRAs"
+      ],
+      "default_widgets": {
+        "lora_name": "",
+        "strength": 1,
+        "additional_loras": "[]"
+      },
+      "width_css_px": 480,
+      "height_css_px": 246,
+      "source_fingerprint": "13c681b6d849d1eddfdc4dc80f1f7665bc1a32d1b643929e725a3f806b14a4a9",
+      "sha256": "918d9526e0175c8bd1b69f60163ca3ce41b8ce299308c166300ab0ed8b9ba7f9",
+      "captured_at": "2026-10-24T20:19:16.104Z"
     },
     "RayMetaInspect": {
       "file": "RayMetaInspect.png",
@@ -344,9 +367,9 @@
       },
       "width_css_px": 340,
       "height_css_px": 427,
-      "source_fingerprint": "68f2730ffdd6ea1dc673c13e9ebe52ffd26d200ea6d89718f56fa104072541b8",
+      "source_fingerprint": "b64eeccacabc1d66a6e25d10f42545a156660981e37b8972586cfd0ccff80c09",
       "sha256": "b0aa49cc86417d03edd40812b16c89196bdfb168b87c069fb252555ad8b5f175",
-      "captured_at": "2026-10-23T14:10:02.447Z"
+      "captured_at": "2026-10-24T20:19:41.759Z"
     },
     "RayModelCard": {
       "file": "RayModelCard.png",
@@ -389,10 +412,10 @@
         "memory_limit_mb": 4096
       },
       "width_css_px": 340,
-      "height_css_px": 529,
-      "source_fingerprint": "83391e7199ad5a85f53643beac4ed8bdb0263d42deb42577f9bbabff6d973cda",
-      "sha256": "8eb670fc49932efd2c63717f046538254f01eabaac79819f8b7c20c33794a6ee",
-      "captured_at": "2026-10-24T13:15:06.350Z"
+      "height_css_px": 545,
+      "source_fingerprint": "271dbdd89739b96a514b249dda4439f91246f1061db18a8f25778e8e37734d9f",
+      "sha256": "17c8afe374be73bcd8c8d18b033312fc3b8212e4de3c097caa151a843ca53191",
+      "captured_at": "2026-10-24T20:18:52.679Z"
     },
     "RayModelCompare": {
       "file": "RayModelCompare.png",
@@ -420,9 +443,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 441,
-      "source_fingerprint": "ef2032ab63c3b044ffbe90b65f054c9fe83528bdaef91b0b148be61df53a6014",
-      "sha256": "d0d9bc045f0439a9b42f5ab1d82c11a998a2a7a53de5201f5cee6c06a553b554",
-      "captured_at": "2026-10-24T10:05:19.320Z"
+      "source_fingerprint": "bbb7cd0a5e0b2b71dcb6f5f9df53b573d4bc4d79ca0430d50126a39c6123a3ec",
+      "sha256": "9e50db31913a61e689478ed18ddfb3d65ceee8a13c761735c4407c59aeb76863",
+      "captured_at": "2026-10-24T20:40:13.188Z"
     },
     "RayModelConvert": {
       "file": "RayModelConvert.png",
@@ -445,20 +468,18 @@
       "sections": [
         "Source",
         "Conversion",
-        "Output",
         "Report"
       ],
       "default_widgets": {
         "weight_format": "bf16",
         "components": "diffusion",
-        "load_result": true,
         "path": ""
       },
       "width_css_px": 470,
-      "height_css_px": 525,
-      "source_fingerprint": "65f66a80155a7df785e0625f1b576c18f5b4bca5cef5e448f4d6969cc4134f7d",
-      "sha256": "d738f624411d2fecff67f0ed41fe5a0742d87136b468f8b588880fe22688c6eb",
-      "captured_at": "2026-10-24T10:05:07.802Z"
+      "height_css_px": 433,
+      "source_fingerprint": "b312632ea4239f3401940ff13ea2348cb1bebff720732c57151cb71ae6733017",
+      "sha256": "53a02b3d8caac4407afbcff72a802b787c1911e9c84f3e15c85bd4d704723030",
+      "captured_at": "2026-10-24T20:40:01.634Z"
     },
     "RayModelInspector": {
       "file": "RayModelInspector.png",
@@ -483,9 +504,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 348,
-      "source_fingerprint": "91bd73cdb121204736fd515af2de3798f7c3c8ed0c43c3c90fb08f5cbeca1c06",
-      "sha256": "1fcd190d3fb9366ad8a23a904d727232d0f2603d11119c61b54059be53f35c5b",
-      "captured_at": "2026-10-24T10:05:17.418Z"
+      "source_fingerprint": "a8e9ff26d2c4a8a8ed715249163120a92b576136fdf1f6c3cde9fac76fd9efe0",
+      "sha256": "2f3046126ce5ef983069adc7e2abdce093a65c1526c0c34c5275e2b955036590",
+      "captured_at": "2026-10-24T20:40:11.266Z"
     },
     "RayModelLoadAs": {
       "file": "RayModelLoadAs.png",
@@ -512,14 +533,13 @@
         "weight_format": "auto",
         "loader": "auto",
         "load_components": true,
-        "path": "",
-        "load_result": true
+        "path": ""
       },
       "width_css_px": 470,
-      "height_css_px": 530,
-      "source_fingerprint": "580e37a37bea9f55396c1d6dfeab11544214c08579db6936ad962926bf394c9c",
-      "sha256": "da8a5a6bb7d8ffa487d5bd03894629c276bafb1a6731f92d7dce67dd2cecd30b",
-      "captured_at": "2026-10-24T10:05:05.836Z"
+      "height_css_px": 467,
+      "source_fingerprint": "84e41045317b42048ba7186960c1b00120cda4040fc71d7d57526642d88ffce7",
+      "sha256": "f1c34b745bfe5720a9fea4f72d027a82e82d0fd7ea96c2747177598791c820fe",
+      "captured_at": "2026-10-24T20:39:59.676Z"
     },
     "RayModelMerge": {
       "file": "RayModelMerge.png",
@@ -535,7 +555,8 @@
         "vae_a",
         "data_a",
         "data_b",
-        "base_data"
+        "base_data",
+        "block_weights"
       ],
       "outputs": [
         "model",
@@ -543,11 +564,11 @@
         "vae",
         "model_data",
         "metadata",
-        "report"
+        "report",
+        "merge_name"
       ],
       "sections": [
         "Merge",
-        "Block weights",
         "Output",
         "Report"
       ],
@@ -563,17 +584,17 @@
         "lambda": 1,
         "top_trim": 0.1,
         "bottom_trim": 0.01,
-        "load_result": true,
         "path_a": "",
         "path_b": "",
         "base_path": "",
-        "fast_merge": false
+        "fast_merge": false,
+        "block_weights": "{}"
       },
       "width_css_px": 470,
-      "height_css_px": 794.1875,
-      "source_fingerprint": "80aeae200a636b37a23eb6a6d907ffbebbf56ace045fa1ce5b03423aadd29ae3",
-      "sha256": "c9a6a6f5eecb9e2136ae5a97f4ef14b5009903905518074f323b3dfbe8b745b5",
-      "captured_at": "2026-10-24T10:05:15.529Z"
+      "height_css_px": 659,
+      "source_fingerprint": "6cdef53a2fc2adbc2cde6ec5510d023b4f740418a5d0476823664fd93fb315ff",
+      "sha256": "074c4732fbbba5c1a88617b39541007b349aab910bf86e216c5fd80a293ec1d7",
+      "captured_at": "2026-10-24T20:40:09.342Z"
     },
     "RayModelMetadata": {
       "file": "RayModelMetadata.png",
@@ -596,10 +617,10 @@
         "editor_source": ""
       },
       "width_css_px": 470,
-      "height_css_px": 285,
-      "source_fingerprint": "c8f779bbf447e6c28e905a9e9009d64dff3d14372d3cecd7475d96831ec1ddee",
-      "sha256": "049e1a00c0d4e188cf750f932da10052adc35b431831e446b5b04ccd44666589",
-      "captured_at": "2026-10-24T10:05:11.663Z"
+      "height_css_px": 299,
+      "source_fingerprint": "276310b8a7b6965fa91c322ecbadd4ff0befd7cc4e12525ab0d5b8d126758836",
+      "sha256": "7951c06cbbbf510af4277afa0d9ea48aabf2d549e4bc5e22226a36cd603da7a0",
+      "captured_at": "2026-10-24T20:40:05.483Z"
     },
     "RayModelMetadataSave": {
       "file": "RayModelMetadataSave.png",
@@ -624,10 +645,10 @@
         "output_path": ""
       },
       "width_css_px": 470,
-      "height_css_px": 502.1875,
-      "source_fingerprint": "381cdff6de7d626402d23274192d97a2d6dc8b08da77358be3850210961ff4f2",
-      "sha256": "72215d0cb0f578aace25d8926ecca4acb952351c3828674fab497e10ae706304",
-      "captured_at": "2026-10-24T10:05:13.587Z"
+      "height_css_px": 473.1875,
+      "source_fingerprint": "a6daedbef1e36c6ee0bd786eeb4bc4ba95c7acbe2651a57f6a24afb385632596",
+      "sha256": "4670b7ae550e110aa78dfef23a01013ff2dc7a7abbbe00e867bf8d0c00e67796",
+      "captured_at": "2026-10-24T20:40:07.403Z"
     },
     "RayModelSave": {
       "file": "RayModelSave.png",
@@ -645,23 +666,23 @@
         "saved_path"
       ],
       "sections": [
-        "Source",
-        "Metadata",
         "Output",
+        "Metadata",
         "Report"
       ],
       "default_widgets": {
-        "filename_prefix": "model_tools/Ray_Model",
+        "filename_prefix": "Ray_Model",
         "metadata_mode": "merge",
         "overwrite": false,
+        "output_folder": "model_tools",
         "path": "",
         "output_path": ""
       },
       "width_css_px": 470,
-      "height_css_px": 664.1875,
-      "source_fingerprint": "f167b46b8863e3af6a7b9649ab53d7e3a2174fbfbc312d945433705db3d6f59a",
-      "sha256": "353b5e81697a32bbbfa4985a4f8f8bcfaab9762728c794f454f86b1074ab78ac",
-      "captured_at": "2026-10-24T10:05:09.743Z"
+      "height_css_px": 447,
+      "source_fingerprint": "b6e43fa305c0dc667fd5be3342f0be7125d099f3b72608330fe80d3f9ac701cb",
+      "sha256": "a12fa8e3a54513929e03e33a4455f4c0b46bb32abf9ecb9f646eda386a8bd62d",
+      "captured_at": "2026-10-24T20:40:03.551Z"
     },
     "RayOffsetPrint": {
       "file": "RayOffsetPrint.png",
@@ -690,9 +711,9 @@
       },
       "width_css_px": 340,
       "height_css_px": 450,
-      "source_fingerprint": "ebf62feed5277256812a4c7c94cfb09d74efd5b5f504f6dd5de65d6e311ce420",
+      "source_fingerprint": "ed9a290aff0468beecbde06b1e8060220c25b87270e85cb7b25bc12e0219cda0",
       "sha256": "36334d489531b354ecbe1de480745ba8cf9aad3e373ebc1d2df0289a1bbcbec8",
-      "captured_at": "2026-10-23T14:09:42.546Z"
+      "captured_at": "2026-10-24T20:19:21.909Z"
     },
     "RayPixelArtDetector": {
       "file": "RayPixelArtDetector.png",
@@ -736,9 +757,9 @@
       },
       "width_css_px": 340,
       "height_css_px": 694,
-      "source_fingerprint": "c4423304ed785bc5e3881e47c8f7bff6e4f38e9319eb5f9402b443f9c5820015",
+      "source_fingerprint": "2299fda3eacf2311e36956bf279712f775c1c0f987776432007b06146e67c5e5",
       "sha256": "78e065fb4573d5fa3945820bd0d0e62e72c89c40fde00714f2ed8225f2697996",
-      "captured_at": "2026-10-23T14:09:44.536Z"
+      "captured_at": "2026-10-24T20:19:23.884Z"
     },
     "RayPromptFetcher": {
       "file": "RayPromptFetcher.png",
@@ -776,9 +797,9 @@
       },
       "width_css_px": 340,
       "height_css_px": 466,
-      "source_fingerprint": "dc4140762c1f6f23ebe081dafbf3dcaa22f49469185cfb48b1cf60fc6183cf6d",
+      "source_fingerprint": "dd72f32cdd444e01622126689875bda91d40f81bd8e5b459589676c23f5f360a",
       "sha256": "59444776e9d137bc8a060a06332109e58e494913efc64b08e892918ee1fb992c",
-      "captured_at": "2026-10-23T14:10:00.496Z"
+      "captured_at": "2026-10-24T20:19:39.820Z"
     },
     "RayQueuedModelLoader": {
       "file": "RayQueuedModelLoader.png",
@@ -797,10 +818,10 @@
         "spectrum_enabled": false
       },
       "width_css_px": 480,
-      "height_css_px": 207,
-      "source_fingerprint": "c3f62805e806f998aec52197f403ededc2465d4e2a3e8f5aa9e38caf9544da81",
-      "sha256": "033ccd46430e07dbfe12f4a052a5a8f20869d3b72140ef9aec861d5ad91bf129",
-      "captured_at": "2026-10-24T14:05:05.679Z"
+      "height_css_px": 189,
+      "source_fingerprint": "13ecb4f1ffe4723b4c867f51ceb5c59b51115f6846dda7cd47e6d3605b74ea27",
+      "sha256": "38964f53a0b09ddd4f9c87d3d22375a411cbbbfe39c5027e992cd9c9ab417314",
+      "captured_at": "2026-10-24T20:18:56.556Z"
     },
     "RaySaveImage": {
       "file": "RaySaveImage.png",
@@ -824,9 +845,9 @@
       },
       "width_css_px": 420,
       "height_css_px": 510,
-      "source_fingerprint": "bad1cb147f1bc38afdf94f949e239378171c022384880a371de412e994582c87",
+      "source_fingerprint": "3a82af9aa00517d09c651fed21d264d2f11998b6b31d27ae9e306f3d7c9d7f60",
       "sha256": "e2365a41cb5bef35ea7165c64d3cf7926d26735e0d00b470d6a7a411d4b12565",
-      "captured_at": "2026-10-23T14:09:15.160Z"
+      "captured_at": "2026-10-24T20:18:50.703Z"
     },
     "RaySwitch": {
       "file": "RaySwitch.png",
@@ -844,9 +865,9 @@
       },
       "width_css_px": 270,
       "height_css_px": 342.796875,
-      "source_fingerprint": "4dac466afc90883a7862bae59d82651828b16cfc4ddc60ca0999a4338398312c",
+      "source_fingerprint": "753d726ea2cc30e256b9f7aec2dde733232dee9e95247d4a4bb17dc816b316a4",
       "sha256": "bb063a470dcec335fa7988decb15d2a0c83925331281ce0c48bc2d9465280465",
-      "captured_at": "2026-10-23T14:09:48.410Z"
+      "captured_at": "2026-10-24T20:19:27.806Z"
     },
     "RayTextFolder": {
       "file": "RayTextFolder.png",
@@ -869,9 +890,9 @@
       },
       "width_css_px": 340,
       "height_css_px": 324,
-      "source_fingerprint": "d362fafafdb36bea69dd3a7df9d3515f8b38a75ee3959c971176a86012ad5eda",
+      "source_fingerprint": "78807f6893a79f76c5829c1230d546e12580aa01536b706354e22fb92d3b55bf",
       "sha256": "baa00e8029cb675fd9fa8f81dd75e0fae83114297a7dca3fcff29a417fad55a6",
-      "captured_at": "2026-10-23T14:09:54.263Z"
+      "captured_at": "2026-10-24T20:19:33.637Z"
     },
     "RayVHS": {
       "file": "RayVHS.png",
@@ -908,9 +929,9 @@
       },
       "width_css_px": 340,
       "height_css_px": 552,
-      "source_fingerprint": "6956445d20d7442104152409a9d45c94fbbcffd41c4bd07bb0c86363747b2fe5",
+      "source_fingerprint": "6bb08cb1d65bafe0c1729a83569e4a8cae496c0aa39659a92b7aa20ebd89342c",
       "sha256": "360253d434c285e757686adc9388a0a69e7cae6e8b0d1ea93d3d61ec04ea3f94",
-      "captured_at": "2026-10-23T14:10:06.382Z"
+      "captured_at": "2026-10-24T20:19:45.660Z"
     },
     "RayVLMFolder": {
       "file": "RayVLMFolder.png",
@@ -950,33 +971,9 @@
       },
       "width_css_px": 400,
       "height_css_px": 877.1875,
-      "source_fingerprint": "097648069799dbb3ecee3b2858a084e462b73ec585f999d9f0eb0009ba5f0d79",
+      "source_fingerprint": "d36ebfc38661920612adc3185de6b65f9a01a29e3025ae6b67f648ec2e6437bc",
       "sha256": "13ef6d233247ba6d1a07162d4ebe4c833f97e99071efa484a0979d4584b2b3e4",
-      "captured_at": "2026-10-23T14:09:56.356Z"
-    },
-    "RayLoraQKVLoader": {
-      "file": "RayLoraQKVLoader.png",
-      "display_name": "🧰 Ray's Model Tools: LoRA QKV Loader",
-      "title": "🧰 Ray's Model Tools: LoRA QKV Loader",
-      "inputs": [
-        "model"
-      ],
-      "outputs": [
-        "MODEL"
-      ],
-      "sections": [
-        "LoRAs"
-      ],
-      "default_widgets": {
-        "lora_name": "",
-        "strength": 1,
-        "additional_loras": "[]"
-      },
-      "width_css_px": 480,
-      "height_css_px": 260,
-      "source_fingerprint": "38ad70dfe7108c3ccc59c0a0e13c863aaab79288b2ab290ad0e261d98ac90154",
-      "sha256": "13273c1f30f9b7aaeca3f8dcbd217540d6b1121596f238d36595407292b4b097",
-      "captured_at": "2026-10-24T14:15:22.477Z"
+      "captured_at": "2026-10-24T20:19:35.698Z"
     }
   },
   "renderer": "ComfyUI Nodes 2.0",
@@ -984,7 +981,7 @@
   "zoom": 1,
   "padding_css_px": 24,
   "comfyui_version": "0.42.0",
-  "frontend_version": "1.57.1",
+  "frontend_version": "1.55.18",
   "browser_version": "156.0.8078.4",
   "platform": "win32"
 }

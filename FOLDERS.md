@@ -52,8 +52,9 @@ metadata. Symbolic links outside the opened folder are not followed.
 
 ## Settings
 
-The cog opens settings for images/video/audio, name/date-modified/file-size sorting
-in either direction, recursion, 2–7 thumbnail columns, color groups, NSFW filtering,
+The top-right cog beside the Folder heading opens settings for images/video/audio,
+name/date-modified/file-size sorting in either direction, recursion, 2–7 thumbnail
+columns, color groups, NSFW filtering,
 best-prompt extraction, and single-line/multiline prompt formatting. Settings are
 saved per node in the workflow.
 

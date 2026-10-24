@@ -14,6 +14,7 @@ function option(name, fallback) {
 }
 const url = option('--url', 'http://127.0.0.1:8191');
 const python = option('--python', 'python');
+const browserChannel = option('--browser-channel', '');
 const requested = option('--node', '').split(',').filter(Boolean);
 const output = path.join(repo, 'screenshots');
 const manifestPath = path.join(output, 'manifest.json');
@@ -55,7 +56,7 @@ async function settle(page, selector) {
     const classes = requested.length ? requested : Object.keys(modules);
     const fingerprints = JSON.parse(execFileSync(python,
         [path.join(__dirname,'check_node_screenshots.py'),'--sources-json'],{encoding:'utf8'}));
-    const browser = await chromium.launch({headless:true});
+    const browser = await chromium.launch({headless:true, ...(browserChannel ? {channel:browserChannel} : {})});
     try {
         const page = await browser.newPage({viewport:{width:1800,height:2000}, deviceScaleFactor:scale});
         const errors = [];
@@ -151,11 +152,30 @@ async function settle(page, selector) {
                 }
                 for (const section of element.querySelectorAll('.rp-section:not([hidden])')) {
                     if (!section.getBoundingClientRect().height) continue;
-                    if (!section.querySelector(':scope > .rp-title')) throw Error('Untitled control section');
+                    if (!section.querySelector(':scope > .rp-title, :scope > .rp-header > .rp-title')) throw Error('Untitled control section');
                     const preceding = [...section.parentElement.children].slice(0, [...section.parentElement.children].indexOf(section))
                         .some(sibling => sibling.matches('.rp-section:not([hidden])') && sibling.getBoundingClientRect().height > 0);
                     if ((parseFloat(getComputedStyle(section).borderTopWidth) > 0) !== preceding)
                         throw Error(`Inconsistent section separator: ${section.textContent.slice(0, 50)}`);
+                }
+                const settings = [...element.querySelectorAll('button[data-icon="settings"]')]
+                    .filter(button => button.getBoundingClientRect().height > 0);
+                if (settings.length > 1) throw Error('Duplicate settings entry points');
+                for (const button of settings) {
+                    const box = button.getBoundingClientRect();
+                    const group = button.closest('.rp-header-actions');
+                    const header = group?.closest('.rp-header');
+                    const section = header?.parentElement;
+                    const first = [...section?.parentElement?.children || []]
+                        .find(item => item.matches('.rp-section:not([hidden])') && item.getBoundingClientRect().height > 0);
+                    if (Math.abs(box.width-30) > .5 || Math.abs(box.height-30) > .5)
+                        throw Error('Settings button must have a 30 by 30 CSS-pixel hit target');
+                    if (!header || section !== first || group.lastElementChild !== button)
+                        throw Error('Settings must be rightmost in the first visible section header');
+                    if (Math.abs(box.right-header.getBoundingClientRect().right) > 1)
+                        throw Error('Settings button is not aligned to the header right edge');
+                    if (!button.title || !button.getAttribute('aria-label') || button.type !== 'button')
+                        throw Error('Settings button is missing its accessible action label');
                 }
                 const visible = direction => [...element.querySelectorAll(`.lg-slot--${direction}`)]
                     .filter(slot => slot.getBoundingClientRect().height > 0)

@@ -14,6 +14,7 @@ const first = path.join(fixtures, 'fused.safetensors'), second = path.join(fixtu
         page = await browser.newPage({viewport: {width: 1500, height: 1200}});
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
+        await page.route(/\/(?:api\/)?models\/loras$/, route => route.fulfill({json: [first, second, path.join(fixtures, 'missing.safetensors')]}));
         await page.goto(base);
         await page.waitForFunction(() => !!globalThis.comfyAPI?.app?.app?.graph);
         await page.evaluate(async () => {
@@ -32,7 +33,13 @@ const first = path.join(fixtures, 'fused.safetensors'), second = path.join(fixtu
         });
         const source = index => page.getByRole('combobox', {name: `LoRA ${index}`, exact: true});
         const amount = index => page.getByRole('spinbutton', {name: `LoRA ${index} strength`, exact: true});
-        const edit = async (locator, value) => { await locator.fill(value); await locator.press('Tab'); };
+        const edit = async (locator, value) => {
+            if (await locator.getAttribute('role') === 'combobox') {
+                const label = await locator.getAttribute('aria-label');
+                await locator.click(); await page.getByRole('textbox', {name: `Filter ${label}`, exact: true}).fill(value);
+                await page.getByRole('menuitem', {name: value, exact: true}).click();
+            } else { await locator.fill(value); await locator.press('Tab'); }
+        };
         await source(1).waitFor();
         await edit(source(1), first); await edit(amount(1), '0.5');
         await page.getByRole('button', {name: 'Add LoRA', exact: true}).click();
@@ -79,17 +86,16 @@ const first = path.join(fixtures, 'fused.safetensors'), second = path.join(fixtu
         await edit(amount(1), '-99.99'); await drag(1, -120); assert.equal(await amount(1).inputValue(), '-100');
         await amount(1).click(); await edit(amount(1), '0.5');
         await page.getByRole('button', {name: 'Remove LoRA 1', exact: true}).click();
-        assert.equal(await source(1).inputValue(), second, 'Removing first must promote the complete second row');
+        assert.equal(await source(1).textContent(), second, 'Removing first must promote the complete second row');
         assert.equal(await amount(1).inputValue(), '-0.25');
         await edit(source(1), first); await edit(amount(1), '0.5');
         await page.getByRole('button', {name: 'Add LoRA', exact: true}).click();
         await edit(source(2), second); await edit(amount(2), '-0.25');
         await page.getByRole('button', {name: 'Add LoRA', exact: true}).click();
         await edit(source(3), path.join(fixtures, 'missing.safetensors')); await edit(amount(3), '0');
-        await page.route('**/ray/browse', route => route.fulfill({json: {cancelled: true}}));
-        await page.getByRole('button', {name: 'Choose LoRA 1 file', exact: true}).click();
-        assert.equal(await source(1).inputValue(), first, 'Picker cancellation preserves the selection');
-        await page.unroute('**/ray/browse');
+        await source(1).click(); await page.getByRole('textbox', {name: 'Filter LoRA 1', exact: true}).waitFor();
+        await page.keyboard.press('Escape');
+        assert.equal(await source(1).textContent(), first, 'Picker cancellation preserves the selection');
         const saved = await page.evaluate(async () => {
             const {app} = await import('/scripts/app.js'); return app.graph.serialize();
         });
@@ -101,7 +107,7 @@ const first = path.join(fixtures, 'fused.safetensors'), second = path.join(fixtu
             const {app} = await import('/scripts/app.js'); await app.loadGraphData(saved);
             window.loader = app.graph._nodes.find(node => node.type === 'RayLoraQKVLoader');
         }, saved);
-        assert.equal(await source(2).inputValue(), second);
+        assert.equal(await source(2).textContent(), second);
         assert.equal(await amount(2).inputValue(), '-0.25');
         await page.evaluate(async first => {
             const {app} = await import('/scripts/app.js');
@@ -112,7 +118,6 @@ const first = path.join(fixtures, 'fused.safetensors'), second = path.join(fixtu
             upstream.connect(0, window.loader, slot); window.upstream = upstream;
             window.loader._rayLoraQKV.refresh();
         }, first);
-        assert.equal(await page.getByRole('button', {name: 'Choose LoRA 1 file', exact: true}).isDisabled(), true);
         assert.equal(await page.getByRole('button', {name: 'Remove LoRA 1', exact: true}).isDisabled(), true);
         assert.equal(await source(1).isVisible(), false);
         const prompt = await page.evaluate(async () => {
@@ -145,10 +150,10 @@ const first = path.join(fixtures, 'fused.safetensors'), second = path.join(fixtu
         const status = await page.locator('.rlq-loras [role=status]').textContent();
         assert.match(status, /3 weights loaded.*1 QKV split/);
         assert.match(status, /skipped \(strength 0\)/);
-        // Unlink using the shared control and ensure the file picker becomes available again.
+        // Unlink using the shared control and ensure the dropdown becomes available again.
         await page.locator('.rlq-loras .rp-link').filter({hasText: 'LoraQKVProbeString'}).getByRole('button').click();
         assert.equal(await source(1).isVisible(), true);
-        assert.equal(await page.getByRole('button', {name: 'Choose LoRA 1 file', exact: true}).isDisabled(), false);
+        assert.equal(await source(1).isEnabled(), true);
         assert.deepEqual(errors, []);
         console.log('Nodes 2.0 browser and execution checks passed: horizontal strength dragging, fine adjustment, live values, bounds, grouped graph changes, direct entry, add/remove, independent strengths, picker cancellation, serialization, linked filename, exact native patch values, repair status and zero-strength skip.');
     } catch (error) {

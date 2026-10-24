@@ -1,4 +1,4 @@
-"""Validate a complete model selection before submitting any sweep jobs."""
+"""Validate model paths without loading weights; retained for older clients."""
 from aiohttp import web
 from server import PromptServer
 

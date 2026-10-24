@@ -113,6 +113,27 @@ def _call(node_class, model, values):
     return result[0]
 
 
+def _sdxl_cleanup(model):
+    """Release the adapter's raw-output history between sampler calls."""
+    import inspect
+    from comfy.patcher_extension import WrappersMP
+    function = model.model_options.get("model_function_wrapper")
+    if not inspect.isfunction(function):
+        return
+    state = inspect.getclosurevars(function).nonlocals.get("state")
+    if not isinstance(state, dict) or "forecasters" not in state:
+        return
+    def cleanup(executor, *args, **kwargs):
+        state["forecasters"] = None
+        state["last_t"] = -1
+        try:
+            return executor(*args, **kwargs)
+        finally:
+            state["forecasters"] = None
+            state["last_t"] = -1
+    model.add_wrapper_with_key(WrappersMP.OUTER_SAMPLE, "ray_spectrum_sdxl_cleanup", cleanup)
+
+
 def _general_patch(node_class, model, values):
     """Turn upstream's direct Z-Image/Ernie edits into native object patches."""
     core = model.get_model_object("diffusion_model")
@@ -211,6 +232,8 @@ def apply_spectrum(model, prompt=None, loader_id=None, registry=None):
             return model, {"state": "skipped", "message": message, "provider": node_id}
     else:
         patched = _call(provider, model.clone(), values)
+        if family == "sdxl":
+            _sdxl_cleanup(patched)
         architecture = {"moss": "MOSS-Image Adaptive", "minimax": "MiniMax H3", "sdxl": "SDXL / Anima"}[family]
     message = f"Spectrum attached: {architecture}"
     LOG.info(message)

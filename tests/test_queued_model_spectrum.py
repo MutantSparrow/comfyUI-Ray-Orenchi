@@ -90,3 +90,22 @@ def test_sdxl_uses_actual_steps_or_native_fallback():
     assert captured == {"steps": 25, "stop_caching_step": 22}
     patched, report = apply_spectrum(model, registry=registry)
     assert patched is model and report["state"] == "skipped"
+
+
+def test_sdxl_forecast_history_is_released_even_on_cancellation():
+    from queued_model_spectrum import _sdxl_cleanup
+    state = {"forecasters": [object()], "last_t": 123}
+    def unet_wrapper(*args):
+        return state
+    wrappers = []
+    model = SimpleNamespace(model_options={"model_function_wrapper": unet_wrapper},
+                            add_wrapper_with_key=lambda kind, key, function: wrappers.append(function))
+    _sdxl_cleanup(model)
+    assert len(wrappers) == 1
+    def sample():
+        assert state["forecasters"] is None and state["last_t"] == -1
+        state["forecasters"] = [object()]
+        raise RuntimeError("cancelled")
+    with pytest.raises(RuntimeError, match="cancelled"):
+        wrappers[0](sample)
+    assert state["forecasters"] is None and state["last_t"] == -1

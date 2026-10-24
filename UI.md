@@ -89,6 +89,7 @@ shared implementation and this guide together.
 | Button | `#171717` background, `1px #383838` border, `5px` radius |
 | Button hover | `#454753` for enabled shared buttons |
 | Icon button | `32 × 28px`, no padding, centered `16 × 16px` SVG |
+| Settings cog button | `30 × 30px` hit target, centered `16 × 16px` SVG; shared settings variant |
 | SVG stroke | `currentColor`, width `1.8`, round caps/joins, no fill |
 | Control-to-icon gap | `6px` |
 | Toggle | `34 × 18px`, `9px` radius, `12px` thumb |
@@ -191,6 +192,40 @@ slider must not prevent typing an exact value.
 - Keep gallery, preview, and report areas bounded. Empty previews and reports
   are valid initial states; show a concise next step rather than fake content.
 
+### Compact widget and output rows
+
+Nodes SHOULD place suitable widgets alongside native output ports whenever
+there is enough usable horizontal space. Reuse the vertical space occupied by
+the output column instead of automatically starting every control below the
+last output. The Folders layout is the reference for this space-saving
+arrangement: its folder/filter controls can occupy the left side of the same
+rows as the output labels and sockets on the right.
+
+- This is a preference for compact layout, not a requirement to put every
+  widget on one row. Several short control rows may share the height of an
+  output column; long editors, galleries, and previews can continue below.
+- MUST preserve native port positions, types, labels, link hit targets, and
+  connection behavior. Reserve a separate output lane with enough space for
+  its measured labels and socket interaction area. Widgets, browse buttons,
+  the settings cog, and their hit targets must never overlap that lane.
+- MUST implement row sharing through shared panel/layout support, extending
+  the common helper when necessary. Do not reintroduce node-local absolute
+  port overlays, hard-coded output-column widths, or renderer-specific CSS
+  selectors as a shortcut. Measure the available space and use one shared
+  layout policy for ordinary panels and custom interfaces.
+- SHOULD use row sharing only while the controls remain readable and useful.
+  At narrow widths, with long output labels, or when native inputs/outputs
+  prevent a clean arrangement, fall back to stacked controls below the ports.
+  Do not force extra node width or shrink controls, text, or button hit targets
+  merely to make the compact arrangement fit.
+- The settings cog remains at the top right of the **widget content lane**,
+  before editable fields and clear of the output lane. Row sharing does not
+  move it to a filter row or footer; the Folders example establishes the
+  space-saving geometry, not an exception to the settings-placement contract.
+- MUST check both Nodes 2.0 and the legacy canvas at normal and narrow widths,
+  including long labels, linked inputs, and all default ports. A supported
+  stacked fallback is preferable to clipped labels or intercepted links.
+
 ## 5. Icons and file/folder actions
 
 MUST use `ICONS` and `iconButton(icon, title, handler)` from `ray_panel.js`.
@@ -203,7 +238,9 @@ buttons. Do not introduce another icon font or external icon dependency.
 | `folder` | Choose a directory or the established open-folder action |
 | `file` | Choose a source file or an explicit Save As destination |
 | `refresh` | Rescan/reload the current source |
-| `edit` | Open the relevant editor/settings |
+| `settings` | Node settings, configuration, options, and additional controls; always in the node header at the top right |
+| `edit` | Edit content, such as deck entries; never a substitute for settings |
+| `remove` | Remove the item in its row; keep separate from numeric decrement |
 | `link`, `unlink` | Connected source and disconnect action |
 | `minus`, `plus` | Numeric adjustment |
 | `fixed`, `increment`, `decrement`, `randomize` | Native seed-after-run modes |
@@ -214,6 +251,62 @@ Every icon-only action MUST have `type="button"`, a useful `title`, and an
 size and spacing. Use the established family action for opening a saved
 location; choosing a folder and opening it in the file manager are different
 operations with different handlers.
+
+### One implementation for each action
+
+`ICONS` and `iconButton()` in `web/ray_panel.js` are the shared icon library and
+button behavior. MUST extend them instead of defining a node-local SVG, cog
+constant, button constructor, size override, or click-handling variant. The
+settings cog has exactly one SVG source, one shared CSS size variant, and the
+same accessible button behavior everywhere. Its **button hit target is exactly
+30 by 30 CSS pixels**; the centered glyph remains 16 by 16 pixels with the shared
+stroke. Hover, disabled, keyboard focus, and pointer behavior come from the
+shared component, including when mounted outside `.rp`.
+
+MUST use a shared node-header/action mounting helper for node-level actions.
+Standard panels and custom galleries use that same header implementation;
+neither may independently position a cog with inline margins or offsets.
+`installPanel(node, { headerActions, sections })` exposes the declarative node
+action API. `headerActions` accepts shared buttons or
+`{ icon, title, onClick, label? }` descriptors, or a factory receiving the panel.
+Use section `actions` for contextual list-heading actions. Custom interfaces
+use `createNodeHeader(title, actions)` and its `element`, `setActions()`, and
+`destroy()` lifecycle instead of building another header.
+The shared helper owns right alignment, ordering, spacing, and teardown. A
+settings action must not be duplicated as another text button in the node body.
+
+### Context and placement contract
+
+The node content header is its first control row below the native title and
+before editable source fields. Its first section title is on the left and
+node-level actions are aligned at the **top right of the widget content lane**.
+When compact row sharing fits, this lane sits beside native output ports;
+otherwise it starts below the native port region. Do not overlay or move native
+titles or input/output ports. This definition applies in Nodes 2.0 and the legacy
+canvas and keeps the action reachable at narrow widths.
+
+| Action/context | Icon and typical placement |
+| --- | --- |
+| Settings, configuration, options, additional controls | `settings`, one 30 × 30px button at the far right of the node content header |
+| Other node-level secondary actions | In the same shared header action group, before the settings cog; settings remains rightmost |
+| Add an item to a node's primary list | `plus`, in the list heading's trailing action group; if the list is the node's first section, share its top header before the cog |
+| Remove a list item | `remove`, at the right end of that item's row; never a node-level settings action |
+| Edit an item's content | `edit`, adjacent to that item or its summary; an entries editor can stay beside the entries summary |
+| Choose a source file/folder or Save As | `file` / `folder`, immediately after the corresponding path input |
+| Rescan a source folder | `refresh`, after that folder's browse button in the same source row |
+| Build a filename/card name | Shared name-builder action beside the corresponding name field |
+| Numeric minus/plus and seed modes | Inside or immediately after their value control, using shared editors |
+| Copy configuration | Beside the relevant content; use a labeled action when meaning would be unclear. Reports use their STRING output. |
+
+Do not use a pencil for configuration dialogs, place node settings in a footer,
+attach the cog to an unrelated filter row, or scatter copies across sections.
+Do not add a cog to a node with no secondary settings. Preserve specialized
+analog faces and compact modes; existing content-editing pencils are valid.
+
+When updating an existing node, migrate its settings entry point without
+changing native widget names, links, values, defaults, or dialog behavior.
+Queued Model Loader's Spectrum options, Folders settings, and Model Card's
+secondary controls are settings actions and must follow this header contract.
 
 ## 6. Path picking, loading, and saving
 
@@ -277,8 +370,9 @@ the ComfyUI server computer; typed paths also refer to that server.
   for supported model files, shards, quantization markers, and tensor access.
   Do not implement a second safetensors reader in a new node.
 - Reuse `ModelAsset`, `load_asset()`, and ComfyUI's native loaders. File-only
-  operations must remain usable when `load_result` is off; do not materialize a
-  GPU model just to inspect, convert, merge, or save a file handle.
+  operations must remain usable without initializing an inference model. Model
+  Tools infer this from MODEL/CLIP/VAE output use; do not add a loading toggle or
+  materialize a GPU model just to inspect, convert, merge, or save a file handle.
 - MUST cooperate with ComfyUI's model management and interruption handling.
   Avoid global model/device state shared between unrelated nodes. Specialized
   inference optimizations must restore any temporarily changed native behavior
@@ -296,6 +390,10 @@ the ComfyUI server computer; typed paths also refer to that server.
 - Save Image resolves blank/relative directories under ComfyUI output, and
   treats its prefix as a filename stem, not another directory. Model Tools use
   `save_path()` for automatic prefix-based output or a validated explicit file.
+  Save Model uses `save_model_path()` for a destination folder and exact stem,
+  without a counter. Its previous path, JSON and explicit-file values stay hidden
+  for saved-workflow compatibility; new workflows use the typed source/metadata
+  inputs and folder control.
 - MUST default to preserving existing files. Save Image uses
   `filename_template.create_unique()` for exclusive creation and collision
   suffixes. Model Tools use `commit_file(..., overwrite=False)`; explicit
@@ -402,6 +500,7 @@ an undocumented private function or copying it.
 | Standard controls, sections, path rows, sizing, settings dialog | [web/ray_panel.js](web/ray_panel.js): `installPanel`, `ensurePanelStyles`, `openPanelSettings` |
 | Declarative layouts for ordinary nodes | [web/ray_panels.js](web/ray_panels.js): `PANEL_SPECS` |
 | Shared SVGs and icon buttons | [web/ray_panel.js](web/ray_panel.js): `ICONS`, `iconButton` |
+| Settings cog and node action placement | [web/ray_panel.js](web/ray_panel.js): `iconButton("settings", ...)`, `createNodeHeader`, `installPanel` headerActions / section actions; standard and custom panels use the same API |
 | Link chips, row drop targets, native-link compatibility | [web/ray_panel.js](web/ray_panel.js), [web/legacy_panel_links.js](web/legacy_panel_links.js) |
 | Black palette, visibility compatibility, Dymo labels | [web/_common.js](web/_common.js), [web/ray_bucket_tints.js](web/ray_bucket_tints.js) |
 | Native browsing and notifications | [web/browse_common.js](web/browse_common.js), [browse_routes.py](browse_routes.py) |
@@ -452,9 +551,9 @@ modules follow `_NODE_MODULES` in `__init__.py`; Model Tools share
 | [RayFolders](screenshots/RayFolders.png) | Folder, Media | `ray_folders.js`, `folders_gallery.js` |
 | [RayModelCard](screenshots/RayModelCard.png) | Card, Sampling, Configuration; secondary settings | `ray_model_card.js` |
 | [RayModelLoadAs](screenshots/RayModelLoadAs.png) | Source, Loading, Report | `ray_model_tools.js` |
-| [RayQueuedModelLoader](screenshots/RayQueuedModelLoader.png) | Models; Loader options / Spectrum | `ray_queued_model_loader.js`, `queued_model_loader.mjs`; shared panel/settings and icons |
+| [RayQueuedModelLoader](screenshots/RayQueuedModelLoader.png) | Models; Loader options / Spectrum | `ray_queued_model_loader.js`; shared panel/settings and icons |
 | [RayModelConvert](screenshots/RayModelConvert.png) | Source, Conversion, Output, Report | `ray_model_tools.js` |
-| [RayModelSave](screenshots/RayModelSave.png) | Source, Metadata, Output, Report | `ray_model_tools.js` |
+| [RayModelSave](screenshots/RayModelSave.png) | Output, Metadata, Report | `ray_model_tools.js` |
 | [RayModelMetadata](screenshots/RayModelMetadata.png) | Source, Metadata; table/JSON editor | `ray_model_tools.js`, `model_tools_ui.mjs` |
 | [RayModelMetadataSave](screenshots/RayModelMetadataSave.png) | Output, Source model, Metadata, Report | `ray_model_tools.js` |
 | [RayModelMerge](screenshots/RayModelMerge.png) | Merge, Algorithm, Block weights, Output, Report | `ray_model_tools.js`, `model_tools_ui.mjs` |
@@ -507,6 +606,9 @@ handle visibility, links, callbacks, history, and measurement.
       sizes, icons, and color meanings match this guide.
 - [ ] Every intended control has a named section. Mode switches hide empty
       groups and separators without gaps. Titles and ports remain visible.
+- [ ] Suitable controls share rows with outputs where space permits, using
+      shared layout support. The output lane and top-right settings remain
+      clear; narrow widths and long labels have a usable stacked fallback.
 - [ ] Native widget values survive save/load, duplicate, undo/redo, API queueing,
       and execution. Links, unlinking, row-drop targets, and seed modes work.
 - [ ] File/folder/Save As behavior matches the field, including cancel,

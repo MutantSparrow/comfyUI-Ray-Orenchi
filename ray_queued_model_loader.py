@@ -1,4 +1,4 @@
-"""One native diffusion model per queued workflow execution."""
+"""Native MODEL lists in one workflow execution, with managed sample offloading."""
 import json
 from pathlib import Path
 
@@ -6,8 +6,10 @@ import folder_paths
 
 if __package__:
     from .queued_model_spectrum import apply_spectrum, sampling_steps
+    from .queued_model_memory import install_model_offload
 else:
     from queued_model_spectrum import apply_spectrum, sampling_steps
+    from queued_model_memory import install_model_offload
 
 
 PLACEHOLDER = "Select a diffusion model…"
@@ -43,18 +45,19 @@ class RayQueuedModelLoader:
         return {"required": {
             "model_name": ("STRING", {
                 "default": "",
-                "tooltip": "Choose a diffusion model or use the file button. Precision and supported quantization are handled automatically by ComfyUI.",
+                "tooltip": "Select a registered diffusion model from the searchable folder dropdown. Search includes every subfolder. Precision and supported quantization are handled automatically by ComfyUI.",
             }),
-            "queued_models": ("STRING", {"default": "[]", "tooltip": "Additional model rows, saved with the workflow. Run in ComfyUI to queue one complete workflow per model."}),
+            "queued_models": ("STRING", {"default": "[]", "tooltip": "Additional models in row order. One execution passes a native MODEL list through the workflow, reusing singleton prompts, seeds and settings."}),
         }, "optional": {
             "spectrum_enabled": ("BOOLEAN", {"default": False, "tooltip": "Enable optional Spectrum forecasting. Auto selects the installed adapter for each model. This approximation can change image/video results; unsupported models keep native sampling."}),
         }, "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}}
 
     RETURN_TYPES = ("MODEL",)
     RETURN_NAMES = ("MODEL",)
+    OUTPUT_IS_LIST = (True,)
     FUNCTION = "load"
     CATEGORY = "👑 Ray/🧰 Model Tools"
-    DESCRIPTION = "Add diffusion models with + and remove rows with the trash button. Run queues the captured workflow once per model, with native automatic precision. Loader options contains an off-by-default Spectrum toggle: auto-selects installed MOSS, MiniMax H3, SDXL/Anima or general Spectrum adapters. Forecasting approximates model evaluations and can change results. Keep compatible text encoders and VAE connected separately."
+    DESCRIPTION = "Add diffusion models with + and remove rows with the trash button. One Run outputs a native MODEL list; standard downstream nodes process each model with the same singleton prompts, seeds and settings. Images appear together in one execution's preview. Rebatch Images combines the image list into a tensor batch. Each sampled model and its clones are offloaded through ComfyUI, including on error/cancel. DynamicVRAM also releases its RAM weight buffers; legacy loading can retain CPU weights in the execution cache. Precision is automatic. Loader options contains optional Spectrum autodetection. Keep compatible text encoders and VAE connected separately."
 
     @classmethod
     def VALIDATE_INPUTS(cls, model_name=None, queued_models="[]"):
@@ -62,8 +65,8 @@ class RayQueuedModelLoader:
             # Linked STRING values become available only when the source executes.
             if model_name is not None:
                 model_path(model_name)
-            if additional_models(queued_models):
-                return "Run this multi-model workflow from ComfyUI. For direct API calls, submit one model_name per job with queued_models set to []."
+            for name in additional_models(queued_models):
+                model_path(name)
         except ValueError as error:
             return str(error)
         return True
@@ -72,19 +75,45 @@ class RayQueuedModelLoader:
         validation = self.VALIDATE_INPUTS(model_name, queued_models)
         if validation is not True:
             raise ValueError(validation)
+        if prompt:
+            # This node cannot freeze random numbers created inside a downstream
+            # node's function separately for each MODEL list element.
+            pending, visited = [str(unique_id)], set()
+            while pending:
+                current = pending.pop()
+                if current in visited:
+                    continue
+                visited.add(current)
+                for node_id, node in prompt.items():
+                    inputs = node.get("inputs", {})
+                    if any(isinstance(value, list) and len(value) == 2 and str(value[0]) == current for value in inputs.values()):
+                        if node.get("class_type") == "RayModelCard" and inputs.get("seed_mode") == "randomize":
+                            raise ValueError("Set Model Card's seed mode to Fixed, Increment or Decrement so each model uses the same seeds.")
+                        pending.append(str(node_id))
         import comfy.sd
-        # Match native Load Diffusion Model's default: no dtype override or conversion.
-        model = comfy.sd.load_diffusion_model(model_path(model_name), model_options={})
-        if not spectrum_enabled:
-            return (model,)
-        model, report = apply_spectrum(model, prompt, unique_id)
-        return {"ui": {"queued_model_loader": [report]}, "result": (model,)}
+        import comfy.model_management
+        models, reports = [], []
+        for name in [model_name, *additional_models(queued_models)]:
+            comfy.model_management.throw_exception_if_processing_interrupted()
+            # Native precision and quantization; no dtype override or conversion.
+            model = install_model_offload(comfy.sd.load_diffusion_model(model_path(name), model_options={}))
+            if hasattr(model, "set_attachments"):
+                model.set_attachments("ray_model_source", name)
+            if spectrum_enabled:
+                model, report = apply_spectrum(model, prompt, unique_id)
+                reports.append({**report, "model": name})
+            models.append(model)
+        result = (models,)
+        return {"ui": {"queued_model_loader": reports}, "result": result} if reports else result
 
     @classmethod
-    def IS_CHANGED(cls, model_name, spectrum_enabled=False, prompt=None, unique_id=None, **kwargs):
+    def IS_CHANGED(cls, model_name, spectrum_enabled=False, prompt=None, unique_id=None, queued_models="[]", **kwargs):
         try:
-            path = model_path(model_name)
-            stat = Path(path).stat()
-            return path, stat.st_mtime_ns, stat.st_size, spectrum_enabled, sampling_steps(prompt, unique_id) if spectrum_enabled else None
+            files = []
+            for name in [model_name, *additional_models(queued_models)]:
+                path = model_path(name)
+                stat = Path(path).stat()
+                files.append((path, stat.st_mtime_ns, stat.st_size))
+            return files, spectrum_enabled, sampling_steps(prompt, unique_id) if spectrum_enabled else None
         except ValueError:
             return model_name

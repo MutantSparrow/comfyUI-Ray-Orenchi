@@ -558,6 +558,10 @@ the inference device must be a GPU. The checkpoint must fit the available resour
 
 **Category:** `👑 Ray/🔧 Tools`. Output node; no output sockets.
 
+Completed previews return when you switch back to a workflow tab or open its
+completed run from history, including runs that finish while another workflow
+tab is active. Temporary previews remain available until ComfyUI clears its temp files.
+
 | Input | Purpose |
 |---|---|
 | `image_1` | Required IMAGE batch. |
@@ -573,6 +577,8 @@ error; Both with only image_1 saves that input. Preview-only mode writes only to
 ComfyUI's temporary folder. All saved images retain resolution and alpha. The
 comparison fits each image without stretching; a singleton repeats across the
 other batch, and unequal non-singleton batches show unpaired trailing images.
+Click the preview to advance to the next image pair; the last pair wraps back
+to the first. The arrow buttons also step through the batch.
 Drag the divider or focus it and use Left/Right/Home/End. Folder history holds
 three successful destinations per browser, independently of workflow values.
 
@@ -672,8 +678,8 @@ Loader widget paths/extensions are removed. The workflow keeps the template and
 resolves current widget values when queued. Title priority is config `=title`,
 Card name, then `MODEL CARD` when blank. Existing name selections survive reload.
 
-**Settings** contains source image width/height, card width, maximum preview width,
-embedded guidance and run safeguards.
+The top-right **settings cog** opens source image width/height, card width,
+maximum preview width, embedded guidance and run safeguards.
 
 Generation runs categories top to bottom and prompts left to right. The largest
 category sets the column count; shorter rows leave aligned black cells. Thumbnails
@@ -709,24 +715,28 @@ connect Save Image or another output node when you want to save them.
 
 ![🧰 Ray's Model Tools: Queued Model Loader](screenshots/RayQueuedModelLoader.png)
 
-Choose one or more diffusion models, add rows with **+**, and remove them with
-the trash icons. Connect the single native **MODEL** output to your sampler or
-model processing chain. Press **Run** to queue the captured workflow once per
-model, in row order, with the same sampler seeds and settings. Each file uses
+Choose one or more diffusion models, add rows with **+** beside the Models heading,
+and remove them with the trash icons. Connect the single native **MODEL** output to your sampler or
+model processing chain. Press **Run** once to process a native model list in one
+workflow execution, in row order, with the same singleton seeds and settings. Each file uses
 ComfyUI's automatic precision and supported quantization. Keep compatible text
 encoders and VAE connected separately.
 
-Model suggestions come from ComfyUI's diffusion model folders. The file icon
-opens the shared system file picker. Selections survive workflow save/reload;
-each queued job records only the model it actually loads. Queue/history controls
-manage jobs individually. For predictable comparisons, use deterministic random
-inputs and a non-randomized Model Card seed mode.
+The dropdown lists ComfyUI's registered diffusion models in their folder tree.
+Typing in its filter searches full paths across every subfolder; clearing the
+filter restores the tree. Selections survive workflow save/reload.
+All image results appear together in that run's preview. Use **Rebatch Images**
+after decoding when a downstream node needs one tensor batch. Each sampled model
+and its clones are explicitly offloaded through native memory management,
+including on error/cancel. DynamicVRAM also releases RAM weight buffers; legacy
+loading can retain CPU weights in the execution cache. For predictable comparisons,
+use deterministic random inputs and a non-randomized Model Card seed mode.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [queued model comparisons](MODEL_TOOLS.md#queued-model-comparisons)
-for queue behavior, direct API usage and limitations.
+for list behavior, memory management, direct API usage and limitations.
 
-**Loader options** opens an optional **Spectrum** toggle, off by default. It
-automatically chooses the installed MOSS, MiniMax H3, SDXL/Anima or general
+The top-right **Loader options cog** opens an optional **Spectrum** toggle, off by
+default. It automatically chooses the installed MOSS, MiniMax H3, SDXL/Anima or general
 Spectrum adapter for each loaded model. The node reports the attached adapter or
 native fallback. Spectrum approximates model evaluations and can change results;
 see [Spectrum acceleration](MODEL_TOOLS.md#optional-spectrum-acceleration) for
@@ -738,9 +748,9 @@ optional dependencies, supported families and step-count requirements.
 
 ![🧰 Ray's Model Tools: Load Model As](screenshots/RayModelLoadAs.png)
 
-**Purpose.** Choose a checkpoint or diffusion model with the file picker. Load it automatically or with an explicit storage format. Also accepts a `model_data` handle; returns MODEL, CLIP, VAE, model data, metadata, and a report.
+**Purpose.** Choose a checkpoint or diffusion model from the searchable folder dropdown. Select Auto or an explicit storage format. Also accepts a `model_data` handle; returns MODEL, CLIP, VAE, model data, metadata, and a report.
 
-For a file-only merge, turn **Load result** off and leave the format on **Auto** or **Preserve**. The node passes the source to `model_data` after reading its headers, without loading or rewriting the weights. Choose the final precision in Model Merge.
+For a file-only merge, connect only **model_data** and leave the format on **Auto** or **Preserve**. The node passes the source after reading its headers. Inference models load automatically when MODEL, CLIP or VAE outputs are used. Choose the final precision in Model Merge.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
 
@@ -750,7 +760,7 @@ For a file-only merge, turn **Load result** off and leave the format on **Auto**
 
 ![🧰 Ray's Model Tools: Convert Model](screenshots/RayModelConvert.png)
 
-**Purpose.** Convert connected model weights or a safetensors source to another supported precision or quantization. Optional loading returns usable ComfyUI components alongside the file handle and report.
+**Purpose.** Convert connected model weights or a safetensors source to another supported precision or quantization. Using an inference output automatically loads usable ComfyUI components alongside the file handle and report.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
 
@@ -760,7 +770,7 @@ For a file-only merge, turn **Load result** off and leave the format on **Auto**
 
 ![🧰 Ray's Model Tools: Save Model](screenshots/RayModelSave.png)
 
-**Purpose.** Save effective weights, including active patches, to a safetensors file. Accepts optional CLIP, VAE, source model data, and structured metadata; returns a model-data handle and the saved path.
+**Purpose.** Save a connected MODEL or model_data, including active patches, as `<filename_prefix>.safetensors` in the chosen output folder. Connect optional CLIP, VAE and structured metadata; returns a model-data handle and the saved path. Blank folders use ComfyUI output; relative folders are inside it. No counter is added, and existing files require overwrite.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
 
@@ -790,7 +800,16 @@ For a file-only merge, turn **Load result** off and leave the format on **Auto**
 
 ![🧰 Ray's Model Tools: Model Merge](screenshots/RayModelMerge.png)
 
-**Purpose.** Merge compatible models connected to A, B and any required base, using MODEL or model-data inputs. Supports LERP, SLERP, TIES, DARE, DELLA, or Breadcrumbs variants, component selection, seeded controls, block weights, and optional loading of the result. Fast merge holds the output in RAM to reduce disk writes; it can use substantial system memory. For a direct save, disable Load result and connect model_data to Save Model.
+**Purpose.** Merge compatible models connected to A, B and any required base, using MODEL or model-data inputs. Supports LERP, SLERP, TIES, DARE, DELLA, or Breadcrumbs variants, component selection and seeded controls. Connect block weights as a JSON STRING. Inference outputs load automatically when used. Fast merge holds the output in RAM; a data-only connection to Save Model avoids intermediate model files.
+
+The live **Merge name** preview follows upstream model selections and settings.
+Connect the **merge_name** STRING output to Save Model's **filename_prefix** for
+a name containing the sources, strategy, percentages, precision, settings
+fingerprint and execution datetime.
+
+Open **? Help** for each strategy's purpose, strengths and limitations. Hover
+the controls for setting-specific tooltips. Enabling Fast merge opens a RAM
+warning with **REVERT** and **CONFIRM**; both close the popup and apply the choice.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
 
@@ -841,8 +860,9 @@ For a file-only merge, turn **Load result** off and leave the format on **Auto**
 ![🧰 Ray's Model Tools: LoRA QKV Loader](screenshots/RayLoraQKVLoader.png)
 
 **Purpose.** Load one or more LoRAs onto a MODEL with individual strengths. Add
-rows with **+**, remove them with **trash**, and choose registered files or browse
-to a file. Automatically repairs unambiguous trainer names and supported
+rows with **+** beside the LoRAs heading, remove them with **trash**, and select
+registered files from the searchable folder dropdown. The filter searches full
+paths across every subfolder. Automatically repairs unambiguous trainer names and supported
 fused/separate QKV mismatches against the connected model, using native ComfyUI
 adapters for ordinary loading. Zero strength skips a row; an empty list passes
 the model through. Reports loaded weights, fixes and unmatched adapters. MODEL

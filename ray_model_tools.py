@@ -7,6 +7,12 @@ import importlib
 import uuid
 
 core = importlib.import_module(".model_tools", __package__) if __package__ else importlib.import_module("model_tools")
+if __package__:
+    from . import model_workflow as workflow
+    from . import filename_template as names
+else:
+    import model_workflow as workflow
+    import filename_template as names
 
 CATEGORY = "👑 Ray/🧰 Model Tools"
 SCOPES = ["diffusion", "diffusion_and_text", "text_encoder", "all"]
@@ -23,8 +29,8 @@ def combo(values, default=None, **options):
     return (values, {"default": default or values[0], **options})
 
 
-def number(default, minimum=0., maximum=1., step=.01):
-    return ("FLOAT", {"default": default, "min": minimum, "max": maximum, "step": step})
+def number(default, minimum=0., maximum=1., step=.01, **options):
+    return ("FLOAT", {"default": default, "min": minimum, "max": maximum, "step": step, **options})
 
 
 def files(kind):
@@ -75,6 +81,20 @@ def save_path(filename_prefix, output_path, extension):
         return str(path)
     folder, name, counter, _, _ = folder_paths.get_save_image_path(filename_prefix, folder_paths.get_output_directory())
     return str(Path(folder) / f"{name}_{counter:05}_{extension}")
+
+
+def save_model_path(filename_prefix, output_folder):
+    """Use one destination folder and a safe filename stem, without a counter."""
+    import folder_paths
+    root = Path(folder_paths.get_output_directory()).resolve()
+    folder = Path(output_folder.strip().strip('"').strip("'")).expanduser() if output_folder.strip() else root
+    if not folder.is_absolute():
+        folder = root / folder
+    prefix = filename_prefix.strip()
+    if not prefix:
+        raise ValueError("Enter a filename prefix or connect merge_name.")
+    stem = names.finish_stem(names.clean_text(prefix))
+    return str(folder.resolve() / f"{stem}.safetensors")
 
 
 def progress():
@@ -157,6 +177,7 @@ def load_asset(asset, kind="auto", dtype="auto", components=True):
     if model is None:
         raise ValueError("ComfyUI could not load this model architecture. File-only inspection and conversion remain available.")
     attach_metadata(model, source.metadata)
+    model.set_attachments("ray_model_source", asset.metadata.get("ray_merge_name") or asset.metadata.get("ray_source_name") or asset._path)
     return model, clip, vae
 
 
@@ -176,7 +197,7 @@ def changed_path(path="", **_):
 
 
 class RayModelLoadAs:
-    DESCRIPTION = "Choose a supported diffusion model or checkpoint file, or a sharded model folder. Disable load_result for file-only merge/convert/save; Auto then passes through the source without loading or rewriting weights. FP8→FP16 cannot restore lost precision."
+    DESCRIPTION = "Select a registered diffusion model or checkpoint from the searchable folder dropdown. Inference models are initialized automatically when MODEL, CLIP or VAE outputs are used; data-only workflows avoid that extra load. FP8→FP16 cannot restore lost precision."
     CATEGORY, FUNCTION = CATEGORY, "load"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report")
@@ -186,74 +207,87 @@ class RayModelLoadAs:
         return {"required": {"model_name": text(), "weight_format": combo(["auto", *core.FORMATS]),
                              "loader": combo(["auto", "checkpoint", "diffusion"]),
                              "load_components": ("BOOLEAN", {"default": True})},
-                "optional": {"path": text(), "model_data": ("RAY_MODEL_DATA",),
-                             "load_result": ("BOOLEAN", {"default": True, "tooltip": "Disable for file-only processing. With Auto or Preserve, model_data references the original file without loading or converting it."})}}
+                "optional": {"path": text(), "model_data": ("RAY_MODEL_DATA",)},
+                "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}}
 
     @classmethod
-    def IS_CHANGED(cls, model_name="", path="", model_data=None, **kwargs):
-        return changed_path(path=model_data.path if model_data else resolve_file(model_name, path))
+    def IS_CHANGED(cls, model_name="", path="", model_data=None, prompt=None, unique_id=None, **kwargs):
+        return changed_path(path=model_data._path if model_data else resolve_file(model_name, path)), workflow.inference_requested(prompt, unique_id)
 
-    def load(self, model_name="", weight_format="auto", loader="auto", load_components=True, path="", model_data=None, load_result=True):
+    def load(self, model_name="", weight_format="auto", loader="auto", load_components=True, path="", model_data=None, prompt=None, unique_id=None):
         source = core.TensorSource(model_data.path if model_data else resolve_file(model_name, path))
         asset = core.ModelAsset(str(source.path), source.metadata)
         target = weight_format
+        initialize = workflow.inference_requested(prompt, unique_id)
         legacy = False
-        if load_result and target in ("auto", "preserve") and any(k.rsplit(".", 1)[-1] == "scaled_int8" for k in source.index):
+        if initialize and target in ("auto", "preserve") and any(k.rsplit(".", 1)[-1] == "scaled_int8" for k in source.index):
             # Decode the standalone suite's legacy INT8 layout into the native format.
             target = "int8_row"
             legacy = True
-        elif load_result and target in ("auto", "preserve") and any(k.endswith(".scale_weight") for k in source.index):
+        elif initialize and target in ("auto", "preserve") and any(k.endswith(".scale_weight") for k in source.index):
             target = "fp8_e4m3fn_scaled"
             legacy = True
         if target not in ("auto", "preserve"):
             asset = core.convert(source, cache_path("converted"), target, scope="all" if legacy else "diffusion", progress=progress())
-        model, clip, vae = load_asset(asset, loader, target, load_components) if load_result else (None, None, None)
+        asset = core.ModelAsset(asset._path, {**asset.metadata, "ray_source_name": workflow.source_stem(source.path)}, asset.tensors)
+        model, clip, vae = load_asset(asset, loader, target, load_components) if initialize else (None, None, None)
         report = {"operation": "load", "source": str(source.path), "weight_format": target,
-                  "loaded": load_result, "architecture": type(model.model).__name__ if model is not None else None,
+                  "loaded": initialize, "architecture": type(model.model).__name__ if model is not None else None,
                   "clip": clip is not None, "vae": vae is not None}
         return result((model, clip, vae, asset, asset.metadata, core.json_text(report)), report)
 
 
 class RayModelConvert:
-    DESCRIPTION = "Convert a model file or the effective state of a connected MODEL. Disable load_result for file-only processing. Non-Linear layers stay bf16 for quantized output."
+    DESCRIPTION = "Convert a model file or the effective state of a connected MODEL. Inference outputs are loaded automatically when used. Non-Linear layers stay bf16 for quantized output."
     CATEGORY, FUNCTION = CATEGORY, "convert"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report")
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"weight_format": combo(core.FORMATS[1:], "bf16"), "components": combo(SCOPES),
-                             "load_result": ("BOOLEAN", {"default": True})},
+        return {"required": {"weight_format": combo(core.FORMATS[1:], "bf16"), "components": combo(SCOPES)},
                 "optional": {"model": ("MODEL",), "clip": ("CLIP",), "vae": ("VAE",),
-                             "model_data": ("RAY_MODEL_DATA",), "path": text()}}
+                             "model_data": ("RAY_MODEL_DATA",), "path": text()},
+                "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}}
 
-    IS_CHANGED = staticmethod(changed_path)
+    @classmethod
+    def IS_CHANGED(cls, path="", prompt=None, unique_id=None, **_):
+        return changed_path(path), workflow.inference_requested(prompt, unique_id)
 
-    def convert(self, weight_format, components="diffusion", load_result=True, model=None, clip=None, vae=None, model_data=None, path=""):
+    def convert(self, weight_format, components="diffusion", model=None, clip=None, vae=None, model_data=None, path="", prompt=None, unique_id=None):
         with source_path(model, model_data, path, clip, vae) as src:
             asset = core.convert(src, cache_path("converted"), weight_format, components, progress())
-        loaded = load_asset(asset, dtype=weight_format) if load_result else (None, None, None)
+        initialize = workflow.inference_requested(prompt, unique_id)
+        label = workflow.source_name(model, model_data, path)
+        asset = core.ModelAsset(asset._path, {**asset.metadata, "ray_source_name": workflow.source_stem(label)}, asset.tensors)
+        loaded = load_asset(asset, dtype=weight_format) if initialize else (None, None, None)
         report = {"operation": "convert", "weight_format": weight_format, "components": components,
-                  "bytes": Path(asset.path).stat().st_size, "loaded": load_result}
+                  "bytes": Path(asset.path).stat().st_size, "loaded": initialize}
         return result((*loaded, asset, asset.metadata, core.json_text(report)), report)
 
 
 class RayModelSave:
-    DESCRIPTION = "Save the current effective MODEL, baking active LoRA/merge patches. Connect CLIP/VAE to include them. Metadata is merged by default; existing files require overwrite."
+    DESCRIPTION = "Save a connected MODEL or model_data as <filename_prefix>.safetensors in the output folder, without a counter. MODEL saves bake active patches; connect CLIP/VAE to include them. Connect metadata to merge or replace the source metadata. Existing files require overwrite."
     CATEGORY, FUNCTION, OUTPUT_NODE = CATEGORY, "save", True
     RETURN_TYPES, RETURN_NAMES = ("RAY_MODEL_DATA", "STRING"), ("model_data", "saved_path")
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"filename_prefix": text("model_tools/Ray_Model"), "metadata_mode": combo(["merge", "replace"]),
-                             "overwrite": ("BOOLEAN", {"default": False})},
+        return {"required": {"filename_prefix": text("Ray_Model", tooltip="Filename stem, without .safetensors. No counter is added; spaces and unsupported characters become underscores."),
+                             "metadata_mode": combo(["merge", "replace"], tooltip="Merge preserves source metadata and adds connected fields. Replace keeps only connected fields, required quantization metadata and save history."),
+                             "overwrite": ("BOOLEAN", {"default": False, "tooltip": "Allow replacing an existing file. Off preserves it and reports a filename collision."}),
+                             "output_folder": text("model_tools", tooltip="Destination folder on the server. Blank uses ComfyUI output; relative folders are inside output. Missing folders are created when saving.")},
                 "optional": {"model": ("MODEL",), "clip": ("CLIP",), "vae": ("VAE",),
                              "model_data": ("RAY_MODEL_DATA",), "metadata": ("RAY_MODEL_METADATA",),
+                             # Hidden compatibility values preserve saved workflows and connected legacy inputs.
                              "metadata_json": text("", True), "path": text(), "output_path": text()}}
 
-    def save(self, filename_prefix="model_tools/Ray_Model", metadata_mode="merge", overwrite=False,
-             model=None, clip=None, vae=None, model_data=None, metadata=None, metadata_json="", path="", output_path=""):
-        destination = save_path(filename_prefix, output_path, ".safetensors")
+    def save(self, filename_prefix="Ray_Model", metadata_mode="merge", overwrite=False,
+             model=None, clip=None, vae=None, model_data=None, metadata=None, metadata_json="", path="", output_path="",
+             output_folder="model_tools"):
+        destination = save_path(filename_prefix, output_path, ".safetensors") if output_path.strip() else save_model_path(filename_prefix, output_folder)
+        if model is None and model_data is None and not path.strip():
+            raise ValueError("Connect MODEL or model_data to Save Model.")
         with ExitStack() as stack:
             memory = model_data if model is None and isinstance(model_data, core.ModelAsset) and model_data.tensors is not None else None
             src = None if memory is not None else stack.enter_context(source_path(model, model_data, path, clip, vae))
@@ -332,33 +366,51 @@ class RayModelMetadataSave:
 
 
 class RayModelMerge:
-    DESCRIPTION = "Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's nine strategies. Task-vector strategies require a base_model or base_data connection. Intersect, Pad and Trim preserve tensors found in only one input; Pad/Trim also resize shared tensors. Fast merge keeps the entire result in RAM and avoids intermediate disk writes when passed to Save Model with load_result disabled. Warning: high RAM usage; insufficient memory can cause paging or failure."
+    DESCRIPTION = "Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's nine strategies. Task-vector strategies require a base_model or base_data connection. Block weights accepts a connected JSON string. Inference outputs load automatically when used. merge_name combines the sources, method, ratio, precision, settings fingerprint and time for use with Save Model. Fast merge keeps the entire result in RAM; insufficient memory can cause paging or failure."
     CATEGORY, FUNCTION = CATEGORY, "merge"
-    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING")
-    RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report")
+    RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING", "STRING")
+    RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report", "merge_name")
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"strategy": combo(core.STRATEGIES), "weight_a": number(.5),
-            "weight_format": combo(core.FORMATS[1:], "bf16"), "components": combo(SCOPES),
+        return {"required": {
+            "strategy": combo(core.STRATEGIES, tooltip="Merge method. LERP is a fast weighted average; SLERP blends along layer angles. TIES, DARE, DELLA and Breadcrumbs merge changes from a compatible base model. Open node Help for each method's strengths and limitations."),
+            "weight_a": number(.5, tooltip="Contribution of A; B uses 1 minus this value. For LERP/SLERP, 1 selects A and 0 selects B. Other methods apply this ratio to pruned changes from the base. Matching block_weights entries override it."),
+            "weight_format": combo(core.FORMATS[1:], "bf16", tooltip="Storage format for merged floating-point weights. Quantized formats target eligible Linear layers; other merged layers stay bf16. Higher precision needs more RAM and disk space and cannot restore precision already lost in a source."),
+            "components": combo(SCOPES, tooltip="Components whose matching tensors are merged: diffusion, diffusion plus text, text encoder only, or all. Unselected components pass through from A unchanged."),
             "mismatch": combo(["forbid", "intersect", "pad", "trim"], tooltip="Forbid: require matching names and shapes. Intersect: merge shared tensors of matching shape. Pad/Trim: resize shared tensors to the larger/smaller shape. Intersect, Pad and Trim preserve tensors present in only one input unchanged."),
-            "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
-            "density": number(.5), "lambda": number(1., 0., 5.), "top_trim": number(.1, 0., .99),
-            "bottom_trim": number(.01, 0., .99), "load_result": ("BOOLEAN", {"default": True})},
-            "optional": {"model_a": ("MODEL",), "model_b": ("MODEL",), "base_model": ("MODEL",),
-                "clip_a": ("CLIP",), "clip_b": ("CLIP",), "base_clip": ("CLIP",), "vae_a": ("VAE",),
-                "data_a": ("RAY_MODEL_DATA",), "data_b": ("RAY_MODEL_DATA",), "base_data": ("RAY_MODEL_DATA",),
-                "path_a": text(), "path_b": text(), "base_path": text(), "block_weights": text("{}", True),
-                "fast_merge": ("BOOLEAN", {"default": False, "tooltip": "High RAM usage: retain the entire merged model in system RAM until ComfyUI releases its cache. Disable load_result and connect model_data to Save Model to avoid intermediate disk writes. Insufficient RAM can cause paging or failure."})}}
+            "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff,
+                "tooltip": "Random pruning seed for DARE and DELLA. Each tensor derives its own seed from this value and its name. Keep the seed and inputs fixed for repeatable results."}),
+            "density": number(.5, tooltip="Retention setting for TIES, DARE and DELLA. TIES keeps the largest changes; DARE uses this keep probability; DELLA adjusts it by change magnitude. Lower values prune more changes and can lose detail or amplify retained updates."),
+            "lambda": number(1., 0., 5., tooltip="DELLA importance exponent. Higher values favor larger changes from the base more strongly. Zero gives uniform keep probabilities; use with density and seed."),
+            "top_trim": number(.1, 0., .99, tooltip="Breadcrumbs fraction of the largest absolute changes to discard as outliers, per tensor. 0.10 means 10%. Top trim plus Bottom trim must be less than 1."),
+            "bottom_trim": number(.01, 0., .99, tooltip="Breadcrumbs fraction of the smallest absolute changes to discard, per tensor. 0.01 means 1%. Top trim plus Bottom trim must be less than 1; excessive trimming can remove learned details.")},
+            "optional": {
+                "model_a": ("MODEL", {"tooltip": "Live model A, including its active patches. Takes priority over data_a and legacy path_a; exporting its effective weights needs a temporary snapshot."}),
+                "model_b": ("MODEL", {"tooltip": "Live model B, including its active patches. Takes priority over data_b and legacy path_b."}),
+                "base_model": ("MODEL", {"tooltip": "Compatible original training base for task-vector methods. Required for TIES, DARE, DELLA and Breadcrumbs; unused by LERP and SLERP. Takes priority over base_data."}),
+                "clip_a": ("CLIP", {"tooltip": "Text encoder belonging to live model A. Include it when merging text-encoder components or retaining a full checkpoint."}),
+                "clip_b": ("CLIP", {"tooltip": "Text encoder belonging to live model B when merging text-encoder components."}),
+                "base_clip": ("CLIP", {"tooltip": "Text encoder belonging to the live base model when merging text-encoder changes."}),
+                "vae_a": ("VAE", {"tooltip": "VAE to include in the snapshot of live model A. It passes through from A unless the selected components include it."}),
+                "data_a": ("RAY_MODEL_DATA", {"tooltip": "Model data for A, usually from Load Model As. Used when model_a is disconnected; avoids exporting a live model."}),
+                "data_b": ("RAY_MODEL_DATA", {"tooltip": "Model data for B, usually from Load Model As. Used when model_b is disconnected."}),
+                "base_data": ("RAY_MODEL_DATA", {"tooltip": "Model data for the compatible base. Used by task-vector methods when base_model is disconnected; not needed for LERP or SLERP."}),
+                "path_a": text(tooltip="Legacy model A path retained for saved workflows. Connect Load Model As to data_a for normal file selection; model_a and data_a take priority."),
+                "path_b": text(tooltip="Legacy model B path retained for saved workflows. Connect Load Model As to data_b; model_b and data_b take priority."),
+                "base_path": text(tooltip="Legacy base-model path retained for saved workflows. Connect a compatible base to base_data or base_model instead."),
+                "block_weights": text("{}", True, forceInput=True, tooltip='Connect a STRING containing a JSON map of tensor prefixes to A ratios between 0 and 1, for example {"diffusion_model.blocks.0.": 0.7}. The longest prefix wins. Leave disconnected for the global Weight A ratio.'),
+                "fast_merge": ("BOOLEAN", {"default": False, "tooltip": "High RAM usage: retain the entire merged model in system RAM until ComfyUI releases its cache. A data-only connection to Save Model avoids intermediate disk writes. Insufficient RAM can cause paging or failure."})},
+            "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}}
 
     @classmethod
-    def IS_CHANGED(cls, path_a="", path_b="", base_path="", **_):
-        return changed_path(path_a), changed_path(path_b), changed_path(base_path)
+    def IS_CHANGED(cls, path_a="", path_b="", base_path="", prompt=None, unique_id=None, **_):
+        return changed_path(path_a), changed_path(path_b), changed_path(base_path), workflow.inference_requested(prompt, unique_id)
 
     def merge(self, strategy="LERP", weight_a=.5, weight_format="bf16", components="diffusion", mismatch="forbid",
-              seed=0, density=.5, top_trim=.1, bottom_trim=.01, load_result=True,
+              seed=0, density=.5, top_trim=.1, bottom_trim=.01,
               model_a=None, model_b=None, base_model=None, clip_a=None, clip_b=None, base_clip=None, vae_a=None,
-              data_a=None, data_b=None, base_data=None, path_a="", path_b="", base_path="", block_weights="{}", fast_merge=False, **kwargs):
+              data_a=None, data_b=None, base_data=None, path_a="", path_b="", base_path="", block_weights="{}", fast_merge=False, prompt=None, unique_id=None, **kwargs):
         if model_a is None and data_a is None and not path_a.strip():
             raise ValueError("Connect Model A to model_a or data_a.")
         if model_b is None and data_b is None and not path_b.strip():
@@ -371,10 +423,18 @@ class RayModelMerge:
             asset, check = core.merge_models(a, b, cache_path("merged"), strategy, weight_a, base, weight_format,
                 components, mismatch, seed, density, kwargs.get("lambda", 1.), top_trim, bottom_trim,
                 block_weights, progress(), fast_merge=fast_merge)
-        loaded = load_asset(asset, dtype=weight_format) if load_result else (None, None, None)
+        naming = dict(components=components, mismatch=mismatch, seed=seed, density=density,
+                      top_trim=top_trim, bottom_trim=bottom_trim, block_weights=block_weights, fast_merge=fast_merge, **{"lambda": kwargs.get("lambda", 1.)})
+        name = workflow.merge_name(
+            workflow.source_name(model_a, data_a, path_a, prompt, unique_id, ("model_a", "data_a")),
+            workflow.source_name(model_b, data_b, path_b, prompt, unique_id, ("model_b", "data_b")),
+            workflow.source_name(base_model, base_data, base_path, prompt, unique_id, ("base_model", "base_data")),
+            strategy, weight_a, weight_format, naming)
+        asset = core.ModelAsset(asset._path, {**asset.metadata, "ray_merge_name": name}, asset.tensors)
+        loaded = load_asset(asset, dtype=weight_format) if workflow.inference_requested(prompt, unique_id) else (None, None, None)
         report = {"operation": "merge", "strategy": strategy, "weight_a": weight_a, "seed": seed,
-                  "fast_merge": fast_merge, "comparison": check}
-        return result((*loaded, asset, asset.metadata, core.json_text(report)), report)
+                  "fast_merge": fast_merge, "comparison": check, "merge_name": name}
+        return result((*loaded, asset, asset.metadata, core.json_text(report), name), report)
 
 
 class RayModelInspector:
@@ -425,17 +485,17 @@ class RayLoraBake:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {"lora_name": text(), "strength_model": number(1., -20., 20.),
-                             "strength_clip": number(1., -20., 20.), "weight_format": combo(core.FORMATS, "preserve"),
-                             "load_result": ("BOOLEAN", {"default": True})},
+                             "strength_clip": number(1., -20., 20.), "weight_format": combo(core.FORMATS, "preserve")},
                 "optional": {"model": ("MODEL",), "clip": ("CLIP",), "vae": ("VAE",),
-                             "model_data": ("RAY_MODEL_DATA",), "path": text(), "lora_path": text()}}
+                             "model_data": ("RAY_MODEL_DATA",), "path": text(), "lora_path": text()},
+                "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}}
 
     @classmethod
-    def IS_CHANGED(cls, path="", lora_path="", lora_name="", **_):
-        return changed_path(path), changed_path(resolve_file(lora_name, lora_path))
+    def IS_CHANGED(cls, path="", lora_path="", lora_name="", prompt=None, unique_id=None, **_):
+        return changed_path(path), changed_path(resolve_file(lora_name, lora_path)), workflow.inference_requested(prompt, unique_id)
 
-    def bake(self, lora_name, strength_model=1., strength_clip=1., weight_format="preserve", load_result=True,
-             model=None, clip=None, vae=None, model_data=None, path="", lora_path=""):
+    def bake(self, lora_name, strength_model=1., strength_clip=1., weight_format="preserve",
+             model=None, clip=None, vae=None, model_data=None, path="", lora_path="", prompt=None, unique_id=None):
         import comfy.sd
         import comfy.utils
         import comfy.lora
@@ -468,7 +528,8 @@ class RayLoraBake:
             old = asset.path
             asset = core.convert(asset.path, cache_path("baked-converted"), weight_format, progress=progress())
             Path(old).unlink(missing_ok=True)
-        loaded = load_asset(asset, dtype=weight_format) if load_result else (None, None, None)
+        asset = core.ModelAsset(asset._path, {**asset.metadata, "ray_source_name": workflow.source_stem(workflow.source_name(model, model_data, path))}, asset.tensors)
+        loaded = load_asset(asset, dtype=weight_format) if workflow.inference_requested(prompt, unique_id) else (None, None, None)
         report = {"operation": "bake_lora", "matched_layers": len(patches), "adapter": adapter_path,
                   "strength_model": strength_model, "strength_clip": strength_clip, "weight_format": weight_format}
         return result((*loaded, asset, asset.metadata, core.json_text(report)), report)

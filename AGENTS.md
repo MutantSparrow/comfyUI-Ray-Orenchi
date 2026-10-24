@@ -38,6 +38,16 @@ Before changing a node or shared component, read and follow [UI.md](UI.md),
 including its shared controls, lifecycle contracts, reference inventory and
 completion checklist.
 
+Settings/configuration actions use the single shared `settings` cog button
+(30 × 30 CSS pixels) in the shared node header at the top right. Content edits
+use the pencil beside their content. Follow the context-placement table in
+`UI.md`; do not define node-local cog SVGs, styling, or button behavior.
+
+Prefer placing suitable widgets alongside native output ports to save vertical
+space, as in Folders, using shared layout support. Reserve clear space for port
+labels, sockets, and link hit targets; fall back to stacked rows when narrow.
+The settings cog stays top right of the widget content lane, clear of outputs.
+
 Use the pack's category and title format: category emoji, Ray's group, then the
 node name. Keep stable registered class IDs. Group related controls into named
 sections using the shared magenta, uppercase `.rp-title` style. Separate visible

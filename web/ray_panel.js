@@ -15,7 +15,9 @@ export const ICONS = {
     folder: '<svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10v10H3z"/></svg>',
     file: '<svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>',
     refresh: '<svg viewBox="0 0 24 24"><path d="M19 8a7.5 7.5 0 1 0 1.2 6"/><path d="M19.5 3.5V8H15"/></svg>',
+    settings: '<svg viewBox="0 0 24 24"><path d="m10 3-1 3-3 1-3 3 2 2-1 3 3 3 3-1 2 2 3-1 1-3 3-1 1-3-2-2 1-3-3-3-3 1z"/><circle cx="12" cy="12" r="3"/></svg>',
     edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+    remove: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/></svg>',
     unlink: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     minus: '<svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg>',
     plus: '<svg viewBox="0 0 24 24"><path d="M6 12h12M12 6v12"/></svg>',
@@ -35,13 +37,43 @@ const el = (tag, className, text) => {
     return node;
 };
 export function iconButton(icon, title, onClick, { label } = {}) {
-    const b = el("button", "rp-icon");
+    injectStyles();
+    const b = el("button", `rp-icon${icon === "settings" ? " rp-settings" : ""}`);
     b.type = "button";
     b.title = title;
+    b.dataset.icon = icon;
     b.setAttribute("aria-label", title);
     if (label) b.textContent = label; else b.innerHTML = ICONS[icon] || "";
-    b.addEventListener("click", event => { event.stopPropagation(); onClick(event); });
+    b.querySelector("svg")?.setAttribute("aria-hidden", "true");
+    b.addEventListener("pointerdown", event => { if (event.button === 0) event.stopPropagation(); });
+    isolateKeys(b);
+    b.addEventListener("click", event => { event.stopPropagation(); if (!b.disabled) onClick(event); });
     return b;
+}
+
+const actionElements = actions => (actions || []).map(action => action instanceof HTMLElement
+    ? action : iconButton(action.icon, action.title, action.onClick, { label: action.label }));
+
+// The same first-content header serves ordinary panels and custom galleries.
+// Actions may be shared icon buttons or { icon, title, onClick, label? } specs.
+export function createNodeHeader(title, actions = []) {
+    injectStyles();
+    const element = el("div", "rp-header"), heading = el("div", "rp-title", title);
+    const group = el("div", "rp-header-actions");
+    element.append(heading, group);
+    let current = [];
+    function setActions(actions) {
+        const next = actionElements(actions);
+        // Keep settings rightmost without changing the order of contextual actions.
+        next.sort((a, b) => Number(a.dataset.icon === "settings") - Number(b.dataset.icon === "settings"));
+        if (next.length !== current.length || next.some((button, index) => button !== current[index])) {
+            group.replaceChildren(...next);
+            current = next;
+        }
+        group.hidden = !next.length;
+    }
+    setActions(actions);
+    return { element, heading, actions: group, setActions, destroy() { current = []; element.remove(); } };
 }
 
 // How an option reads: the layout's label, or a snake_case value written out ("error_diffusion" -> "Error diffusion").
@@ -65,6 +97,10 @@ export const PANEL_CSS = `
 .rp-section {display:flex;flex-direction:column;gap:6px;min-width:0}
 .rp-section:not([hidden]) ~ .rp-section:not([hidden]) {border-top:1px solid #2b2b2b;padding-top:8px}
 .rp-title {font:600 10px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#d43aa8}
+.rp-header {display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.rp-header > .rp-title {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-header-actions {display:flex;align-items:center;justify-content:flex-end;gap:6px;flex:0 0 auto;pointer-events:auto}
+.rp-header-actions[hidden] {display:none}
 .rp-row {display:grid;grid-template-columns:minmax(64px,34%) minmax(0,1fr);gap:8px;align-items:center;min-height:28px;border-radius:5px;position:relative}
 .rp-row.rp-full {grid-template-columns:minmax(0,1fr);gap:4px}
 .rp-row.rp-bool {grid-template-columns:minmax(0,1fr) auto}
@@ -78,11 +114,12 @@ export const PANEL_CSS = `
   background-position:calc(100% - 13px) 12px,calc(100% - 9px) 12px;background-size:4px 4px;background-repeat:no-repeat}
 .rp-select option {background:#141414;color:#eee}
 .rp :is(.rp-input,.rp-select,.rp-textarea):disabled {opacity:.55}
-.rp :focus-visible {outline:2px solid #b9a4fa;outline-offset:1px}
-.rp button {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:5px;cursor:pointer}
-.rp button:hover:not(:disabled) {background:#454753}
-.rp button:disabled {opacity:.4;cursor:default}
-.rp .rp-icon {flex:0 0 auto;width:32px;height:28px;padding:0;display:grid;place-items:center;font:600 13px ui-monospace,monospace}
+.rp :focus-visible, button.rp-icon:focus-visible {outline:2px solid #b9a4fa;outline-offset:1px}
+.rp button, button.rp-icon {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:5px;cursor:pointer}
+.rp button:hover:not(:disabled), button.rp-icon:hover:not(:disabled) {background:#454753}
+.rp button:disabled, button.rp-icon:disabled {opacity:.4;cursor:default}
+.rp .rp-icon, button.rp-icon {box-sizing:border-box;flex:0 0 auto;width:32px;height:28px;padding:0;display:grid;place-items:center;font:600 13px ui-monospace,monospace;pointer-events:auto}
+.rp .rp-icon.rp-settings, button.rp-icon.rp-settings {width:30px;height:30px}
 .rp-icon svg {width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .rp-seg {display:flex;flex:0 1 auto;min-width:0;border:1px solid #444;border-radius:5px;overflow:hidden}
 .rp .rp-seg button {flex:1 1 auto;min-width:0;height:26px;padding:3px 8px;font-size:12px;background:transparent;border:0;border-radius:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -302,7 +339,9 @@ export function installPanel(node, spec = {}) {
         const full = field.full ?? (["textarea", "path"].includes(kind) && field.labelAbove !== false);
         const row = { name: widget.name, widget, when: field.when, kind, element: el("div", `rp-row${full ? " rp-full" : ""}${kind === "toggle" ? " rp-bool" : ""}`) };
         const label = el("label", "rp-label", field.label || humanize(widget.name));
-        label.title = widget.tooltip || widget.options?.tooltip || widget.name;
+        const tooltip = field.tooltip || widget.tooltip || widget.options?.tooltip || "";
+        label.title = tooltip || widget.name;
+        row.element.title = tooltip;
         const control = el("div", "rp-control");
         row.element.append(label, control);
         const linkBox = el("div", "rp-link");
@@ -587,9 +626,12 @@ export function installPanel(node, spec = {}) {
 
     // ---- sections ----------------------------------------------------------------------------------------
     const sections = [];
+    const nodeActions = actionElements(typeof spec.headerActions === "function" ? spec.headerActions(panel) : spec.headerActions);
     function addSection(section) {
         const box = el("div", "rp-section");
-        box.append(el("div", "rp-title", section.title || "Settings"));
+        const actions = actionElements(typeof section.actions === "function" ? section.actions(panel) : section.actions);
+        const header = createNodeHeader(section.title || "Settings", actions);
+        box.append(header.element);
         const own = [];
         for (const field of section.fields || []) {
             const row = makeRow(typeof field === "string" ? { name: field } : field);
@@ -597,7 +639,7 @@ export function installPanel(node, spec = {}) {
             own.push(row); rows.push(row);
             box.append(row.element);
         }
-        sections.push({ box, rows: own, when: section.when });
+        sections.push({ box, rows: own, when: section.when, header, actions });
         root.append(box);
     }
     for (const section of spec.sections || []) addSection(section);
@@ -634,6 +676,8 @@ export function installPanel(node, spec = {}) {
             }
             section.box.hidden = !any || (section.when && !section.when(node));
         }
+        const first = sections.find(section => !section.box.hidden);
+        for (const section of sections) section.header.setActions([...section.actions, ...(section === first ? nodeActions : [])]);
         const empty = sections.every(s => s.box.hidden);
         root.hidden = empty;
         host.hidden = empty;
@@ -671,6 +715,7 @@ export function installPanel(node, spec = {}) {
     const timer = setInterval(() => { if (root.isConnected) refresh(); }, 400);
     function destroy() {
         clearInterval(timer); unregister();
+        for (const section of sections) section.header.destroy();
         if (spec.settings) for (const row of rows) if (row.widget?.rayPanel === panel) delete row.widget.rayPanel;
     }
 
@@ -704,7 +749,7 @@ export function installPanel(node, spec = {}) {
 }
 
 // Secondary settings reuse the same native-widget editors as the graph panel.
-export function openPanelSettings(node, spec, title = "Ray settings") {
+export function openPanelSettings(node, spec, title = "Ray settings", options = {}) {
     node._raySettingsClose?.();
     const dialog = document.createElement("dialog");
     dialog.className = "rp-dialog";
@@ -716,9 +761,9 @@ export function openPanelSettings(node, spec, title = "Ray settings") {
     dialog.append(heading, mount);
     document.body.append(dialog);
     const panel = installPanel(node, { ...spec, mount, settings: true });
-    const done = el("button", "rp-input", "Done");
-    done.type = "button";
-    dialog.append(done);
+    const actions = el("div", "rp rp-control");
+    Object.assign(actions.style, { flexDirection: "row", justifyContent: "flex-end" });
+    dialog.append(actions);
     let closed = false;
     const close = () => {
         if (closed) return;
@@ -728,8 +773,14 @@ export function openPanelSettings(node, spec, title = "Ray settings") {
         delete node._raySettingsClose;
         dialog.close();
         dialog.remove();
+        options.onClose?.();
     };
-    done.onclick = close;
+    for (const action of options.actions || [{ label: "Done" }]) {
+        const control = el("button", "rp-input", action.label);
+        control.type = "button";
+        control.onclick = () => { try { action.onClick?.(); } finally { close(); } };
+        actions.append(control);
+    }
     dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
     dialog.addEventListener("click", event => { if (event.target === dialog) close(); });
     for (const type of ["keydown", "keyup", "keypress"]) dialog.addEventListener(type, event => event.stopPropagation());
@@ -740,6 +791,6 @@ export function openPanelSettings(node, spec, title = "Ray settings") {
     }
     node._raySettingsClose = close;
     dialog.showModal();
-    done.focus();
+    actions.querySelector("button")?.focus();
     return { dialog, panel, close };
 }

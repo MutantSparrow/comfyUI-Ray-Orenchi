@@ -1,9 +1,11 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { installPanel, linkOf } from "./ray_panel.js";
+import { installPanel, iconButton, linkChip, linkOf, registerLinkTargets, openPanelSettings } from "./ray_panel.js";
 import { applyBucketTint, setWidgetHidden } from "./_common.js";
 import { notify } from "./browse_common.js";
 import { metadataRows, rowsToMetadata, mergeFields, filterTensors, parseMetadataJSON } from "./model_tools_ui.mjs";
+import { createModelPicker } from "./model_picker.js";
+import { mergeName, mergeSources, stringValue } from "./model_merge_name.mjs";
 
 const IDS = new Set(["RayModelLoadAs", "RayModelConvert", "RayModelSave", "RayModelMetadata", "RayModelMetadataSave",
     "RayModelMerge", "RayModelInspector", "RayModelCompare", "RayLoraBake", "RayLoraExtract"]);
@@ -33,7 +35,7 @@ function styles() {
     .rmt [hidden]{display:none!important}.rmt-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.rmt button{height:28px;padding:4px 9px}.rmt input,.rmt textarea,.rmt select{background:#141414;color:#eee;border:1px solid #3a3a3a;border-radius:5px;padding:4px 9px;font:12px system-ui;min-width:0}
     .rmt input{width:100%}.rmt textarea{width:100%;resize:vertical;min-height:54px;max-height:240px;font:11px monospace}.rmt pre{font:11px monospace;white-space:pre-wrap;word-break:break-word;margin:0;max-height:240px;overflow:auto}
     .rmt-scroll{max-height:330px;overflow:auto;scrollbar-width:thin}.rmt-table{width:100%;border-collapse:collapse;font:11px system-ui;table-layout:fixed}.rmt-table th{text-align:left;color:#aaa;position:sticky;top:0;background:#080808}.rmt-table th:first-child{width:64%}.rmt-table th:nth-child(2){width:23%}.rmt-table th:nth-child(3){width:13%}.rmt-table td,.rmt-table th{padding:5px;border-bottom:1px solid #272727;vertical-align:top;overflow-wrap:anywhere}
-    .rmt-row{display:grid;grid-template-columns:minmax(95px,1fr) minmax(120px,1.5fr) 52px;gap:5px;padding-bottom:7px;border-bottom:1px solid #252525}.rmt-key{display:flex;flex-direction:column;gap:5px}.rmt-row details{font-size:10px;color:#aaa}.rmt-message{color:#aaa;font-size:11px;white-space:pre-wrap}.rmt-error{color:#ff9292}.rmt-warning{color:#edbc78;font-size:12px;line-height:1.5;margin:0}.rmt-raw{min-height:180px!important}`;
+    .rmt-row{display:grid;grid-template-columns:minmax(95px,1fr) minmax(120px,1.5fr) 32px;gap:5px;padding-bottom:7px;border-bottom:1px solid #252525}.rmt-key{display:flex;flex-direction:column;gap:5px}.rmt-row details{font-size:10px;color:#aaa}.rmt-message{color:#aaa;font-size:11px;white-space:pre-wrap}.rmt-error{color:#ff9292}.rmt-warning{color:#edbc78;font-size:12px;line-height:1.5;margin:0}.rmt-raw{min-height:180px!important}`;
     document.head.append(style);
 }
 
@@ -94,7 +96,7 @@ export function createMetadataEditor(node) {
             const changed = () => { updateNested(); commit(); };
             key.oninput = changed; type.onchange = changed; text.oninput = changed;
             keyBox.append(key, type); valueBox.append(text, details);
-            row.append(keyBox, valueBox, button("Delete", () => { rows = rows.filter(r => r !== record); row.remove(); commit(); }));
+            row.append(keyBox, valueBox, iconButton("remove", "Remove metadata field", () => { rows = rows.filter(r => r !== record); row.remove(); commit(); }));
             rows.push(record); updateNested(); scroll.append(row);
         }
         raw.value = JSON.stringify(object, null, 2);
@@ -102,6 +104,14 @@ export function createMetadataEditor(node) {
     const hydrate = (object, source = "") => {
         rawMode = false; raw.hidden = true; scroll.hidden = false;
         draw(object); setValue(node, "editor_source", source); commit();
+    };
+    const addField = () => {
+        try {
+            const object = JSON.parse(serialize()); let key = "new_field", i = 1;
+            while (Object.hasOwn(object, key)) key = `new_field_${i++}`;
+            Object.defineProperty(object, key, { value: "", enumerable: true, writable: true, configurable: true });
+            hydrate(object, value(node, "editor_source"));
+        } catch (error) { notify(error.message); }
     };
     toolbar.append(button("Load / Edit", async () => {
         const ticket = ++request;
@@ -112,13 +122,6 @@ export function createMetadataEditor(node) {
             const data = await preview(node, "metadata");
             if (ticket === request) hydrate(data.metadata_json ? parseMetadataJSON(data.metadata_json) : data.metadata, data.source);
         } catch (error) { message.textContent = error.message; message.classList.add("rmt-error"); }
-    }), button("Add field", () => {
-        try {
-            const object = JSON.parse(serialize()); let key = "new_field", i = 1;
-            while (Object.hasOwn(object, key)) key = `new_field_${i++}`;
-            Object.defineProperty(object, key, { value: "", enumerable: true, writable: true, configurable: true });
-            hydrate(object, value(node, "editor_source"));
-        } catch (error) { notify(error.message); }
     }), button("Table / JSON", () => {
         try {
             const object = JSON.parse(serialize());
@@ -137,7 +140,7 @@ export function createMetadataEditor(node) {
         catch (error) { message.textContent = error.message; message.classList.add("rmt-error"); }
     };
     reload();
-    node._rayMetadataEditor = { root, hydrate, reload, serialize };
+    node._rayMetadataEditor = { root, hydrate, reload, serialize, addField };
     return root;
 }
 
@@ -180,16 +183,13 @@ export function createReport(node, id) {
         try { show(await preview(node, id === "RayModelInspector" ? "inspect" : "compare")); }
         catch (error) { summary.textContent = error.message; summary.classList.add("rmt-error"); }
     }));
-    toolbar.append(button("Copy report", async () => {
-        try { await navigator.clipboard.writeText(JSON.stringify(report || {}, null, 2)); }
-        catch (error) { notify(error.message); }
-    }));
     search.oninput = () => { query = search.value; page = 0; render(); };
     const previous = button("‹", () => { page--; render(); }), next = button("›", () => { page++; render(); });
     previous.title = "Previous tensor page"; next.title = "Next tensor page";
     previous.setAttribute("aria-label", previous.title); next.setAttribute("aria-label", next.title);
     paging.append(previous, count, next);
-    root.append(toolbar, summary, search, paging, content);
+    if (toolbar.childElementCount) root.append(toolbar);
+    root.append(summary, search, paging, content);
     watchHeight(node, root);
     node._rayModelToolsView = { show, root };
     return root;
@@ -198,14 +198,13 @@ export function createReport(node, id) {
 const SECTIONS = {
     RayModelLoadAs: [
         ["Source", "model_name", "path"],
-        ["Loading", "weight_format", "load_result", "loader", "load_components"],
+        ["Loading", "weight_format", "loader", "load_components"],
     ],
     RayModelConvert: [
-        ["Source", "path"], ["Conversion", "weight_format", "components"], ["Output", "load_result"],
+        ["Source", "path"], ["Conversion", "weight_format", "components"],
     ],
     RayModelSave: [
-        ["Source", "path"], ["Metadata", "metadata_mode", "metadata_json"],
-        ["Output", "filename_prefix", "output_path", "overwrite"],
+        ["Output", "output_folder", "filename_prefix", "overwrite"], ["Metadata", "metadata_mode"],
     ],
     RayModelMetadata: [["Source", "path"]],
     RayModelMetadataSave: [
@@ -215,13 +214,13 @@ const SECTIONS = {
     RayModelMerge: [
         ["Merge", "strategy", "weight_a", "components", "mismatch"],
         ["Algorithm", "density", "lambda", "top_trim", "bottom_trim", "seed"],
-        ["Block weights", "block_weights"], ["Output", "weight_format", "fast_merge", "load_result"],
+        ["Output", "weight_format", "fast_merge"],
     ],
     RayModelInspector: [["Source", "path"], ["Inspection", "max_rows"]],
     RayModelCompare: [["Sources", "path_a", "path_b"], ["Comparison", "components"]],
     RayLoraBake: [
         ["Source", "path"], ["LoRA", "lora_name", "lora_path", "strength_model", "strength_clip"],
-        ["Output", "weight_format", "load_result"],
+        ["Output", "weight_format"],
     ],
     RayLoraExtract: [
         ["Sources", "finetuned_path", "base_path"],
@@ -233,7 +232,7 @@ const LABELS = {
     model_name: "Model file", lora_name: "LoRA file", lora_path: "LoRA file",
     strength_model: "Model strength", strength_clip: "CLIP strength", metadata_json: "Metadata (JSON)",
     path: "Model file", path_a: "Model A file", path_b: "Model B file", base_path: "Base model file",
-    finetuned_path: "Fine-tuned model file", source_model_path: "Source model file", output_path: "Output file",
+    finetuned_path: "Fine-tuned model file", source_model_path: "Source model file", output_path: "Output file", output_folder: "Output folder",
 };
 const MODEL_FILTERS = [["Safetensors", ["safetensors"]]];
 const INSPECT_FILTERS = [["Model files", ["safetensors", "gguf"]]];
@@ -252,18 +251,135 @@ function normalizeSource(node, name, legacyName) {
     if (source.value === "Select a file or use path…") source.value = "";
 }
 
-export function installModelTools(node, id) {
+const OLD_WIDGETS = {
+    RayModelLoadAs: ["model_name", "weight_format", "loader", "load_components", "path", "load_result"],
+    RayModelConvert: ["weight_format", "components", "load_result", "path"],
+    RayLoraBake: ["lora_name", "strength_model", "strength_clip", "weight_format", "load_result", "path", "lora_path"],
+    RayModelMerge: ["strategy", "weight_a", "weight_format", "components", "mismatch", "seed", "control_after_generate",
+        "density", "lambda", "top_trim", "bottom_trim", "load_result", "path_a", "path_b", "base_path", "block_weights", "fast_merge"],
+};
+function migrateWidgets(node, id, saved) {
+    const names = OLD_WIDGETS[id], values = saved?.widgets_values;
+    const earlierMerge = id === "RayModelMerge" && Array.isArray(values) && values.length === names.length - 1 && typeof values[11] === "boolean";
+    if (names && !saved?.properties?.ray_model_tools_schema && Array.isArray(values) && (values.length === names.length || earlierMerge)) {
+        for (const [index, name] of names.entries()) {
+            const target = widget(node, name);
+            if (target && index < values.length) target.value = values[index];
+        }
+        if (earlierMerge) widget(node, "fast_merge").value = false;
+    }
+    if (id === "RayModelSave" && (saved?.properties?.ray_model_tools_schema || 0) < 3 && Array.isArray(values) && values.length === 6) {
+        ["filename_prefix", "metadata_mode", "overwrite", "metadata_json", "path", "output_path"].forEach((name, index) => {
+            const target = widget(node, name); if (target) target.value = values[index];
+        });
+        const linked = name => saved.inputs?.some(input => (input.name === name || input.widget?.name === name) && input.link != null);
+        const split = text => { const normalized = String(text || "").replaceAll("\\", "/"); const index = normalized.lastIndexOf("/");
+            return [index < 0 ? "" : normalized.slice(0, index + 1), normalized.slice(index + 1)]; };
+        const explicit = widget(node, "output_path");
+        if (explicit?.value && !linked("output_path")) {
+            const [folder, file] = split(explicit.value.trim().replace(/^["']|["']$/g, ""));
+            widget(node, "output_folder").value = folder;
+            if (!linked("filename_prefix")) { widget(node, "filename_prefix").value = file.replace(/\.safetensors$/i, ""); explicit.value = ""; }
+        } else if (!explicit?.value && !linked("output_path") && !linked("filename_prefix")) {
+            const [folder, file] = split(widget(node, "filename_prefix").value);
+            widget(node, "output_folder").value = folder; widget(node, "filename_prefix").value = file;
+        }
+    }
+    node.properties ||= {}; node.properties.ray_model_tools_schema = id === "RayModelSave" ? 3 : 2;
+}
+
+function createLoadSource(node) {
+    const root = el("div", undefined, "rp-row rp-full"), label = el("label", "Model", "rp-label"), control = el("div", undefined, "rp-control");
+    const picker = createModelPicker({ group: ["diffusion_models", "checkpoints"], label: "Model", value: value(node, "model_name"),
+        accept: name => name.toLowerCase().endsWith(".safetensors"),
+        placeholder: "Select a model…", disabled: () => ["model_name", "path", "model_data"].some(name => linkOf(node, name)),
+        onSelect: next => setValue(node, "model_name", next) });
+    picker.element.id = `ray-model-source-${crypto.randomUUID()}`; label.htmlFor = picker.element.id;
+    const chips = ["model_data", "path", "model_name"].map(name => linkChip(node, name, () => node._rayPanel?.schedule()));
+    control.append(...chips.map(chip => chip.element), picker.element); root.append(label, control);
+    const refresh = () => {
+        normalizeSource(node, "model_name", "path"); picker.update(value(node, "model_name"));
+        chips.forEach(chip => chip.update());
+        picker.element.hidden = ["model_name", "path", "model_data"].some(name => !!linkOf(node, name));
+    };
+    const unregister = registerLinkTargets(node, [{name: "model_name", element: root}], refresh);
+    const removed = node.onRemoved;
+    node.onRemoved = function () { picker.destroy(); unregister(); return removed?.apply(this, arguments); };
+    refresh(); return {root, refresh};
+}
+
+function createMergeName(node) {
+    const root = el("div", undefined, "rmt"), label = el("label", "Merge name", "rp-label"), output = el("output", "", "rmt-message");
+    output.setAttribute("aria-label", "Merge name"); output.style.overflowWrap = "anywhere"; output.style.whiteSpace = "normal";
+    root.append(label, output);
+    let signature = "";
+    const state = node._rayMergeName = {name: "", show(name) { state.name = name; output.textContent = name; }};
+    const refresh = () => {
+        const sources = mergeSources(node), settings = Object.fromEntries(["components", "mismatch", "seed", "density", "lambda", "top_trim", "bottom_trim", "fast_merge"]
+            .map(name => [name, value(node, name)]));
+        settings.block_weights = stringValue(node, "block_weights") || "{}";
+        const args = {...sources, settings, strategy: value(node, "strategy"), weight_a: value(node, "weight_a"), weight_format: value(node, "weight_format")};
+        const next = JSON.stringify(args);
+        if (next === signature) return;
+        signature = next;
+        if (!sources.a || !sources.b) { state.name = ""; output.textContent = "Connect model A and B to build a merge name."; }
+        else state.show(mergeName(args));
+    };
+    refresh(); return {root, refresh};
+}
+
+function installFastMergeConfirmation(node) {
+    const target = widget(node, "fast_merge");
+    if (!target || node._rayFastMerge) return;
+    let previous = !!target.value, popup = null;
+    const callback = target.callback;
+    const confirm = () => {
+        if (popup) return;
+        let confirmed = false;
+        popup = openPanelSettings(node, { sections: [{ title: "High RAM usage", fields: [{
+            custom: () => el("p", "Fast merge keeps the entire merged model in system RAM until ComfyUI releases its cache. Allow room for the output and working tensors; insufficient RAM can cause paging or failure. A data-only connection to Save Model avoids an intermediate model file.", "rmt-warning"),
+        }] }] }, "Fast merge", {
+            actions: [
+                { label: "REVERT" },
+                { label: "CONFIRM", onClick: () => { confirmed = true; } },
+            ],
+            onClose: () => {
+                popup = null;
+                if (!confirmed && target.value) setValue(node, "fast_merge", false);
+                node._rayPanel?.refresh();
+            },
+        });
+    };
+    target.callback = function () {
+        const enabled = !!target.value, turnedOn = enabled && !previous;
+        previous = enabled;
+        const result = callback?.apply(this, arguments);
+        if (turnedOn) confirm();
+        else if (!enabled) popup?.close();
+        return result;
+    };
+    node._rayFastMerge = { sync() { previous = !!target.value; if (!previous) popup?.close(); } };
+}
+
+export function installModelTools(node, id, nodeData = null) {
     const sourceNames = id === "RayModelLoadAs" ? ["model_name", "path"]
         : id === "RayLoraBake" ? ["lora_name", "lora_path"] : null;
     if (sourceNames) normalizeSource(node, ...sourceNames);
     if (node._rayModelTools) return;
     node._rayModelTools = true; styles(); applyBucketTint(node, "Tools");
+    node.properties ||= {}; node.properties.ray_model_tools_schema = id === "RayModelSave" ? 3 : 2;
+    // Keep old saved per-layer ratios as a hidden native value behind the STRING socket.
+    if (id === "RayModelMerge" && !widget(node, "block_weights")) node.addWidget("text", "block_weights", "{}", () => {});
     const hidden = id === "RayModelMetadata" ? ["editor_json", "editor_source"]
-        : id === "RayModelMerge" ? ["path_a", "path_b", "base_path"] : [];
+        : id === "RayModelMerge" ? ["path_a", "path_b", "base_path", "block_weights"]
+        : id === "RayModelLoadAs" ? ["model_name", "path"]
+        : id === "RayModelSave" ? ["path", "metadata_json", "output_path"] : [];
     for (const name of hidden) if (widget(node, name)) setWidgetHidden(node, widget(node, name), true);
     const native = (node.widgets || []).filter(w => w.type !== "button" && w.name !== "control_after_generate" && !hidden.includes(w.name));
+    const definitions = { ...nodeData?.input?.required, ...nodeData?.input?.optional };
     const fields = native.map(w => {
-        const field = { name: w.name, label: LABELS[w.name], full: /path|model_name|lora_name|block_weights|metadata_json/.test(w.name) };
+        const field = { name: w.name, label: LABELS[w.name], tooltip: definitions[w.name]?.[1]?.tooltip,
+            full: /path|model_name|lora_name|block_weights|metadata_json|output_folder/.test(w.name) };
         if (/^(model_name|lora_name|path|path_a|path_b|base_path|finetuned_path|lora_path|source_model_path)$/.test(w.name)) {
             const metadata = id === "RayModelMetadata";
             if (metadata) field.label = "Model / metadata file";
@@ -278,13 +394,14 @@ export function installModelTools(node, id) {
                 return !!linkOf(n, sourceNames[1]) === (w.name === sourceNames[1]);
             };
         }
-        if (id === "RayModelLoadAs" && ["loader", "load_components"].includes(w.name)) {
-            field.when = n => value(n, "load_result") !== false;
-        }
         if (w.name === "output_path") {
             field.browse = n => ({ kind: "save", title: "Choose output file",
                 filters: [[outputExtension(n, id) === "json" ? "Metadata JSON" : "Safetensors", [outputExtension(n, id)]]] });
             field.placeholder = "Automatic filename in the output folder";
+        }
+        if (w.name === "output_folder") {
+            field.browse = {kind: "folder", title: "Choose output folder"};
+            field.placeholder = "ComfyUI output folder";
         }
         if (id === "RayModelMerge" && ["density", "lambda", "top_trim", "bottom_trim", "seed"].includes(w.name)) {
             field.when = n => mergeFields(String(value(n, "strategy")))[w.name];
@@ -297,20 +414,20 @@ export function installModelTools(node, id) {
     const sections = SECTIONS[id].map(([title, ...names]) => ({
         title, fields: names.map(name => byName.get(name)).filter(Boolean),
     }));
+    if (id === "RayModelLoadAs") {
+        let source;
+        sections[0].fields = [{custom: () => { source = createLoadSource(node); return source.root; }, update: () => source?.refresh()}];
+    }
     if (id === "RayModelMerge") {
-        const output = sections.find(section => section.title === "Output");
-        const toggle = output.fields.findIndex(field => field.name === "fast_merge");
-        if (toggle >= 0) output.fields.splice(toggle + 1, 0, {
-            when: n => !!value(n, "fast_merge"),
-            custom: () => {
-                const warning = el("p", "High RAM usage: keeps the entire merged model in system memory until ComfyUI releases its cache. Insufficient RAM can cause paging or failure. Disable Load result when only saving to avoid an extra model load and temporary file.", "rmt-warning");
-                warning.setAttribute("role", "note");
-                return warning;
-            },
+        let name;
+        sections.find(section => section.title === "Output").fields.push({
+            custom: () => { name = createMergeName(node); return name.root; }, update: () => name?.refresh(),
         });
     }
-    sections.push({ title: id === "RayModelMetadata" ? "Metadata" : "Report", fields: [{ custom }] });
+    sections.push({ title: id === "RayModelMetadata" ? "Metadata" : "Report", fields: [{ custom }],
+        ...(id === "RayModelMetadata" ? {actions: [{icon: "plus", title: "Add field", onClick: () => node._rayMetadataEditor.addField()}]} : {}) });
     installPanel(node, { skip: hidden, minWidth: 470, sections });
+    if (id === "RayModelMerge") installFastMergeConfirmation(node);
 }
 
 app.registerExtension({
@@ -320,10 +437,20 @@ app.registerExtension({
         const created = nodeType.prototype.onNodeCreated, configured = nodeType.prototype.onConfigure,
             executed = nodeType.prototype.onExecuted;
         nodeType.prototype.onNodeCreated = function () {
-            const result = created?.apply(this, arguments); installModelTools(this, nodeData.name); return result;
+            const result = created?.apply(this, arguments); installModelTools(this, nodeData.name, nodeData); return result;
         };
-        nodeType.prototype.onConfigure = function () {
-            const result = configured?.apply(this, arguments); installModelTools(this, nodeData.name);
+        nodeType.prototype.onConfigure = function (saved) {
+            migrateWidgets(this, nodeData.name, saved);
+            const result = configured?.apply(this, arguments); installModelTools(this, nodeData.name, nodeData);
+            const removedInput = this.inputs?.findIndex(input => input.name === "load_result");
+            if (removedInput >= 0) this.removeInput(removedInput);
+            if (nodeData.name === "RayModelMerge") {
+                if (!this.inputs?.some(input => input.name === "block_weights")) this.addInput("block_weights", "STRING", {shape: 7});
+                const blocks = this.inputs.find(input => input.name === "block_weights");
+                delete blocks.widget; blocks.type = "STRING";
+            }
+            if (nodeData.name === "RayModelMerge" && !this.outputs?.some(output => output.name === "merge_name")) this.addOutput("merge_name", "STRING");
+            this._rayFastMerge?.sync();
             this._rayMetadataEditor?.reload(); return result;
         };
         nodeType.prototype.onExecuted = function (message) {
@@ -331,6 +458,7 @@ app.registerExtension({
             if (report) {
                 this._rayModelToolsReport = report;
                 this._rayModelToolsView?.show(report);
+                if (report.merge_name) this._rayMergeName?.show(report.merge_name);
                 if (nodeData.name === "RayModelMetadata" && !value(this, "editor_json")) {
                     try { this._rayMetadataEditor?.hydrate(report.metadata_json ? parseMetadataJSON(report.metadata_json) : report.metadata || {}, value(this, "path")); }
                     catch (error) { notify(error.message); }

@@ -51,26 +51,24 @@ export function installModelCard(node, defaultConfig) {
     if (typeof node.addDOMWidget !== "function") {
         node.addWidget("button", "{ } Build card name", null, () => openCardNameBuilder(node), { serialize: false });
         node.addWidget("button", "Copy Config", null, copy, { serialize: false });
-        node.addWidget("button", "Settings", null, () => openModelCardSettings(node), { serialize: false });
         return;
     }
     for (const name of SECONDARY) {
         const widget = find(node, name);
         if (widget) setWidgetHidden(node, widget, true);
     }
-    installPanel(node, { skip: [...SECONDARY, ...(control ? ["seed_mode"] : [])], minWidth: 340, sections: [
+    installPanel(node, { skip: [...SECONDARY, ...(control ? ["seed_mode"] : [])], minWidth: 340,
+        headerActions: [{ icon: "settings", title: "Model Card settings", onClick: () => openModelCardSettings(node) }], sections: [
         { title: "Card", fields: [{ name: "card_name", label: "Card name", full: true, placeholder: "MODEL CARD",
             actions: [{ label: "{ }", title: "Build card name", onClick: () => openCardNameBuilder(node) }] }] },
         { title: "Sampling", fields: ["seed", ...(!control ? ["seed_mode"] : []), "steps", { name: "cfg", label: "CFG" },
             { name: "sampler_name", label: "Sampler" }, "scheduler", "denoise"] },
         { title: "Configuration", fields: [{ custom() {
             const row = document.createElement("div"); row.className = "rp-control";
-            for (const [text, action, callback] of [["Copy Config", "copy-config", copy], ["Settings", "settings", () => openModelCardSettings(node)]]) {
-                const button = document.createElement("button"); button.type = "button";
-                button.textContent = text; button.dataset.action = action;
-                Object.assign(button.style, { flex: "1", height: "28px" });
-                button.onclick = callback; row.append(button);
-            }
+            const button = document.createElement("button"); button.type = "button";
+            button.textContent = "Copy Config"; button.dataset.action = "copy-config";
+            Object.assign(button.style, { flex: "1", height: "28px" });
+            button.onclick = copy; row.append(button);
             return row;
         } }] },
     ] });

@@ -1,0 +1,7 @@
+[
+  {"a":"diffusion_models: MOSS/Alpha.safetensors","b":"G:\\models\\Beta model.fp8.safetensors","strategy":"LERP","weight_a":0.5,"weight_format":"bf16","settings":{}},
+  {"a":"MOSS/日本語.safetensors","b":"MOSS/Béta.safetensors","base":"MOSS/Base.safetensors","strategy":"Breadcrumbs-TIES","weight_a":0.3333,"weight_format":"fp16","settings":{"block_weights":"{\"z\":1.0,\"a\":0.7}","seed":123,"top_trim":0.2}},
+  {"a":"C:/layers/a.safetensors.index.json","b":"b.ckpt","strategy":"SLERP","weight_a":1,"weight_format":"int8_convrot","settings":{"fast_merge":true,"density":0.25,"lambda":2}},
+  {"a":"CON.safetensors","b":"name: braces{other}.safetensors","strategy":"DARE-Linear","weight_a":0,"weight_format":"fp32","settings":{"components":"all","mismatch":"pad","block_weights":"{}"}},
+  {"a":"Very long source model A with many revision words.safetensors","b":"Very long source model B with many revision words.safetensors","base":"Very long original base model with revision words.safetensors","strategy":"Breadcrumbs-TIES","weight_a":0.333333,"weight_format":"fp8_e4m3fn_scaled","settings":{}}
+]

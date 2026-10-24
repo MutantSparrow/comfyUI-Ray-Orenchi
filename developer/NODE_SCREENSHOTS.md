@@ -32,9 +32,13 @@ when the appearance is unchanged, but its manifest must record the new capture.
    node scripts/capture_node_screenshots.cjs --url http://127.0.0.1:8191 --node RayCRT,RayOffsetPrint
    ```
 
-   Use `--python /path/to/python` if Python is not on your PATH. The script enables
-   Nodes 2.0 in that instance's settings and clears its test graph. It creates real
-   nodes, waits for stable layout/fonts, checks title/port clipping, section headings and dividers, and captures
+   Use `--python /path/to/python` if Python is not on your PATH. An installed
+   Chromium browser can be selected with `--browser-channel msedge` or
+   `--browser-channel chrome` when the bundled browser is unavailable.
+   The script enables Nodes 2.0 in that instance's settings and clears its test
+   graph. It creates real
+   nodes, waits for stable layout/fonts, checks title/port clipping, section
+   headings, dividers, and settings-button size/placement/accessibility, and captures
    the browser render directly. It never queues a workflow.
 4. Inspect every updated image for complete controls and clean framing. Update
    the corresponding documentation if the node's interface changed.

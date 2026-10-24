@@ -73,6 +73,8 @@ function styles() {
 .ray-save-stops button + button {border-left:1px solid #2f2f2f}
 .ray-save .ray-save-stops button[aria-pressed=true], .ray-save .ray-save-stops button[aria-pressed=true]:hover {background:#e2e2e2;color:#111}
 .ray-save-stage {position:relative;flex:1 1 0;min-height:0;overflow:hidden;border-radius:5px;background:#000}
+.ray-save-stage.ray-save-cycle {pointer-events:auto;cursor:pointer}
+.ray-save-panning .ray-save-stage,.ray-save-panning .ray-save-divider,.ray-save-panning .ray-save-handle {pointer-events:none}
 .ray-save-stage img {position:absolute;width:100%;height:100%;object-fit:contain;inset:0;pointer-events:none}
 .ray-save-overlay {position:absolute;inset:0;pointer-events:none;background:#000}
 .ray-save-divider {position:absolute;top:0;bottom:0;width:12px;transform:translateX(-50%);cursor:ew-resize;touch-action:none;pointer-events:auto}
@@ -119,9 +121,10 @@ function build(node) {
     styles();
     const navigation = new AbortController();
     let spaceHeld = false, panClick = false;
-    window.addEventListener("keydown", e => { if (e.code === "Space" || e.key === " ") spaceHeld = true; }, {capture: true, signal: navigation.signal});
-    window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") spaceHeld = false; }, {capture: true, signal: navigation.signal});
-    window.addEventListener("blur", () => { spaceHeld = false; }, {signal: navigation.signal});
+    function panMode(held) { spaceHeld = held; root.classList.toggle("ray-save-panning", held); }
+    window.addEventListener("keydown", e => { if (e.code === "Space" || e.key === " ") panMode(true); }, {capture: true, signal: navigation.signal});
+    window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") panMode(false); }, {capture: true, signal: navigation.signal});
+    window.addEventListener("blur", () => panMode(false), {signal: navigation.signal});
     const root = element("div", "ray-save"), head = element("div", "ray-save-head rp-section");
     // Filename prefix, with { } opening the filename builder.
     const prefixLabel = element("label", "ray-save-label", "Filename prefix");
@@ -188,6 +191,34 @@ function build(node) {
     const previous = button("‹", () => { index--; show(); }), next = button("›", () => { index++; show(); });
     previous.setAttribute("aria-label", "Previous image pair"); next.setAttribute("aria-label", "Next image pair");
     batch.append(previous, count, next);
+    let previewPress = null;
+    stage.addEventListener("pointerdown", e => {
+        // Legacy DOM widgets sit above the canvas instead of inside its event path.
+        if (e.target === stage && e.button !== 0 && !root.closest("[data-node-id]")) {
+            app.canvas?.canvas?.dispatchEvent(new PointerEvent(e.type, e));
+            e.preventDefault(); e.stopPropagation(); return;
+        }
+        if (e.target !== stage || e.button !== 0 || spaceHeld) return;
+        app.canvas?.canvas?.focus({preventScroll: true});
+        previewPress = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
+    });
+    stage.addEventListener("pointermove", e => {
+        if (previewPress?.id === e.pointerId && Math.hypot(e.clientX - previewPress.x, e.clientY - previewPress.y) > 5) previewPress.moved = true;
+    });
+    stage.addEventListener("pointercancel", () => { if (previewPress) previewPress.moved = true; });
+    stage.addEventListener("wheel", e => {
+        if (!root.closest("[data-node-id]") && app.canvas?.processMouseWheel) {
+            app.canvas.processMouseWheel(e); e.stopPropagation();
+        }
+    }, {passive: false});
+    stage.addEventListener("click", e => {
+        const moved = previewPress?.moved;
+        previewPress = null;
+        const total = Math.max(arrays[0].length, arrays[1].length);
+        if (e.target !== stage || e.button !== 0 || spaceHeld || moved || total <= 1) return;
+        index = (index + 1) % total;
+        show();
+    });
     function position(value) {
         fraction = Math.max(0, Math.min(1, value));
         overlay.style.clipPath = comparing ? `inset(0 ${(1 - fraction) * 100}% 0 0)` : "none";
@@ -198,8 +229,7 @@ function build(node) {
         const rect = stage.getBoundingClientRect();
         if (rect.width) position((e.clientX - rect.left) / rect.width);
     }
-    // The full divider takes pointer input; the rest of the preview stays
-    // transparent so the canvas keeps its menu, pan and zoom.
+    // The divider owns comparison dragging; canvas navigation still bubbles.
     divider.onpointerdown = e => { if (spaceHeld || !comparing || e.button !== 0 || activePointer !== null) return; activePointer = e.pointerId; divider.setPointerCapture(e.pointerId); handle.focus({preventScroll:true}); drag(e); e.preventDefault(); };
     divider.onpointermove = e => { if (activePointer === e.pointerId) drag(e); };
     divider.onpointerup = divider.onpointercancel = e => { if (activePointer !== e.pointerId) return; if (divider.hasPointerCapture(e.pointerId)) divider.releasePointerCapture(e.pointerId); activePointer = null; };
@@ -224,6 +254,8 @@ function build(node) {
         handle.setAttribute("aria-disabled", String(!comparing));
         empty.hidden = !!(pair[0] || pair[1]); empty.style.display = empty.hidden ? "none" : "flex";
         batch.hidden = total <= 1; batch.style.display = batch.hidden ? "none" : "flex";
+        stage.classList.toggle("ray-save-cycle", total > 1);
+        stage.title = total > 1 ? "Click to show the next image pair" : "";
         count.textContent = `${index + 1} / ${total}${!comparing && arrays[1].length ? " · Unpaired image" : ""}`;
         previous.disabled = index === 0; next.disabled = index >= total - 1;
         position(fraction);
@@ -277,8 +309,23 @@ function build(node) {
     show(); ui.sync(); return ui;
 }
 
+function restoreOutput(node, message) {
+    if (message.ray_saved?.length && message.ray_directory?.[0]) node._raySavedDirectory = message.ray_directory[0];
+    node._raySave?.executed(message);
+}
+
 app.registerExtension({
     name: "Ray.SaveImage",
+    onNodeOutputsUpdated(outputs) {
+        // Workflow tabs and history restore cached outputs without onExecuted.
+        const root = app.rootGraph || app.graph;
+        for (const [id, output] of Object.entries(outputs || {})) {
+            const separator = id.lastIndexOf(":");
+            const graph = separator < 0 ? root : root?.subgraphs?.get(id.slice(0, separator));
+            const node = graph?.getNodeById(id.slice(separator + 1));
+            if (node?.comfyClass === "RaySaveImage") restoreOutput(node, output);
+        }
+    },
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== "RaySaveImage") return;
         const proto = nodeType.prototype, created = proto.onNodeCreated;
@@ -303,8 +350,7 @@ app.registerExtension({
         const executed = proto.onExecuted;
         proto.onExecuted = function (message) {
             const result = executed?.apply(this, arguments);
-            if (message.ray_saved?.length && message.ray_directory?.[0]) this._raySavedDirectory = message.ray_directory[0];
-            this._raySave?.executed(message); return result;
+            restoreOutput(this, message); return result;
         };
         const removed = proto.onRemoved;
         proto.onRemoved = function () { this._raySave?.destroy(); this._rayNameBuilder?.close(); return removed?.apply(this, arguments); };

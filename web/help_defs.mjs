@@ -12,6 +12,45 @@
 // backticks. A node without an entry still gets its DESCRIPTION as summary.
 
 export const RAY_HELP_DEFS = {
+    RayModelLoadAs: {
+        sections: [{ heading: "Selecting and loading", bullets: [
+            "Select a registered checkpoint or diffusion model from the folder dropdown. Its filter searches full paths across all subfolders.",
+            "MODEL, CLIP and VAE outputs initialize inference components automatically when used. A data-only connection with Auto or Preserve passes the source file without that extra load.",
+        ] }],
+    },
+    RayQueuedModelLoader: {
+        sections: [{ heading: "Selecting models", bullets: [
+            "Each row uses ComfyUI's registered diffusion model list. Open folders to navigate their subfolders, or type in the filter to search full paths across every folder.",
+            "Clear the filter to restore the folder tree. Escape closes the dropdown without changing the selection. Add rows with + and remove them with the trash button.",
+        ] }],
+    },
+    RayLoraQKVLoader: {
+        sections: [{ heading: "Selecting LoRAs", bullets: [
+            "Each row uses ComfyUI's registered LoRA list. Open folders to navigate their subfolders, or type in the filter to search full paths across every folder.",
+            "Clear the filter to restore the folder tree. Escape leaves the selection unchanged. Each row keeps its own strength; removing a row preserves the other LoRAs and strengths.",
+        ] }],
+    },
+    RayModelMerge: {
+        summary: "Merge compatible models using a weighted blend or changes from a shared base. Choose a strategy for the kind of interference you want to reduce; no method guarantees a better model.",
+        sections: [{ heading: "Direct blends — no base needed", defs: [
+            ["LERP", "Weighted average of A and B. Fast, predictable baseline for mixing similar models; can dilute distinctive features or cancel opposing changes."],
+            ["SLERP", "Interpolates along the angle between each pair of layer tensors. Can reduce the magnitude shrinkage of linear averaging; needs extra computation and is not reliably better. Nearly parallel or zero-length tensors use LERP."],
+        ] }, { heading: "Task-vector methods — compatible base required", body: "These methods merge A minus Base and B minus Base, then add the result back to Base. Use models derived from a compatible training base; matching names and shapes alone do not establish compatibility.", defs: [
+            ["TIES", "Keeps larger changes and filters conflicting signs. Useful when finetunes interfere through opposing updates; pruning can discard useful small changes. Tune density."],
+            ["DARE-Linear", "Randomly drops changes, rescales survivors and blends them. Can reduce overlapping updates without magnitude sorting; depends on the seed, and low density can amplify noise or lose details."],
+            ["DARE-TIES", "Adds sign-conflict filtering to DARE. Useful when randomly thinned updates still disagree; adds filtering cost and may discard more useful changes. Tune density and seed."],
+            ["DELLA", "Samples changes with probabilities biased by their magnitude. Favors larger updates over uniform dropping; magnitude is an imperfect importance estimate, and density, lambda and seed need tuning."],
+            ["DELLA-TIES", "Adds sign-conflict filtering to DELLA's magnitude-biased sampling. Can reduce disagreement among retained updates; combines sampling sensitivity with the risk of discarding useful conflicting changes."],
+            ["Breadcrumbs", "Discards the smallest changes and largest outliers, keeping the middle magnitude band. Useful when weak updates and extremes add interference; deterministic, but trim settings can remove important strong or subtle features."],
+            ["Breadcrumbs-TIES", "Adds sign-conflict filtering to the Breadcrumbs middle band. Targets outliers and opposing updates together; more aggressive filtering can erase useful details. Tune both trims."],
+        ] }, { heading: "Practical settings", bullets: [
+            "Weight A controls A's contribution; B uses 1 minus Weight A. Block weights override it for matching layers. For task-vector methods, the ratio applies after pruning, so endpoint weights do not necessarily reproduce the original input.",
+            "Density is a retention setting, not a drop fraction. Lambda controls DELLA's magnitude bias; Top trim and Bottom trim are the discarded fractions for Breadcrumbs. Only relevant controls are shown.",
+            "Connect block_weights to a STRING containing a JSON map of tensor prefixes to A ratios. Leave it disconnected for the global Weight A ratio.",
+            "merge_name updates its preview as sources or controls change. Connect the STRING output to Save Model's filename_prefix; the executed value includes the resolved source names and execution datetime.",
+            "Fast merge uses the same calculations with more system RAM to reduce disk writes. Enabling it opens a RAM warning: REVERT turns it off; CONFIRM keeps it on. A data-only connection to Save Model avoids an intermediate model file. Using an inference output loads the result automatically.",
+        ] }],
+    },
     RayModelCard: {
         summary: "Connect MODEL, CLIP and VAE to generate a complete visual model benchmark. Outputs the full black card, a reduced preview, source images in card order, and a Markdown report as text.",
         sections: [{ heading: "Benchmark config", bullets: [
@@ -23,7 +62,7 @@ export const RAY_HELP_DEFS = {
         ] }, { heading: "Generation and layout", bullets: [
             "Categories run top to bottom, prompts left to right. The largest category sets the column count; shorter categories reserve empty cells. Captions wrap to two lines, then truncate with an ellipsis; the report keeps complete prompts.",
             "Fixed repeats the initial seed. Increment/decrement advance before each image: initial 100 produces 101, 102, 103 with increment. Seeds wrap at 64 bits. Randomize chooses each image seed independently; all actual seeds are reported. The native seed control also updates the starting seed between queued runs.",
-            "Settings controls generation width/height, card width, maximum preview width, embedded guidance and run safeguards. Card height is automatic; preview is resized from the completed card.",
+            "The top-right settings cog controls generation width/height, card width, maximum preview width, embedded guidance and run safeguards. Card height is automatic; preview is resized from the completed card.",
             "Use the supplied model's normal sampler/CFG settings. Auto guidance applies the Settings guidance value to models declaring an embedding. Set supplies it explicitly; Disabled keeps native conditioning. MODEL patches such as shift/renorm belong upstream. V1 benchmarks image generation.",
             "Source images remain in memory. The run count and estimated CPU output budget are checked before generation and can be raised in Settings. Model/VRAM memory is additional. A failed or interrupted run never emits a completed partial card.",
         ] }],
@@ -181,7 +220,7 @@ export const RAY_HELP_DEFS = {
         summary: "Browse local images, videos and audio. Select files to output native media lists, prompts and paths. The listing refreshes every run, even without connected outputs.",
         sections: [{heading: "Gallery", bullets: [
             "Click selects one file; Ctrl/Cmd-click toggles additional selections. Media retains original dimensions and sample rates.",
-            "Folder and fuzzy filename filter accept STRING connections. The cog controls sorting, recursion, 2–7 columns, color/NSFW filters and prompt formatting.",
+            "Folder and fuzzy filename filter accept STRING connections. The top-right cog beside the Folder heading controls sorting, recursion, 2–7 columns, color/NSFW filters and prompt formatting.",
             "Hover for metadata; hold Shift for the prompt. Double-click opens the viewer. Right-click copies an image, prompt or embedded workflow.",
             "Drag an image to the canvas or an existing Load Image node. A copy is imported; the original stays in place.",
             "The bottom note shows total media counts. Missing files are dropped from selection; deleted folders or disconnected drives show an unavailable state. Refresh after reconnecting.",
@@ -199,8 +238,8 @@ export const RAY_HELP_DEFS = {
             bullets: [
                 "The folder button next to **Directory** opens your system's folder dialog and pastes the path. A blank directory saves to ComfyUI's output folder; the ▾ in the field recalls the last three save folders.",
                 "The Save Image buttons choose None, 1, 2 or Both; saving happens when the workflow runs. None only previews.",
-                "With two images connected, drag the ‹ › handle to compare them. The preview is otherwise click-through, so right-click, middle-drag and the wheel still reach the canvas.",
-                "The picture fills the node: resize the node to enlarge it. Image sizes and the save status sit on the picture, and with several images the arrows at the bottom right step through the pairs.",
+                "With two images connected, drag the ‹ › handle to compare them. Right-click, Space-drag, middle-drag and the wheel still reach the canvas.",
+                "The picture fills the node: resize the node to enlarge it. Image sizes and the save status sit on the picture. With several images, click the preview to advance through the pairs and wrap back to the first, or use the arrows at the bottom right.",
                 "The **{ }** button next to **Filename prefix** opens a panel to build the name from tokens: `{date}`, `{time}`, `{counter}`, `{index}`, `{input}`, `{hash}` and `{widget:ID.NAME}` (the value of any widget in the workflow). The file is saved as exactly `<name>.png`.",
                 "Spaces and characters a filename cannot hold are replaced with `_`, and nothing is ever overwritten: `{counter}` moves on to the next free number, otherwise `-2`, `-3`… is added.",
                 "Leave `metadata` unconnected to keep ComfyUI's default embedded metadata. Connect a STRING to replace it with that exact text in PNG `parameters`, including empty text.",
