@@ -1,10 +1,11 @@
 # Ray's Model Tools
 
-Ten nodes under **👑 Ray / 🧰 Model Tools**. They run inside ComfyUI; the standalone
+Eleven nodes under **👑 Ray / 🧰 Model Tools**. They run inside ComfyUI; the standalone
 ModelMergeTools app and its FastAPI server are not required.
 
 | Node | Purpose |
 | --- | --- |
+| [Queued Model Loader](screenshots/RayQueuedModelLoader.png) | Queue the same workflow once per selected diffusion model, with native automatic precision. |
 | [Load Model As](screenshots/RayModelLoadAs.png) | Choose a safetensors checkpoint/diffusion model with the file picker. Auto detects the loader. |
 | [Convert Model](screenshots/RayModelConvert.png) | Convert a file or connected MODEL into another storage format. |
 | [Save Model](screenshots/RayModelSave.png) | Save the effective model, including active merge and LoRA patches, with optional CLIP/VAE and metadata. |
@@ -16,6 +17,35 @@ ModelMergeTools app and its FastAPI server are not required.
 | [LoRA Bake](screenshots/RayLoraBake.png) | Choose a LoRA file and bake it using ComfyUI's adapter mappings and supported LoRA variants. |
 | [LoRA Extract](screenshots/RayLoraExtract.png) | SVD extraction from finetuned minus base, including convolution weights. |
 
+
+## Queued model comparisons
+
+Replace a native Load Diffusion Model with **Queued Model Loader** and connect its
+single MODEL output to the same destination. Choose a model from the registered
+diffusion model suggestions, type its name/path, or use the file icon. Press **+**
+to add rows and use each row's trash icon to remove it. **Run** queues one complete
+workflow per model, in row order, including while another job is running. One row
+behaves like a normal loader. Precision and supported quantization use ComfyUI's
+native defaults independently for each file; there is no shared precision override.
+
+Each sweep captures the workflow once, including sampler seeds. Seed controls
+advance once per sweep, rather than per model. Conventional `seed`/`noise_seed`
+values of -1 are resolved once. Keep other random nodes deterministic, including
+wildcards and random input selectors; arbitrary server-side randomness and live
+network sources cannot be frozen by the loader. For Model Card, use Fixed,
+Increment or Decrement seed mode. Text encoders, VAE, LoRAs and sampling settings
+stay as wired, so choose compatible diffusion models.
+
+Jobs appear individually in ComfyUI's queue/history and can be cancelled there.
+Each job's saved workflow contains only its actual model; the editable canvas keeps
+your full selection. Model files are checked before submission. If submission is
+interrupted, the error reports how many jobs were already accepted. Native loaders
+still determine whether model contents and quantization are supported at execution.
+
+Use one multi-row loader per sweep, on the main canvas. Other loaders may each
+select one model. A linked first model is supported with a single row; unlink it
+to add rows. Direct API clients must submit one `model_name` per job and set
+`queued_models` to `[]`; the multi-model queue action runs in the ComfyUI frontend.
 
 ## Connections and file-only processing
 

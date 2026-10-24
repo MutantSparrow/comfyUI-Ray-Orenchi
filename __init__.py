@@ -33,6 +33,7 @@ _NODE_MODULES = {
     "RaySaveImage":        "ray_save_image",
     "RayModelCard":        "ray_model_card",
     "RayModelLoadAs":      "ray_model_tools",
+    "RayQueuedModelLoader": "ray_queued_model_loader",
     "RayModelConvert":     "ray_model_tools",
     "RayModelSave":        "ray_model_tools",
     "RayModelMetadata":    "ray_model_tools",
@@ -67,6 +68,7 @@ _ROUTE_MODULES = (
     "browse_routes",
     "folders_routes",
     "model_tools_routes",
+    "queued_model_routes",
 )
 
 # Choose the import mode before importing. Dependency failures must keep their
@@ -113,6 +115,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RaySaveImage":        "🔧 Ray's Tools: Save Image",
     "RayModelCard":        "🔧 Ray's Tools: Model Card",
     "RayModelLoadAs":      "🧰 Ray's Model Tools: Load Model As",
+    "RayQueuedModelLoader": "🧰 Ray's Model Tools: Queued Model Loader",
     "RayModelConvert":     "🧰 Ray's Model Tools: Convert Model",
     "RayModelSave":        "🧰 Ray's Model Tools: Save Model",
     "RayModelMetadata":    "🧰 Ray's Model Tools: Metadata Load / Edit",

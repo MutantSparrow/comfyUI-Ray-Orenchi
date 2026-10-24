@@ -390,9 +390,9 @@
       },
       "width_css_px": 340,
       "height_css_px": 529,
-      "source_fingerprint": "bce73a73d933976b923021dc57b026721815dab95e6b05f7e04823d4d7291639",
+      "source_fingerprint": "83391e7199ad5a85f53643beac4ed8bdb0263d42deb42577f9bbabff6d973cda",
       "sha256": "8eb670fc49932efd2c63717f046538254f01eabaac79819f8b7c20c33794a6ee",
-      "captured_at": "2026-10-23T14:09:17.133Z"
+      "captured_at": "2026-10-24T13:15:06.350Z"
     },
     "RayModelCompare": {
       "file": "RayModelCompare.png",
@@ -780,6 +780,27 @@
       "sha256": "59444776e9d137bc8a060a06332109e58e494913efc64b08e892918ee1fb992c",
       "captured_at": "2026-10-23T14:10:00.496Z"
     },
+    "RayQueuedModelLoader": {
+      "file": "RayQueuedModelLoader.png",
+      "display_name": "🧰 Ray's Model Tools: Queued Model Loader",
+      "title": "🧰 Ray's Model Tools: Queued Model Loader",
+      "inputs": [],
+      "outputs": [
+        "MODEL"
+      ],
+      "sections": [
+        "Models"
+      ],
+      "default_widgets": {
+        "model_name": "",
+        "queued_models": "[]"
+      },
+      "width_css_px": 480,
+      "height_css_px": 207,
+      "source_fingerprint": "e07aecdbe37e52c5d11b5a8d63320ecf667757016cbbc426e491c36c79ae6616",
+      "sha256": "56a2a1d02c87bd258f63c81300a8ebd9ae2a2e7be27e1f140208fb42bd5da047",
+      "captured_at": "2026-10-24T13:15:04.369Z"
+    },
     "RaySaveImage": {
       "file": "RaySaveImage.png",
       "display_name": "🔧 Ray's Tools: Save Image",
@@ -938,7 +959,7 @@
   "zoom": 1,
   "padding_css_px": 24,
   "comfyui_version": "0.42.0",
-  "frontend_version": "1.55.18",
+  "frontend_version": "1.57.1",
   "browser_version": "156.0.8078.4",
   "platform": "win32"
 }

@@ -705,6 +705,28 @@ connect Save Image or another output node when you want to save them.
 
 ---
 
+## 🧰 Ray's Model Tools: Queued Model Loader (`RayQueuedModelLoader`)
+
+![🧰 Ray's Model Tools: Queued Model Loader](screenshots/RayQueuedModelLoader.png)
+
+Choose one or more diffusion models, add rows with **+**, and remove them with
+the trash icons. Connect the single native **MODEL** output to your sampler or
+model processing chain. Press **Run** to queue the captured workflow once per
+model, in row order, with the same sampler seeds and settings. Each file uses
+ComfyUI's automatic precision and supported quantization. Keep compatible text
+encoders and VAE connected separately.
+
+Model suggestions come from ComfyUI's diffusion model folders. The file icon
+opens the shared system file picker. Selections survive workflow save/reload;
+each queued job records only the model it actually loads. Queue/history controls
+manage jobs individually. For predictable comparisons, use deterministic random
+inputs and a non-randomized Model Card seed mode.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [queued model comparisons](MODEL_TOOLS.md#queued-model-comparisons)
+for queue behavior, direct API usage and limitations.
+
+---
+
 ## 🧰 Ray's Model Tools: Load Model As (`RayModelLoadAs`)
 
 ![🧰 Ray's Model Tools: Load Model As](screenshots/RayModelLoadAs.png)
