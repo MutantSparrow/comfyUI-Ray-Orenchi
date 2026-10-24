@@ -1,9 +1,11 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { applyBucketTint, setWidgetHidden } from "./_common.js";
-import { installPanel, iconButton, linkChip, linkOf, registerLinkTargets } from "./ray_panel.js";
+import { installPanel, openPanelSettings, iconButton, linkChip, linkOf, registerLinkTargets } from "./ray_panel.js";
 import { browsePath, notify } from "./browse_common.js";
-import { LOADER_ID, PLACEHOLDER, planSweep, submitSweep } from "./queued_model_loader.mjs";
+import { PLACEHOLDER, planSweep, submitSweep } from "./queued_model_loader.mjs";
+
+const LOADER_ID = "RayQueuedModelLoader";
 
 const outputTypes = new Set();
 let modelNames;
@@ -22,6 +24,7 @@ function installLoader(node, definition) {
     applyBucketTint(node, "Tools");
     const first = widget(node, "model_name"), rest = widget(node, "queued_models");
     setWidgetHidden(node, first, true); setWidgetHidden(node, rest, true);
+    setWidgetHidden(node, widget(node, "spectrum_enabled"), true);
     const root = element("div", "rql-models"), list = element("div"), choices = element("datalist");
     choices.id = `ray-queued-models-${crypto.randomUUID()}`;
     availableModels().then(names => {
@@ -31,7 +34,15 @@ function installLoader(node, definition) {
     });
     const status = element("div", "rp-status"); status.setAttribute("role", "status");
     const controls = element("div", "rp-control");
-    const add = iconButton("plus", "Add model", () => write([...read(), ""])); controls.append(add);
+    const spectrumStatus = element("div", "rp-status");
+    const add = iconButton("plus", "Add model", () => write([...read(), ""]));
+    const options = iconButton("edit", "Loader options", () => openPanelSettings(node, { sections: [
+        { title: "Spectrum", fields: [{ name: "spectrum_enabled", label: "Enable Spectrum" }, { custom: () => {
+            const note = element("div", "rp-status", "Automatically selects the installed Spectrum adapter for each model. Forecasting can change generated results. MOSS, MiniMax H3 and SDXL/Anima use dedicated adapters; other supported families use general Spectrum. Check the node status after running.");
+            note.setAttribute("role", "note"); return note;
+        } }] },
+    ] }, "Queued Model Loader options"));
+    options.style.marginLeft = "auto"; controls.append(add, options);
     for (const container of [root, list]) Object.assign(container.style, { display: "flex", flexDirection: "column", gap: "6px" });
     let signature = "", unregister = () => {};
     const read = () => {
@@ -49,6 +60,8 @@ function installLoader(node, definition) {
         signature = ""; refresh(); node._rayPanel?.schedule(); node.setDirtyCanvas?.(true, true);
     }
     function refresh() {
+        spectrumStatus.textContent = widget(node, "spectrum_enabled")?.value
+            ? node._raySpectrumReport?.message || "Spectrum: Auto" : "";
         const linked = !!linkOf(node, "model_name"); add.disabled = linked;
         const next = JSON.stringify([first.value, rest.value, linked]);
         if (next === signature) return;
@@ -88,8 +101,8 @@ function installLoader(node, definition) {
         if (firstRow) unregister = registerLinkTargets(node, [{ name: "model_name", element: firstRow }], refresh);
         node._rayPanel?.schedule();
     }
-    root.append(choices, list, controls, status);
-    const panel = installPanel(node, { minWidth: 480, skip: ["model_name", "queued_models"],
+    root.append(choices, list, controls, spectrumStatus, status);
+    const panel = installPanel(node, { minWidth: 480, skip: ["model_name", "queued_models", "spectrum_enabled"],
         sections: [{ title: "Models", fields: [{ custom: () => root, update: refresh }] }] });
     const observer = new ResizeObserver(() => panel.schedule()); observer.observe(root);
     const removed = node.onRemoved;
@@ -123,7 +136,15 @@ app.registerExtension({
     beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.output_node) outputTypes.add(nodeData.name);
         if (nodeData.name !== LOADER_ID) return;
-        const created = nodeType.prototype.onNodeCreated, configured = nodeType.prototype.onConfigure;
+        const created = nodeType.prototype.onNodeCreated, configured = nodeType.prototype.onConfigure,
+            executed = nodeType.prototype.onExecuted;
+        nodeType.prototype.onExecuted = function (message) {
+            const result = executed?.apply(this, arguments);
+            if (message?.queued_model_loader?.[0]) {
+                this._raySpectrumReport = message.queued_model_loader[0]; this._rayQueuedLoader?.refresh();
+            }
+            return result;
+        };
         nodeType.prototype.onNodeCreated = function () {
             const result = created?.apply(this, arguments); installLoader(this, nodeData); return result;
         };

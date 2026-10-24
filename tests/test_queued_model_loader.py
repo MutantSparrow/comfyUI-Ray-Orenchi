@@ -28,6 +28,15 @@ def test_file_changes_invalidate_the_loader_cache(tmp_path):
         assert before != RayQueuedModelLoader.IS_CHANGED("model.safetensors")
 
 
+def test_spectrum_step_inference_participates_in_cache_key(tmp_path):
+    source = tmp_path / "model.safetensors"; source.write_bytes(b"fixture")
+    prompt = {"1": {"inputs": {}}, "2": {"inputs": {"model": ["1", 0], "steps": 25}}}
+    with patch("folder_paths.get_full_path", return_value=str(source)):
+        first = RayQueuedModelLoader.IS_CHANGED("model.safetensors", True, prompt, "1")
+        prompt["2"]["inputs"]["steps"] = 30
+        assert first != RayQueuedModelLoader.IS_CHANGED("model.safetensors", True, prompt, "1")
+
+
 @pytest.mark.parametrize("value", ['{}', '[null]', '[""]', 'invalid'])
 def test_invalid_model_lists(value):
     with pytest.raises(ValueError):
@@ -48,3 +57,16 @@ def test_automatic_precision_delegates_to_native_loader(tmp_path):
     with patch("folder_paths.get_full_path", return_value=str(source)), patch("comfy.sd.load_diffusion_model", return_value=sentinel) as load:
         assert RayQueuedModelLoader().load("model.safetensors") == (sentinel,)
     load.assert_called_once_with(str(source), model_options={})
+
+
+def test_spectrum_is_optional_and_receives_the_queued_graph(tmp_path):
+    source = tmp_path / "model.safetensors"; source.write_bytes(b"fixture")
+    model, accelerated = object(), object()
+    prompt = {"sampler": {"inputs": {"steps": 25}}}
+    with patch("folder_paths.get_full_path", return_value=str(source)), patch("comfy.sd.load_diffusion_model", return_value=model), \
+            patch("ray_queued_model_loader.apply_spectrum", return_value=(accelerated, {"state": "attached"})) as spectrum:
+        assert RayQueuedModelLoader().load("model.safetensors") == (model,)
+        spectrum.assert_not_called()
+        result = RayQueuedModelLoader().load("model.safetensors", spectrum_enabled=True, prompt=prompt, unique_id="loader")
+        assert result["result"] == (accelerated,)
+        spectrum.assert_called_once_with(model, prompt, "loader")

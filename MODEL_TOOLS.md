@@ -48,6 +48,37 @@ select one model. A linked first model is supported with a single row; unlink it
 to add rows. Direct API clients must submit one `model_name` per job and set
 `queued_models` to `[]`; the multi-model queue action runs in the ComfyUI frontend.
 
+### Optional Spectrum acceleration
+
+The small **Loader options** button opens a **Spectrum** switch, off by default.
+When enabled, each loaded model automatically selects an installed adapter:
+
+| Model family | Required optional node pack |
+| --- | --- |
+| MOSS-Image | [ComfyUI-Spectrum-MOSS](https://github.com/Rkkss/ComfyUI-Spectrum-MOSS), Adaptive node |
+| MiniMax H3 | [ComfyUI-Spectrum-MiniMax-H3](https://github.com/xmarre/ComfyUI-Spectrum-MiniMax-H3) |
+| SDXL / Anima | [comfyui-spectrum-sdxl](https://github.com/ruwwww/comfyui-spectrum-sdxl) |
+| Flux/Klein/Longcat, SD3/Qwen Image, Z Image/Lumina2, Ernie, HunyuanVideo and Wan | [ComfyUI-Spectrum](https://github.com/judian17/ComfyUI-Spectrum), according to its installed architecture support |
+
+Adapters remain separate optional packs; no extra Spectrum node is needed in the
+workflow. Install the relevant packs and restart ComfyUI before enabling the
+switch. Disabled mode needs none of them. A missing adapter gives its installation
+link. Unsupported models report that native sampling was kept. The node displays
+which adapter was attached; sampler-specific native fallbacks remain controlled
+by that adapter, so attachment does not guarantee a speedup.
+
+Spectrum forecasts some model evaluations and can change generated results. Keep
+the same toggle value across models when comparing them. Each adapter uses its
+own declared defaults; the loader leaves precision, prompts, seeds and sampler
+settings unchanged. SDXL/Anima automatically reads downstream sampler/scheduler
+steps and preserves three final actual steps. If that count is ambiguous, dynamic,
+or outside 10–500, it reports a native fallback. Use the standalone adapter node
+when a workflow needs custom Spectrum tuning or a different step contract.
+
+Compatibility and quality vary by architecture and sampler. In particular, the
+general adapter discourages Qwen Image Edit and lists LTX support as untested.
+Models reported unsupported by the installed adapter keep native sampling.
+
 ## Connections and file-only processing
 
 MODEL, CLIP and VAE are normal ComfyUI connections. **model_data** is a Ray

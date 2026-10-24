@@ -793,13 +793,14 @@
       ],
       "default_widgets": {
         "model_name": "",
-        "queued_models": "[]"
+        "queued_models": "[]",
+        "spectrum_enabled": false
       },
       "width_css_px": 480,
       "height_css_px": 207,
-      "source_fingerprint": "e07aecdbe37e52c5d11b5a8d63320ecf667757016cbbc426e491c36c79ae6616",
-      "sha256": "56a2a1d02c87bd258f63c81300a8ebd9ae2a2e7be27e1f140208fb42bd5da047",
-      "captured_at": "2026-10-24T13:15:04.369Z"
+      "source_fingerprint": "c3f62805e806f998aec52197f403ededc2465d4e2a3e8f5aa9e38caf9544da81",
+      "sha256": "033ccd46430e07dbfe12f4a052a5a8f20869d3b72140ef9aec861d5ad91bf129",
+      "captured_at": "2026-10-24T14:05:05.679Z"
     },
     "RaySaveImage": {
       "file": "RaySaveImage.png",

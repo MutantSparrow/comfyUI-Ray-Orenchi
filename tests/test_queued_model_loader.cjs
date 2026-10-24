@@ -22,6 +22,12 @@ const assert = require('node:assert/strict');
     plan.jobs[0].output['2'].inputs.steps = 100;
     assert.equal(plan.jobs[1].output['2'].inputs.steps, 20);
     assert.equal(original.output['2'].inputs.steps, 20);
+    const accelerated = snapshot(); accelerated.output['1'].inputs.spectrum_enabled = true;
+    accelerated.workflow.nodes[0].widgets_values.push(true);
+    for (const job of planSweep(accelerated, {outputTypes}).jobs) {
+        assert.equal(job.output['1'].inputs.spectrum_enabled, true);
+        assert.equal(job.workflow.nodes[0].widgets_values[2], true);
+    }
     assert.throws(() => parseModels('a', '[""]'), /every row/);
     assert.throws(() => parseModels('a', '{}'), /array/);
     assert.throws(() => parseModels('', '[]'), /every row/);

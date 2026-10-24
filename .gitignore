@@ -33,5 +33,4 @@ civitai.secret
 # Local working docs (kept on disk for reference, not published)
 PIXEL_ART.md
 FAST_VLM_RELIABILITY.md
-UI.md
 benchmarks/pixel_art/*.md

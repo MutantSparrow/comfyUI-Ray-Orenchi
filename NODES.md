@@ -725,6 +725,13 @@ inputs and a non-randomized Model Card seed mode.
 **Category:** `👑 Ray/🧰 Model Tools`. See [queued model comparisons](MODEL_TOOLS.md#queued-model-comparisons)
 for queue behavior, direct API usage and limitations.
 
+**Loader options** opens an optional **Spectrum** toggle, off by default. It
+automatically chooses the installed MOSS, MiniMax H3, SDXL/Anima or general
+Spectrum adapter for each loaded model. The node reports the attached adapter or
+native fallback. Spectrum approximates model evaluations and can change results;
+see [Spectrum acceleration](MODEL_TOOLS.md#optional-spectrum-acceleration) for
+optional dependencies, supported families and step-count requirements.
+
 ---
 
 ## 🧰 Ray's Model Tools: Load Model As (`RayModelLoadAs`)

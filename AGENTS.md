@@ -34,6 +34,10 @@ registration names; use judgment for changes outside that dependency inventory.
 
 ## Node design
 
+Before changing a node or shared component, read and follow [UI.md](UI.md),
+including its shared controls, lifecycle contracts, reference inventory and
+completion checklist.
+
 Use the pack's category and title format: category emoji, Ray's group, then the
 node name. Keep stable registered class IDs. Group related controls into named
 sections using the shared magenta, uppercase `.rp-title` style. Separate visible
