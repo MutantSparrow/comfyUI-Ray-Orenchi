@@ -952,6 +952,30 @@
       "source_fingerprint": "097648069799dbb3ecee3b2858a084e462b73ec585f999d9f0eb0009ba5f0d79",
       "sha256": "13ef6d233247ba6d1a07162d4ebe4c833f97e99071efa484a0979d4584b2b3e4",
       "captured_at": "2026-10-23T14:09:56.356Z"
+    },
+    "RayLoraQKVLoader": {
+      "file": "RayLoraQKVLoader.png",
+      "display_name": "🧰 Ray's Model Tools: LoRA QKV Loader",
+      "title": "🧰 Ray's Model Tools: LoRA QKV Loader",
+      "inputs": [
+        "model"
+      ],
+      "outputs": [
+        "MODEL"
+      ],
+      "sections": [
+        "LoRAs"
+      ],
+      "default_widgets": {
+        "lora_name": "",
+        "strength": 1,
+        "additional_loras": "[]"
+      },
+      "width_css_px": 480,
+      "height_css_px": 260,
+      "source_fingerprint": "62ebe1a213827d02a8f8eb814966f69296b18cc4e7fb5bc199e489ae80cf5320",
+      "sha256": "13273c1f30f9b7aaeca3f8dcbd217540d6b1121596f238d36595407292b4b097",
+      "captured_at": "2026-10-24T13:36:40.567Z"
     }
   },
   "renderer": "ComfyUI Nodes 2.0",

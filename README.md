@@ -31,6 +31,7 @@ inference, prompt tooling and analog-console controls. Find them under the
 | | **Model Merge** | Nine seeded merge strategies, component selection and block weights |
 | | **Model Inspector / Model Compare** | Tensor tables, architecture detection and structural comparison |
 | | **LoRA Bake / LoRA Extract** | Bake supported adapters or extract low-rank checkpoint differences |
+| | **LoRA QKV Loader** | Stack model LoRAs with individual strengths and automatic naming/QKV compatibility fixes |
 
 See [MODEL_TOOLS.md](MODEL_TOOLS.md) for formats, examples and file-only workflows.
 

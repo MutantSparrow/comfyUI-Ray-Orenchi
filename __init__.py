@@ -43,6 +43,7 @@ _NODE_MODULES = {
     "RayModelCompare":     "ray_model_tools",
     "RayLoraBake":          "ray_model_tools",
     "RayLoraExtract":       "ray_model_tools",
+    "RayLoraQKVLoader":     "ray_lora_qkv_loader",
     "RayFolders":          "ray_folders",
     "RayCRT":              "ray_crt",
     "RayOffsetPrint":      "ray_offset_print",
@@ -125,6 +126,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RayModelCompare":     "🧰 Ray's Model Tools: Model Compare",
     "RayLoraBake":          "🧰 Ray's Model Tools: LoRA Bake",
     "RayLoraExtract":       "🧰 Ray's Model Tools: LoRA Extract",
+    "RayLoraQKVLoader":     "🧰 Ray's Model Tools: LoRA QKV Loader",
     "RayFolders":          "🔧 Ray's Tools: Folders",
 }
 

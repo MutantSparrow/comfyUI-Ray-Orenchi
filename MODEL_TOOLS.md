@@ -1,6 +1,6 @@
 # Ray's Model Tools
 
-Eleven nodes under **👑 Ray / 🧰 Model Tools**. They run inside ComfyUI; the standalone
+Nodes under **👑 Ray / 🧰 Model Tools** run inside ComfyUI; the standalone
 ModelMergeTools app and its FastAPI server are not required.
 
 | Node | Purpose |
@@ -16,6 +16,7 @@ ModelMergeTools app and its FastAPI server are not required.
 | [Model Compare](screenshots/RayModelCompare.png) | Compare names, shapes and dtypes before merging. |
 | [LoRA Bake](screenshots/RayLoraBake.png) | Choose a LoRA file and bake it using ComfyUI's adapter mappings and supported LoRA variants. |
 | [LoRA Extract](screenshots/RayLoraExtract.png) | SVD extraction from finetuned minus base, including convolution weights. |
+| [LoRA QKV Loader](screenshots/RayLoraQKVLoader.png) | Stack LoRAs on a MODEL, with individual strengths and automatic compatibility fixes. |
 
 
 ## Queued model comparisons
@@ -179,6 +180,33 @@ SDXL, Flux and MOSS where available. It identifies structure, not the exact
 checkpoint name. Unknown models remain inspectable. The fp16 memory estimate
 excludes activations and overhead, and packed-format element counts can differ
 from logical parameter counts.
+
+## LoRA QKV Loader
+
+Connect a **MODEL** to **LoRA QKV Loader**, then connect its **MODEL** output to
+the sampler. Choose a LoRA from the filename suggestions or use its file button.
+Use **+** to add rows and **trash** to remove them. Each row has its own
+**Strength**: 1 uses the trained effect, 0 skips the row, and negative values
+reverse the adapter contribution. LoRAs are applied from top to bottom. Removing
+every selection passes the input model through. The first filename and strength,
+and the additional-row list, can also be driven by links.
+
+The loader uses ComfyUI's native adapter conversion, parameter mappings and model
+patching. It checks each selected LoRA against the connected model and adds
+unambiguous trainer-name aliases when necessary. Supported fused QKV adapters
+are split to the model's separate Q/K/V dimensions; separate adapters can map to
+the corresponding slices of a fused weight. Existing native matches are kept.
+Checks apply across model families, including MOSS, rather than requiring a
+model-family switch.
+
+Exact splitting supports linear LoRA/PEFT, output-axis DoRA, linear LoHa,
+compatible LoKr factors, and weight differences. Unsupported layouts, ambiguous
+names, input-axis DoRA, convolutional QKV and incomplete triplets are kept as
+they are and reported when they cannot match. Repairs cannot make a LoRA trained
+for a different architecture compatible. The status beneath the rows shows how
+many model weights loaded and which fixes or warnings occurred. Text-encoder
+weights are not applied; this node has no CLIP connections. Loading adds live
+model patches and does not write or permanently bake the source model or LoRA.
 
 ## Example workflows
 

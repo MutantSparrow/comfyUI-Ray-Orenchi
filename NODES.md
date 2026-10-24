@@ -826,3 +826,20 @@ For a file-only merge, turn **Load result** off and leave the format on **Auto**
 **Purpose.** Extract a LoRA from the difference between finetuned and base checkpoints using SVD, with rank, alpha and precision controls. Returns the saved path, a LoRA-data handle, and a report.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: LoRA QKV Loader (`RayLoraQKVLoader`)
+
+![🧰 Ray's Model Tools: LoRA QKV Loader](screenshots/RayLoraQKVLoader.png)
+
+**Purpose.** Load one or more LoRAs onto a MODEL with individual strengths. Add
+rows with **+**, remove them with **trash**, and choose registered files or browse
+to a file. Automatically repairs unambiguous trainer names and supported
+fused/separate QKV mismatches against the connected model, using native ComfyUI
+adapters for ordinary loading. Zero strength skips a row; an empty list passes
+the model through. Reports loaded weights, fixes and unmatched adapters. MODEL
+input/output only; no text-encoder loading.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md)
+for supported repairs, controls and limitations.
