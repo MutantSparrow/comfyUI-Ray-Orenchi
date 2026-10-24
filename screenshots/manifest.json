@@ -974,9 +974,9 @@
       },
       "width_css_px": 480,
       "height_css_px": 260,
-      "source_fingerprint": "62ebe1a213827d02a8f8eb814966f69296b18cc4e7fb5bc199e489ae80cf5320",
+      "source_fingerprint": "38ad70dfe7108c3ccc59c0a0e13c863aaab79288b2ab290ad0e261d98ac90154",
       "sha256": "13273c1f30f9b7aaeca3f8dcbd217540d6b1121596f238d36595407292b4b097",
-      "captured_at": "2026-10-24T13:36:40.567Z"
+      "captured_at": "2026-10-24T14:15:22.477Z"
     }
   },
   "renderer": "ComfyUI Nodes 2.0",

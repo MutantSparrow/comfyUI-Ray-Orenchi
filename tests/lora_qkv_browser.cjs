@@ -39,6 +39,45 @@ const first = path.join(fixtures, 'fused.safetensors'), second = path.join(fixtu
         await edit(source(2), second); await edit(amount(2), '-0.25');
         assert.equal(await amount(1).inputValue(), '0.5');
         assert.equal(await amount(2).inputValue(), '-0.25');
+        const drag = async (index, dx, {shift = false, live} = {}) => {
+            await amount(index).evaluate(input => input.blur());
+            const bounds = await amount(index).boundingBox();
+            const x = bounds.x + bounds.width / 2, y = bounds.y + bounds.height / 2;
+            await page.mouse.move(x, y);
+            if (shift) await page.keyboard.down('Shift');
+            await page.mouse.down(); await page.mouse.move(x + dx, y, {steps: 8});
+            if (live !== undefined) assert.equal(await page.evaluate(index => {
+                const node = window.loader;
+                return index === 1 ? node.widgets.find(item => item.name === 'strength').value
+                    : JSON.parse(node.widgets.find(item => item.name === 'additional_loras').value)[index - 2].strength;
+            }, index), live, 'Dragging must update the queued value before release');
+            await page.mouse.up();
+            if (shift) await page.keyboard.up('Shift');
+        };
+        await page.evaluate(async () => {
+            const {app} = await import('/scripts/app.js');
+            window.dragChanges = {before: 0, after: 0};
+            for (const name of ['beforeChange', 'afterChange']) {
+                const original = app.graph[name];
+                app.graph[name] = function () {
+                    window.dragChanges[name === 'beforeChange' ? 'before' : 'after']++;
+                    return original?.apply(this, arguments);
+                };
+            }
+        });
+        await drag(1, 120, {live: .7});
+        assert.equal(await amount(1).inputValue(), '0.7');
+        assert.equal(await amount(2).inputValue(), '-0.25', 'Scrubbing one row must preserve other strengths');
+        assert.deepEqual(await page.evaluate(() => window.dragChanges), {before: 1, after: 1}, 'A drag must form one graph change');
+        await drag(1, -120); assert.equal(await amount(1).inputValue(), '0.5');
+        await drag(2, -120, {live: -.45}); assert.equal(await amount(2).inputValue(), '-0.45');
+        await drag(2, 120); assert.equal(await amount(2).inputValue(), '-0.25');
+        await drag(1, 120, {shift: true, live: .52}); assert.equal(await amount(1).inputValue(), '0.52');
+        await page.getByRole('button', {name: 'Increase LoRA 1 strength', exact: true}).click();
+        assert.equal(await amount(1).inputValue(), '0.53', 'Buttons must continue from the fine drag value');
+        await edit(amount(1), '99.99'); await drag(1, 120); assert.equal(await amount(1).inputValue(), '100');
+        await edit(amount(1), '-99.99'); await drag(1, -120); assert.equal(await amount(1).inputValue(), '-100');
+        await amount(1).click(); await edit(amount(1), '0.5');
         await page.getByRole('button', {name: 'Remove LoRA 1', exact: true}).click();
         assert.equal(await source(1).inputValue(), second, 'Removing first must promote the complete second row');
         assert.equal(await amount(1).inputValue(), '-0.25');
@@ -91,11 +130,11 @@ const first = path.join(fixtures, 'fused.safetensors'), second = path.join(fixtu
             const {api} = await import('/scripts/api.js'); return api.queuePrompt(0, prompt);
         }, prompt);
         assert(submitted.prompt_id);
-        await page.waitForFunction(async id => {
-            const history = await (await fetch('/history/' + id)).json(); return !!history[id];
+        const completed = await page.waitForFunction(async id => {
+            const history = await (await fetch('/history/' + id)).json();
+            return history[id]?.status?.completed ? history[id] : false;
         }, submitted.prompt_id);
-        const history = await (await page.request.get(base + '/history/' + submitted.prompt_id)).json();
-        const job = history[submitted.prompt_id];
+        const job = await completed.jsonValue();
         assert.equal(job.status.status_str, 'success', JSON.stringify(job.status));
         const report = job.outputs[probeId].probe[0];
         assert.deepEqual(Object.values(report.sums), [0, 16, 16]);
@@ -111,7 +150,7 @@ const first = path.join(fixtures, 'fused.safetensors'), second = path.join(fixtu
         assert.equal(await source(1).isVisible(), true);
         assert.equal(await page.getByRole('button', {name: 'Choose LoRA 1 file', exact: true}).isDisabled(), false);
         assert.deepEqual(errors, []);
-        console.log('Nodes 2.0 browser and execution checks passed: add/remove, independent strengths, picker cancellation, serialization, linked filename, exact native patch values, repair status and zero-strength skip.');
+        console.log('Nodes 2.0 browser and execution checks passed: horizontal strength dragging, fine adjustment, live values, bounds, grouped graph changes, direct entry, add/remove, independent strengths, picker cancellation, serialization, linked filename, exact native patch values, repair status and zero-strength skip.');
     } catch (error) {
         if (page) {
             console.error(await page.evaluate(() => ({

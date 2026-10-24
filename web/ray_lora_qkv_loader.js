@@ -34,7 +34,7 @@ function installLoader(node, definition) {
     const extraChip = linkChip(node, "additional_loras", () => refresh());
     controls.append(add, extraChip.element);
     const status = el("div", "rp-status"); status.setAttribute("role", "status");
-    let signature = "", unregister = () => {};
+    let signature = "", unregister = () => {}, scrub = null;
 
     function read() {
         let extra;
@@ -42,22 +42,25 @@ function installLoader(node, definition) {
         return [{ name: first.value === PLACEHOLDER ? "" : String(first.value ?? ""), strength: Number(strength.value) },
             ...(Array.isArray(extra) ? extra : [])];
     }
-    function write(rows) {
+    function write(rows, { history = true, render = true } = {}) {
         if (!rows.length) rows = [{ name: "", strength: 1 }];
-        node.graph?.beforeChange?.();
+        if (history) node.graph?.beforeChange?.();
         try {
             first.value = rows[0].name || "";
             strength.value = rows[0].strength;
             rest.value = JSON.stringify(rows.slice(1));
             for (const item of [first, strength, rest]) item.callback?.(item.value);
-        } finally { node.graph?.afterChange?.(); }
-        signature = ""; status.textContent = ""; refresh(); node.setDirtyCanvas?.(true, true);
+        } finally { if (history) node.graph?.afterChange?.(); }
+        signature = ""; status.textContent = "";
+        if (render) refresh();
+        node.setDirtyCanvas?.(true, true);
     }
     function refresh() {
         const sourceLinked = !!linkOf(node, "lora_name"), strengthLinked = !!linkOf(node, "strength"), extraLinked = !!linkOf(node, "additional_loras");
         const next = JSON.stringify([first.value, strength.value, rest.value, sourceLinked, strengthLinked, extraLinked]);
         add.disabled = extraLinked; extraChip.update();
-        if (next === signature) return;
+        // Keep the captured input mounted throughout a drag, including panel updates.
+        if (next === signature || scrub) return;
         signature = next; unregister(); list.replaceChildren();
         const rows = read(), targets = [];
         for (const [index, value] of rows.entries()) {
@@ -100,6 +103,37 @@ function installLoader(node, definition) {
                 const rows = read(); rows[index].strength = Math.round(parsed * 100) / 100; write(rows);
             };
             amount.onchange = () => commit(amount.value);
+            amount.style.touchAction = "none";
+            amount.title = "Drag left or right to adjust; click to type. Hold Shift for finer adjustment.";
+            amount.addEventListener("pointerdown", event => {
+                if (event.button !== 0 || document.activeElement === amount) return;
+                event.preventDefault(); event.stopPropagation();
+                scrub = { id: event.pointerId, x: event.clientX, start: read()[index].strength, moved: false };
+                amount.setPointerCapture(event.pointerId);
+            });
+            amount.addEventListener("pointermove", event => {
+                if (!scrub || event.pointerId !== scrub.id) return;
+                event.stopPropagation();
+                const dx = event.clientX - scrub.x;
+                if (!scrub.moved && Math.abs(dx) < 3) return;
+                if (!scrub.moved) { scrub.moved = true; node.graph?.beforeChange?.(); }
+                const pixelsPerStep = event.shiftKey ? 60 : 6;
+                const next = Math.max(-100, Math.min(100, Math.round((scrub.start + Math.round(dx / pixelsPerStep) * .01) * 100) / 100));
+                const rows = read();
+                if (rows[index].strength !== next) {
+                    rows[index].strength = next;
+                    write(rows, { history: false, render: false });
+                    amount.value = next;
+                }
+            });
+            const stopScrub = event => {
+                if (!scrub || event.pointerId !== scrub.id) return;
+                const { moved } = scrub; scrub = null;
+                if (amount.hasPointerCapture(event.pointerId)) amount.releasePointerCapture(event.pointerId);
+                if (moved) { node.graph?.afterChange?.(); refresh(); }
+                else if (event.type === "pointerup") { amount.focus(); amount.select(); }
+            };
+            for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) amount.addEventListener(type, stopScrub);
             const minus = iconButton("minus", `Decrease LoRA ${index + 1} strength`, () => commit(Math.max(-100, value.strength - .01)));
             const plus = iconButton("plus", `Increase LoRA ${index + 1} strength`, () => commit(Math.min(100, value.strength + .01)));
             number.append(minus, amount, plus); strengthControl.append(number); strengthRow.append(strengthLabel, strengthControl); list.append(strengthRow);
@@ -122,7 +156,11 @@ function installLoader(node, definition) {
         sections: [{ title: "LoRAs", fields: [{ custom: () => root, update: refresh }] }] });
     const observer = new ResizeObserver(() => panel.schedule()); observer.observe(root);
     const removed = node.onRemoved;
-    node.onRemoved = function () { observer.disconnect(); unregister(); return removed?.apply(this, arguments); };
+    node.onRemoved = function () {
+        if (scrub?.moved) node.graph?.afterChange?.();
+        scrub = null;
+        observer.disconnect(); unregister(); return removed?.apply(this, arguments);
+    };
     node._rayLoraQKV = { refresh, status }; refresh();
 }
 

@@ -218,7 +218,9 @@ Connect a **MODEL** to **LoRA QKV Loader**, then connect its **MODEL** output to
 the sampler. Choose a LoRA from the filename suggestions or use its file button.
 Use **+** to add rows and **trash** to remove them. Each row has its own
 **Strength**: 1 uses the trained effect, 0 skips the row, and negative values
-reverse the adapter contribution. LoRAs are applied from top to bottom. Removing
+reverse the adapter contribution. Drag the number left or right to adjust it,
+hold Shift for finer steps, or click to type a value. LoRAs are applied from top
+to bottom. Removing
 every selection passes the input model through. The first filename and strength,
 and the additional-row list, can also be driven by links.
 
