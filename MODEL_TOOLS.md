@@ -110,9 +110,11 @@ only for methods that use them. **block_weights** is a JSON map of tensor
 prefixes to A ratios; the longest matching prefix wins. Unselected components
 pass through from A.
 
-Mismatch policies match the standalone suite: forbid is the default; intersect
-blends common tensors and copies unique tensors from both inputs; pad/trim
-handle common-key shape differences and still require matching key sets.
+**Forbid** is the default and requires matching tensor names and shapes.
+**Intersect**, **Pad** and **Trim** preserve tensors found in only one input
+unchanged. Intersect requires matching shapes for shared tensors. Pad zero-pads
+shared tensors to the larger size along each axis; Trim crops them to the smaller
+size.
 Padding/trimming cannot make unrelated architectures compatible. Matching
 structure does not establish that models share a compatible training base.
 

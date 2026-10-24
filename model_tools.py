@@ -646,8 +646,9 @@ def merge_models(a, b, destination, strategy="LERP", weight=.5, base=None, fmt="
     check = compare_models(a, b, scope)
     if not check["common"]:
         raise ValueError("Models have no matching tensors in the selected components.")
-    if (check["only_a"] or check["only_b"]) and mismatch != "intersect":
-        raise ValueError("Tensor key mismatch; inspect Model Compare or choose intersect (union passthrough).")
+    if (check["only_a"] or check["only_b"]) and mismatch == "forbid":
+        raise ValueError("Tensor key mismatch; Intersect, Pad and Trim preserve tensors found in only one input. "
+                         f"Only in A: {check['only_a'][:3]}; only in B: {check['only_b'][:3]}.")
     if check["shape_mismatches"] and mismatch not in ("pad", "trim"):
         raise ValueError(f"Shape mismatch: {check['shape_mismatches'][0]['name']}")
     common = {k for k in a.canon.keys() & b.canon.keys() if selected(a.canon[k], scope)}
@@ -696,7 +697,7 @@ def merge_models(a, b, destination, strategy="LERP", weight=.5, base=None, fmt="
             result = blend(ta.float(), tb.float(), ratio, strategy, base_t, density, lam, top, bottom,
                            torch.Generator().manual_seed(tensor_seed))
             encode(writer, key, result, fmt)
-        if mismatch == "intersect":
+        if mismatch != "forbid":
             for ck in check["only_b"]:
                 key = b.canon[ck]
                 output_key = ck

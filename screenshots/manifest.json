@@ -270,9 +270,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 646,
-      "source_fingerprint": "ebad6d4cd04228bbcacafb95e703d7a953e86d7a1f4319e1777cc0b2189c8ec0",
+      "source_fingerprint": "8dccdd5f4a7e06a8a659740f3895b278f6db70caf93ea8169093ae3a80309c8c",
       "sha256": "7d0c4378c00cb09bacbbe02ce693485aa642f2c36625d6a542c4c75fc5803cc9",
-      "captured_at": "2026-10-23T20:04:36.190Z"
+      "captured_at": "2026-10-24T09:12:57.692Z"
     },
     "RayLoraExtract": {
       "file": "RayLoraExtract.png",
@@ -310,9 +310,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 733,
-      "source_fingerprint": "876c25637ec544e5d2de9a17a585a945f0dce56fdf484e04e1560fd033af16f2",
+      "source_fingerprint": "45218489e69d4dcb6879604f7cf5787e9a6e32cb0b6da65e2f103fe79c8c699e",
       "sha256": "b8fbf13773d9d91735355ff6b06c05d653affbb4b2d9699fb30adfeb294a6e81",
-      "captured_at": "2026-10-23T20:04:38.145Z"
+      "captured_at": "2026-10-24T09:12:59.628Z"
     },
     "RayMetaInspect": {
       "file": "RayMetaInspect.png",
@@ -420,9 +420,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 441,
-      "source_fingerprint": "8f65043f99144144a63867622d38358ca97a26045976039331b41ee975105453",
+      "source_fingerprint": "46068e2ddd9c748af6fb38f04f878b8cc104ffa415996b42a3b23ed90e6cafa5",
       "sha256": "e19eebd2d34258b9612216bf33891c248424cd0ef56b774dc5b44843aebf8e18",
-      "captured_at": "2026-10-23T20:04:34.250Z"
+      "captured_at": "2026-10-24T09:12:55.738Z"
     },
     "RayModelConvert": {
       "file": "RayModelConvert.png",
@@ -456,9 +456,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 525,
-      "source_fingerprint": "64608230465dbaa7bb611256b689621de0dd10fdde056bf75514c137cb27d270",
+      "source_fingerprint": "009ed7231948f29bb0d1642161295ae2e270a7c46eed7de1f704439050c820d7",
       "sha256": "a44b33e20d0c3a953f8a946959bcbb7f2dfdd116f70cb9c32e5aee55b8d97fa6",
-      "captured_at": "2026-10-23T20:04:22.735Z"
+      "captured_at": "2026-10-24T09:12:44.048Z"
     },
     "RayModelInspector": {
       "file": "RayModelInspector.png",
@@ -483,9 +483,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 348,
-      "source_fingerprint": "aabaf3912d908ae57c2dd57c17dc325df1a73692b0b11da32043773383814a7b",
+      "source_fingerprint": "f1d7c1158887775bd91e5e97b7d57eb06a5a44cf0c240afa706a18c3f7164fe4",
       "sha256": "f4b73f4ef0d502552698fb6676fbe9947e120659ac584b373d04144a2bc32f5d",
-      "captured_at": "2026-10-23T20:04:32.348Z"
+      "captured_at": "2026-10-24T09:12:53.780Z"
     },
     "RayModelLoadAs": {
       "file": "RayModelLoadAs.png",
@@ -517,9 +517,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 530,
-      "source_fingerprint": "211af99e222fb3e71572039976ac81fe94cbec6da6158f62afb6e6fe6de99d25",
+      "source_fingerprint": "863eb276b1ea52b3eaab71830b118fc4950e848a80b0e6903c137322eb0b7415",
       "sha256": "57590b964e434e3fa0515edb218e3430b44bc7442d2dbbe5d4e43819f4c26578",
-      "captured_at": "2026-10-23T20:04:20.800Z"
+      "captured_at": "2026-10-24T09:12:42.080Z"
     },
     "RayModelMerge": {
       "file": "RayModelMerge.png",
@@ -570,9 +570,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 760.1875,
-      "source_fingerprint": "206ce08a8321de217e39e2a17d37da39cde20853f1970ba65e528a3994ff7f02",
+      "source_fingerprint": "75845168dbe6fb6061f0727a724586244341fa87c89750038494e88d93508505",
       "sha256": "094a72e6754556193809c426e35fa4f2e570509c1eb77090329b5a79e0854034",
-      "captured_at": "2026-10-23T20:04:30.444Z"
+      "captured_at": "2026-10-24T09:12:51.842Z"
     },
     "RayModelMetadata": {
       "file": "RayModelMetadata.png",
@@ -596,9 +596,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 285,
-      "source_fingerprint": "57cbb8f5a854884cec5aaccbe6508e834de9e52444b89b2d09003d2333386441",
+      "source_fingerprint": "4cccb5b25f445dd7bc2056faa6c8be375222dc14b49a9428d87c533768a89e51",
       "sha256": "0ede9f3ce65dee9ba50b51a526b5956af8f101c66a089f60c8f561838266842a",
-      "captured_at": "2026-10-23T20:04:26.583Z"
+      "captured_at": "2026-10-24T09:12:47.932Z"
     },
     "RayModelMetadataSave": {
       "file": "RayModelMetadataSave.png",
@@ -624,9 +624,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 502.1875,
-      "source_fingerprint": "763d1f87238a25cbfb11c2ad0205525e18796ac0a7f1217c3985515019af7306",
+      "source_fingerprint": "f7de25b8264a985ebfe03728e92a39f1ae58f0305a9df9c9105d09668ac4c7ca",
       "sha256": "72215d0cb0f578aace25d8926ecca4acb952351c3828674fab497e10ae706304",
-      "captured_at": "2026-10-23T20:04:28.500Z"
+      "captured_at": "2026-10-24T09:12:49.883Z"
     },
     "RayModelSave": {
       "file": "RayModelSave.png",
@@ -658,9 +658,9 @@
       },
       "width_css_px": 470,
       "height_css_px": 664.1875,
-      "source_fingerprint": "12e380c33d4af11fffac22ac6ad700291e5d153e36426e2343f28721d030ff65",
+      "source_fingerprint": "412b7786e425347c0e67cec0c3f9ef616601964d1779f6c3a88d2ed3b4af8a25",
       "sha256": "e80f04276064ffad75444e44cd020e25735c21ae822621d2c34bfa89362c8415",
-      "captured_at": "2026-10-23T20:04:24.660Z"
+      "captured_at": "2026-10-24T09:12:45.994Z"
     },
     "RayOffsetPrint": {
       "file": "RayOffsetPrint.png",

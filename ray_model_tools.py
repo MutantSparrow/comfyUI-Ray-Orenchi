@@ -327,7 +327,7 @@ class RayModelMetadataSave:
 
 
 class RayModelMerge:
-    DESCRIPTION = "Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's nine strategies. Task-vector strategies require a base_model or base_data connection. Intersect merges common keys and passes through the union."
+    DESCRIPTION = "Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's nine strategies. Task-vector strategies require a base_model or base_data connection. Intersect, Pad and Trim preserve tensors found in only one input; Pad/Trim also resize shared tensors."
     CATEGORY, FUNCTION = CATEGORY, "merge"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report")
@@ -336,7 +336,7 @@ class RayModelMerge:
     def INPUT_TYPES(cls):
         return {"required": {"strategy": combo(core.STRATEGIES), "weight_a": number(.5),
             "weight_format": combo(core.FORMATS[1:], "bf16"), "components": combo(SCOPES),
-            "mismatch": combo(["forbid", "intersect", "pad", "trim"]),
+            "mismatch": combo(["forbid", "intersect", "pad", "trim"], tooltip="Forbid: require matching names and shapes. Intersect: merge shared tensors of matching shape. Pad/Trim: resize shared tensors to the larger/smaller shape. Intersect, Pad and Trim preserve tensors present in only one input unchanged."),
             "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
             "density": number(.5), "lambda": number(1., 0., 5.), "top_trim": number(.1, 0., .99),
             "bottom_trim": number(.01, 0., .99), "load_result": ("BOOLEAN", {"default": True})},
