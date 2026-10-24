@@ -5,7 +5,7 @@ ModelMergeTools app and its FastAPI server are not required.
 
 | Node | Purpose |
 | --- | --- |
-| [Load Model As](screenshots/RayModelLoadAs.png) | Choose a safetensors checkpoint/diffusion model with the file picker, or select a sharded model directory. Auto detects the loader. |
+| [Load Model As](screenshots/RayModelLoadAs.png) | Choose a safetensors checkpoint/diffusion model with the file picker. Auto detects the loader. |
 | [Convert Model](screenshots/RayModelConvert.png) | Convert a file or connected MODEL into another storage format. |
 | [Save Model](screenshots/RayModelSave.png) | Save the effective model, including active merge and LoRA patches, with optional CLIP/VAE and metadata. |
 | [Metadata Load / Edit](screenshots/RayModelMetadata.png) | Read model metadata or a JSON sidecar into an editable table and raw JSON editor. |
@@ -13,7 +13,7 @@ ModelMergeTools app and its FastAPI server are not required.
 | [Model Merge](screenshots/RayModelMerge.png) | LERP, SLERP, TIES, DARE-Linear, DARE-TIES, DELLA, DELLA-TIES, Breadcrumbs, Breadcrumbs-TIES. |
 | [Model Inspector](screenshots/RayModelInspector.png) | Header-only tensor listing, dtype distribution, byte counts, and architecture detection. |
 | [Model Compare](screenshots/RayModelCompare.png) | Compare names, shapes and dtypes before merging. |
-| [LoRA Bake](screenshots/RayLoraBake.png) | Bake an adapter using ComfyUI's adapter mappings and supported LoRA variants. |
+| [LoRA Bake](screenshots/RayLoraBake.png) | Choose a LoRA file and bake it using ComfyUI's adapter mappings and supported LoRA variants. |
 | [LoRA Extract](screenshots/RayLoraExtract.png) | SVD extraction from finetuned minus base, including convolution weights. |
 
 
@@ -26,7 +26,6 @@ between model operations and Save Model.
 Reports are also available as STRING outputs.
 
 Use the file icon beside a source path to choose a model or metadata file.
-Where available, the folder icon chooses a model directory, including sharded models.
 The file icon beside **Output file** opens Save As; Metadata Save switches
 between JSON and safetensors according to its mode. Leave Output file blank to
 use the filename prefix and ComfyUI output folder. Choosing a path does not

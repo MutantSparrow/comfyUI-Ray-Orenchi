@@ -424,7 +424,7 @@ class RayLoraBake:
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"lora_name": combo(files("loras")), "strength_model": number(1., -20., 20.),
+        return {"required": {"lora_name": text(), "strength_model": number(1., -20., 20.),
                              "strength_clip": number(1., -20., 20.), "weight_format": combo(core.FORMATS, "preserve"),
                              "load_result": ("BOOLEAN", {"default": True})},
                 "optional": {"model": ("MODEL",), "clip": ("CLIP",), "vae": ("VAE",),
