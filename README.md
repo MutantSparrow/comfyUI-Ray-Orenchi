@@ -56,8 +56,8 @@ are owned by ComfyUI; the pack does not install or upgrade Torch.
 
 ## Good to know
 
-- **Fast Qwen3-VL Infer** uses a full native Qwen3-VL 4B or 8B checkpoint for images, loaded with
-  ComfyUI's `CLIPLoader` (type `qwen_image`, or `krea2`). Connect its `CLIP`, an image and
+- **Fast Qwen3-VL Infer** uses a full native Qwen3 checkpoint or encoder that still retains its LMHead which are more modern DIT model's encoders
+, loaded with  ComfyUI's `CLIPLoader` (type `qwen_image`, or `krea2`). Connect its `CLIP`, an image and
   a prompt. Compatible generative text-only Qwen models use their native generator.
   Details and measurements are in [FAST_VLM.md](FAST_VLM.md).
 - **Network access:** Folders browsing is local-only by default. To permit remote
@@ -75,24 +75,10 @@ are owned by ComfyUI; the pack does not install or upgrade Torch.
 - Works in both the classic canvas and Nodes 2.0. Node IDs are stable, so saved workflows
   keep loading.
 
-## Controls and saving
-
-Node settings open from the cog at the top right of the content area. A pencil
-edits content, such as Button Deck entries. Folder buttons choose directories;
-file buttons choose source files or explicit Save As destinations. Hover over a
-control or port for its description, and use **?** for the full node help.
-
-Metadata Inspector's **Embed** mode writes PNG files. Choose a destination with
-Save As, connect the image, and supply a JSON object of metadata. Existing files
-are preserved unless **Overwrite** is enabled; invalid metadata or a filename
-collision stops the save with an error.
 
 ## Documentation
 
 [NODES.md](NODES.md) is the node-by-node reference for inputs, outputs and behavior.
-
-[NODE_REFERENCE.md](NODE_REFERENCE.md) lists every current input, control, output,
-default, range, and tooltip, including controls hidden by inactive modes.
 
 [FOLDERS.md](FOLDERS.md) covers the media gallery, selection, filtering and outputs.
 
