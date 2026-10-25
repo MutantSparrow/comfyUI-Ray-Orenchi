@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import tomllib
 
 import pytest
 
@@ -8,6 +9,8 @@ spec = importlib.util.spec_from_file_location("registry_release", ROOT / "script
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 SHA = "a" * 40
+VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+NEWER_VERSION = f"{release.Version(VERSION).major + 1}.0.0"
 
 
 def setup_release(monkeypatch, runs, node=None, versions=None):
@@ -32,7 +35,7 @@ def run(**updates):
 
 def test_unpublished_version_requires_success_for_exact_main_commit(monkeypatch):
     setup_release(monkeypatch, [run()])
-    assert release.preflight(ROOT, SHA, "github-credential") == ("ray-orenchi", "1.0.0", True)
+    assert release.preflight(ROOT, SHA, "github-credential") == ("ray-orenchi", VERSION, True)
 
 
 @pytest.mark.parametrize("runs", [[], [run(head_sha="b" * 40)], [run(head_branch="feature")],
@@ -51,23 +54,23 @@ def test_different_checkout_cannot_release(monkeypatch):
 
 
 def test_existing_version_is_skipped_and_older_version_is_rejected(monkeypatch):
-    setup_release(monkeypatch, [run()], {"publisher": {"id": "ray"}, "latest_version": {"version": "1.0.0"}})
+    setup_release(monkeypatch, [run()], {"publisher": {"id": "ray"}, "latest_version": {"version": VERSION}})
     assert release.preflight(ROOT, SHA, "github-credential")[2] is False
-    setup_release(monkeypatch, [run()], {"publisher": {"id": "ray"}, "latest_version": {"version": "1.1.0"}})
+    setup_release(monkeypatch, [run()], {"publisher": {"id": "ray"}, "latest_version": {"version": NEWER_VERSION}})
     with pytest.raises(RuntimeError, match="older than"):
         release.preflight(ROOT, SHA, "github-credential")
 
 
 def test_other_publishers_package_is_rejected(monkeypatch):
-    setup_release(monkeypatch, [run()], {"publisher": {"id": "someone-else"}, "latest_version": {"version": "1.0.0"}})
+    setup_release(monkeypatch, [run()], {"publisher": {"id": "someone-else"}, "latest_version": {"version": VERSION}})
     with pytest.raises(RuntimeError, match="different publisher"):
         release.preflight(ROOT, SHA, "github-credential")
 
 
 def test_pending_version_is_not_uploaded_again_before_catalog_processing(monkeypatch):
     setup_release(monkeypatch, [run()], {"publisher": {"id": "ray"}, "latest_version": None},
-                  versions=[{"version": "1.0.0", "status": "NodeVersionStatusPending"}])
-    assert release.preflight(ROOT, SHA, "github-credential") == ("ray-orenchi", "1.0.0", False)
+                  versions=[{"version": VERSION, "status": "NodeVersionStatusPending"}])
+    assert release.preflight(ROOT, SHA, "github-credential") == ("ray-orenchi", VERSION, False)
 
 
 def test_registry_errors_do_not_silently_allow_a_release(monkeypatch):
