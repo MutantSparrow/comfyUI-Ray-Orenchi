@@ -7,6 +7,9 @@ for (const [name, url] of [
     ['Analog controls', 'http://127.0.0.1:8199/'],
     ['Input connector alignment', 'http://127.0.0.1:8199/tests/panel_links_browser.html'],
     ['Save Image comparison interactions', 'http://127.0.0.1:8202/'],
+    ['Model Card name builder, settings, clipboard and reload', 'http://127.0.0.1:8202/tests/model_card_browser.html'],
+    ['Model Tools metadata, reports and source dialogs', 'http://127.0.0.1:8203/'],
+    ['Folders refresh after workflow completion', 'http://127.0.0.1:8200/tests/folders_execution_browser.html'],
 ]) {
     test(name, async ({page, request}) => {
         if (name.startsWith('Folders:')) {
@@ -46,3 +49,41 @@ test('Offline blinded pixel-art review and exported judgments', async ({page}) =
     await page.locator('#back').click();
     await expect(page.locator('#notes')).toHaveValue('cleaner contours');
 });
+
+for (const [surface, index] of [['classic', 0], ['Nodes 2.0', 1]]) {
+    test(`Model Card picker accepts pointer input (${surface})`, async ({page}) => {
+        await page.goto('http://127.0.0.1:8202/tests/model_card_browser.html');
+        await expect(page.locator('#summary')).toHaveText(/\d+ checks passed/);
+        await page.locator('details').evaluate(element => { element.open = false; });
+        const card = page.locator('.card').nth(index);
+        const source = card.getByLabel('Card name', {exact:true});
+        await source.fill('');
+        const choose = card.getByRole('button', {name:'Build card name',exact:true});
+        await choose.click();
+        const dialog = page.getByRole('dialog', {name:'Build card name',exact:true});
+        await dialog.getByRole('button', {name:'Widget value…',exact:true}).click();
+        const picker = dialog.locator('.ray-name-widgets').last();
+        await expect(picker).toBeVisible();
+        // Real pointer clicks check hit testing; HTMLElement.click() bypasses it.
+        await picker.locator('button[title="{widget:13.ckpt_name}"]').click({timeout:3000});
+        const editor = dialog.getByRole('textbox', {name:'Card name',exact:true});
+        await expect(editor).toHaveValue('{widget:13.ckpt_name}');
+        await expect(dialog.locator('.ray-name-preview')).toHaveText('My SDXL');
+        await editor.fill('Benchmark');
+        await dialog.getByRole('button', {name:'Widget value…',exact:true}).click();
+        const filter = picker.getByRole('textbox', {name:'Filter widgets'});
+        await filter.click();
+        await filter.fill('unet_name');
+        await expect(picker.locator('button[title="{widget:13.ckpt_name}"]')).toHaveCount(0);
+        await picker.locator('button[title="{widget:12.unet_name}"]').click();
+        await expect(editor).toHaveValue('Benchmark {widget:12.unet_name}');
+        await expect(dialog.locator('.ray-name-preview')).toHaveText('Benchmark Flux Dev.v1');
+        await dialog.getByRole('button', {name:'Done',exact:true}).click();
+        await expect(dialog).toHaveCount(0);
+        await expect(source).toHaveValue('Benchmark {widget:12.unet_name}');
+        await choose.click();
+        await expect(editor).toHaveValue('Benchmark {widget:12.unet_name}');
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+    });
+}

@@ -66,3 +66,5 @@ node's current mode.
 README and node documentation are for end users. Describe features, controls,
 usage and limitations. Keep development requests, discussions, maintenance rules
 and contributor instructions in this file or dedicated developer documentation.
+Keep design rationale, icon dimensions and placement standards, shared-component
+instructions, and audit results in `UI.md` or `developer/`, never in the README.

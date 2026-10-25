@@ -11,5 +11,6 @@ module.exports = defineConfig({
         {command: 'python tests/serve_folders.py 8200', url: 'http://127.0.0.1:8200/fixture', reuseExistingServer: false},
         {command: 'node tests/serve_analog.cjs 8199', url: 'http://127.0.0.1:8199/', reuseExistingServer: false},
         {command: 'node tests/serve_save_image.cjs', url: 'http://127.0.0.1:8202/', reuseExistingServer: false},
+        {command: 'node tests/serve_model_tools.cjs', url: 'http://127.0.0.1:8203/', reuseExistingServer: false},
     ],
 });

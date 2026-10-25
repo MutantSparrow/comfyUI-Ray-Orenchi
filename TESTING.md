@@ -32,6 +32,9 @@ runs the JS tests and browser regressions: legacy/Nodes 2.0 layouts, wheel captu
 100,000-file responsiveness, lazy thumbnails, local NSFW inference, prompt cards,
 temporary asset deletion, connector alignment and comparison controls. Browser
 fixtures bind only to loopback and recreate their own temporary files between tests.
+The same suite covers Model Card naming, real pointer input in its widget picker,
+settings and workflow restoration; Model Tools metadata editing, source/output
+dialogs and reports; and Folders refresh after downstream workflow outputs finish.
 No GPU or private checkpoint is needed for these required jobs. Configure branch
 protection to require these checks when enforcing merge rules in GitHub.
 
@@ -189,6 +192,14 @@ renderers. It also covers a second-input-only batch, singleton pairing, and
 single-image and empty previews.
 
 ## Backend changes
+
+`tests/test_model_card.py` checks the configuration grammar, naming, seed order,
+card layout, sampling calls, resource limits and cleanup using tiny local tensors
+and sampling doubles. `tests/test_ray_save_image.py` covers custom metadata,
+connected empty metadata and global metadata suppression for both image batches.
+`tests/test_browse.py` checks that Save As preserves new filenames and selects a
+destination without creating the file. `npm test` includes Model Tools metadata
+round trips, duplicate-key and numeric-precision rejection, and tensor filtering.
 
 For model-processing controls, use the isolated checks below:
 

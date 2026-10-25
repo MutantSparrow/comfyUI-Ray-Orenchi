@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import io
+from types import SimpleNamespace
 import sys
 import threading
 from unittest.mock import patch
@@ -20,6 +22,7 @@ def test_filters_keep_only_plain_extensions():
     assert cleaned == [("Images", ["png", "jpg"]), ("Pipe Name", ["txt"])]
     assert br.clean_filters(None) == [] and br.clean_filters("png") == []
     assert len(br.clean_filters([[f"F{i}", ["a"]] for i in range(30)])) == br.MAX_FILTERS
+    assert br.clean_filters([["Models", ["safetensors", "gguf", "json", "x" * 17]]]) == [("Models", ["safetensors", "gguf", "json"])]
 
 
 def test_start_location_uses_the_nearest_folder_that_exists(tmp_path):
@@ -140,3 +143,31 @@ def test_only_this_computer_may_open_a_dialog():
         assert br.is_local(remote)
     for remote in ("192.168.1.20", "10.0.0.5", "8.8.8.8", "", None, "127.0.0.2.evil.example"):
         assert not br.is_local(remote)
+
+
+def test_save_location_preserves_a_new_filename(tmp_path):
+    destination = tmp_path / "new model.safetensors"
+    assert not destination.exists()
+    assert br.start_location("save", str(destination)) == (str(tmp_path), destination.name)
+    assert br.start_location("save", str(tmp_path)) == (str(tmp_path), "")
+
+
+@pytest.mark.parametrize("extension", ["json", "safetensors"])
+def test_save_dialog_chooses_a_new_file_without_writing_it(monkeypatch, tmp_path, extension):
+    destination = tmp_path / f"new file.{extension}"
+    seen = {}
+    def choose(**kwargs):
+        seen.update(kwargs)
+        return str(destination)
+    root = SimpleNamespace(withdraw=lambda: None, attributes=lambda *args: None, update=lambda: None)
+    tk = SimpleNamespace(Tk=lambda: root, filedialog=SimpleNamespace(asksaveasfilename=choose))
+    monkeypatch.setitem(sys.modules, "tkinter", tk)
+    command = br.build_command("save", str(destination), "", [["Output", [extension]]])
+    monkeypatch.setattr(sys, "argv", ["dialog", *command[3:]])
+    output = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", SimpleNamespace(buffer=output))
+    exec(compile(br._TK, "<tk dialog>", "exec"), {})
+    assert output.getvalue().decode("utf-8") == str(destination)
+    assert seen["initialdir"] == str(tmp_path) and seen["initialfile"] == destination.name
+    assert seen["defaultextension"] == "." + extension and seen["title"] == "Choose a save file"
+    assert not destination.exists()

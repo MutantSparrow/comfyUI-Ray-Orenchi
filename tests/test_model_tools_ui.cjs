@@ -1,0 +1,23 @@
+const assert = require('node:assert/strict');
+(async () => {
+    const {metadataRows, rowsToMetadata, mergeFields, filterTensors, parseMetadataJSON} = await import('../web/model_tools_ui.mjs');
+    const original = {raw: '{ "x": [1, true] }', leading: '001', nested: {x:[1,true,null]}, unicode:'日本語', '__proto__': 'literal'};
+    assert.deepEqual({...rowsToMetadata(metadataRows(original))}, original);
+    assert.throws(() => rowsToMetadata([{key:'a',type:'text',value:'1'},{key:'a',type:'text',value:'2'}]), /Duplicate/);
+    assert.throws(() => rowsToMetadata([{key:'a',type:'json',value:'invalid'}]));
+    assert.throws(() => parseMetadataJSON('{"a":1,"a":2}'),/Duplicate/);
+    assert.throws(() => parseMetadataJSON('{"a":{"x":1,"x":2}}'),/Duplicate/);
+    assert.throws(() => parseMetadataJSON('{"a":9007199254740999}'),/safe range/);
+    assert.deepEqual(parseMetadataJSON('{"a":[{"x":1},{"x":2}]}'), {a:[{x:1},{x:2}]});
+    const malicious = rowsToMetadata([{key:'__proto__',type:'json',value:'{"polluted":true}'}]);
+    assert.equal({}.polluted, undefined); assert.equal(malicious.__proto__.polluted, true);
+    assert.equal(mergeFields('LERP').density, false);
+    assert.equal(mergeFields('DARE-TIES').seed, true);
+    assert.equal(mergeFields('DELLA').lambda, true);
+    assert.equal(mergeFields('Breadcrumbs-TIES').top_trim, true);
+    const rows = Array.from({length:250}, (_,i)=>({name:`layer.${i}`,dtype:i%2?'F16':'BF16',shape:[2,3]}));
+    assert.equal(filterTensors(rows,'',9).page, 2);
+    assert.equal(filterTensors(rows,'',2).rows.length, 50);
+    assert.equal(filterTensors(rows,'BF16').total,125);
+    console.log('Model Tools metadata and tensor filtering checks passed');
+})().catch(error => {console.error(error); process.exitCode=1;});

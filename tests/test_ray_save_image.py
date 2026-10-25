@@ -80,12 +80,38 @@ class SaveTests(unittest.TestCase):
             self.assertIn("workflow", image.info)
 
     def test_metadata_omission_and_global_override(self):
-        for global_disable, node_disable in ((False, True), (True, False)):
-            cli.args.disable_metadata = global_disable
-            result = self.run_save(save_without_metadata=node_disable)
-            with Image.open(result["ray_saved"][0]) as image:
-                self.assertNotIn("prompt", image.info)
-                self.assertNotIn("workflow", image.info)
+        for metadata in (None, "custom metadata"):
+            for global_disable, node_disable in ((False, True), (True, False), (True, True)):
+                with self.subTest(metadata=metadata, global_disable=global_disable, node_disable=node_disable):
+                    cli.args.disable_metadata = global_disable
+                    result = self.run_save(save_without_metadata=node_disable, metadata=metadata)
+                    with Image.open(result["ray_saved"][0]) as image:
+                        self.assertEqual(image.text, {})
+
+    def test_custom_metadata_replaces_defaults_verbatim_for_both_batches(self):
+        for text in ("a cat\nNegative prompt: blur\nSteps: 20, Seed: 42",
+                     '  {"caption": "猫 🐈", "seed": 42}\n  '):
+            with self.subTest(text=text):
+                result = self.run_save(save_image="both", metadata=text)
+                self.assertEqual(len(result["ray_saved"]), 3)
+                for saved in result["ray_saved"]:
+                    with Image.open(saved) as image:
+                        self.assertEqual(image.text, {"parameters": text})
+                for item in result["ray_images_1"] + result["ray_images_2"]:
+                    with Image.open(self.root / "temp" / item["subfolder"] / item["filename"]) as image:
+                        self.assertEqual(image.text, {})
+
+    def test_connected_empty_metadata_replaces_defaults(self):
+        result = self.run_save(metadata="")
+        with Image.open(result["ray_saved"][0]) as image:
+            self.assertEqual(image.text, {"parameters": ""})
+
+    def test_unconnected_metadata_preserves_all_default_chunks(self):
+        extra = {"workflow": {"nodes": []}, "custom": ["value"], "parameters": "existing"}
+        result = self.node.save(self.one, prompt={"test": 1}, extra_pnginfo=extra)
+        with Image.open(result["ui"]["ray_saved"][0]) as image:
+            self.assertEqual(image.text, {key: json.dumps(value) for key, value in
+                                         {"prompt": {"test": 1}, **extra}.items()})
 
     def test_optional_second_input(self):
         self.assertEqual(len(self.node.save(self.one, save_image="both")["ui"]["ray_saved"]), 1)
