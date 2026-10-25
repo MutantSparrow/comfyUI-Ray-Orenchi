@@ -20,6 +20,80 @@ MODEL_IDS = ["RayModelLoadAs", "RayModelConvert", "RayModelSave", "RayModelMetad
              "RayModelMetadataSave", "RayModelMerge", "RayModelInspector", "RayModelCompare",
              "RayLoraBake", "RayLoraExtract"]
 
+# Shared descriptions for the same connections and controls across Model Tools.
+INPUT_TOOLTIPS = {
+    "model_name": "Choose a registered checkpoint or diffusion model. The folder dropdown searches full paths in every subfolder.",
+    "weight_format": "Storage precision or quantization for the result. Auto/Preserve keeps the source representation where supported. Converting to higher precision cannot recover information already lost.",
+    "loader": "Choose automatic architecture detection, a complete checkpoint loader, or a diffusion-only loader. Used when an inference output needs the result.",
+    "load_components": "Include available text encoders and VAE when loading a checkpoint for inference. Diffusion-only files do not contain those components.",
+    "path": "Existing source file or supported sharded model folder on the ComfyUI server. A connected live model or model-data handle takes precedence where available.",
+    "model": "Connected model to process, including its active patches and LoRAs. Takes precedence over a model-data handle or file source.",
+    "clip": "Optional text encoder to include with the connected model. It must match the model architecture and selected component scope.",
+    "vae": "Optional VAE to preserve with the connected model when the operation supports complete checkpoints.",
+    "model_data": "File or in-memory model result from another Model Tools node. Supports data-only processing without initializing inference components.",
+    "components": "Choose diffusion weights, diffusion plus text encoders, text encoders only, or all supported components. Unselected components follow the operation's preservation rules.",
+    "metadata": "Structured model metadata from another node. Use Metadata Load / Edit to inspect or change its fields.",
+    "metadata_json": "Additional metadata as a JSON object. Values may be text or JSON values; duplicate keys and invalid numbers are rejected.",
+    "output_path": "Optional explicit destination file on the ComfyUI server. Leave blank for automatic output naming; the extension must match the selected output mode.",
+    "editor_json": "Metadata currently entered in the table or JSON editor. Changes are retained with the workflow; malformed JSON prevents execution.",
+    "editor_source": "Source associated with the edited metadata. Updated by Load / Edit so the editor keeps the selected source when the workflow is reopened.",
+    "mode": "Save a standalone JSON metadata sidecar, or copy a source model with new embedded metadata while preserving its tensor bytes.",
+    "filename_prefix": "Name or prefix for automatic output under ComfyUI's output folder. An explicit Output file takes precedence when available.",
+    "overwrite": "Allow replacement of an existing destination file. Off preserves existing files and reports a filename collision instead of replacing them.",
+    "source_model_path": "Source safetensors model whose tensor bytes will be copied with the supplied metadata. Required in model-copy mode.",
+    "max_rows": "Maximum tensor rows included in the inspection table and report. Higher values produce larger reports; total model statistics are still reported.",
+    "path_a": "Existing model A file to compare. A connected model A or its data handle takes precedence.",
+    "path_b": "Existing model B file to compare. A connected model B or its data handle takes precedence.",
+    "model_a": "First live model to compare. Its effective weights, including active patches, supply source A.",
+    "model_b": "Second live model to compare. Its effective weights, including active patches, supply source B.",
+    "data_a": "Model-data handle supplying comparison source A when no live model A is connected.",
+    "data_b": "Model-data handle supplying comparison source B when no live model B is connected.",
+    "lora_name": "Choose a registered LoRA file. The folder dropdown searches full paths across all registered LoRA subfolders.",
+    "lora_path": "Optional explicit LoRA file on the ComfyUI server, including sources outside the registered LoRA folders.",
+    "strength_model": "Multiplier for the LoRA's diffusion-model changes. Zero leaves those weights unchanged; negative values reverse the adapter's direction.",
+    "strength_clip": "Multiplier for the LoRA's supported text-encoder changes. Zero leaves the text encoder unchanged; negative values reverse those changes.",
+    "rank": "Maximum low-rank dimension retained per extracted LoRA tensor. Higher ranks preserve more of the difference and produce larger adapters.",
+    "alpha": "LoRA alpha written into the adapter scaling metadata. Zero uses the selected rank.",
+    "include_embeddings": "Include supported embedding changes in the extracted adapter in addition to the selected low-rank weight differences.",
+    "finetuned_model": "Fine-tuned live model from which to extract changes relative to the base model. Connected effective weights take precedence over file/data sources.",
+    "base_model": "Compatible original live model used as the reference for extraction. Use the actual training base for meaningful differences.",
+    "finetuned_clip": "Fine-tuned text encoder for extraction when the selected component scope includes text-encoder weights.",
+    "base_clip": "Compatible base text encoder paired with the fine-tuned text encoder for extraction.",
+    "finetuned_data": "Model-data handle supplying fine-tuned weights when no fine-tuned live model is connected.",
+    "base_data": "Model-data handle supplying base weights when no base live model is connected.",
+    "finetuned_path": "Fine-tuned checkpoint file used when its live-model and data inputs are unconnected.",
+    "base_path": "Compatible base checkpoint file used when its live-model and data inputs are unconnected.",
+}
+OUTPUT_TOOLTIPS = {
+    "model": "Native ComfyUI diffusion model. Inference components are initialized when this output is used; data-only workflows can use model_data instead.",
+    "clip": "Native text encoder when available in the source and enabled by the selected loading/component options; otherwise absent.",
+    "vae": "Native VAE when available in the source and enabled by the selected loading/component options; otherwise absent.",
+    "model_data": "Model Tools data handle for a source file or in-memory result. Connect it directly to compatible merge, conversion, inspection, or save nodes without an extra inference load.",
+    "metadata": "Structured metadata for the source or result, including operation information where applicable.",
+    "report": "Readable inspection or operation report, including compatibility, format, processing, and saved-result information relevant to this operation.",
+    "saved_path": "Actual server path of the completed output file. Emitted only after a successful save.",
+    "metadata_json": "Edited metadata serialized as JSON text, suitable for a JSON sidecar or metadata input.",
+    "structurally_compatible": "Whether the compared tensor names and shapes are structurally compatible. This does not prove a shared training base or guarantee a good merge.",
+    "lora_data": "Model Tools data handle referring to the saved extracted LoRA adapter.",
+    "merge_name": "Suggested merge filename containing resolved source names, strategy, settings, and execution datetime. Connect to Save Model's filename_prefix.",
+}
+
+
+def describe_inputs(spec):
+    """Attach shared help without changing names, values, bounds, or ordering."""
+    for group in ("required", "optional"):
+        for name, value in spec.get(group, {}).items():
+            if name not in INPUT_TOOLTIPS:
+                continue
+            options = dict(value[1]) if len(value) > 1 else {}
+            options.setdefault("tooltip", INPUT_TOOLTIPS[name])
+            spec[group][name] = (value[0], options, *value[2:])
+    return spec
+
+
+def output_tooltips(names):
+    return tuple(OUTPUT_TOOLTIPS[name] for name in names)
+
 
 def text(default="", multiline=False, **options):
     return ("STRING", {"default": default, "multiline": multiline, **options})
@@ -201,14 +275,15 @@ class RayModelLoadAs:
     CATEGORY, FUNCTION = CATEGORY, "load"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report")
+    OUTPUT_TOOLTIPS = output_tooltips(RETURN_NAMES)
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"model_name": text(), "weight_format": combo(["auto", *core.FORMATS]),
+        return describe_inputs({"required": {"model_name": text(), "weight_format": combo(["auto", *core.FORMATS]),
                              "loader": combo(["auto", "checkpoint", "diffusion"]),
                              "load_components": ("BOOLEAN", {"default": True})},
                 "optional": {"path": text(), "model_data": ("RAY_MODEL_DATA",)},
-                "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}}
+                "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}})
 
     @classmethod
     def IS_CHANGED(cls, model_name="", path="", model_data=None, prompt=None, unique_id=None, **kwargs):
@@ -242,13 +317,14 @@ class RayModelConvert:
     CATEGORY, FUNCTION = CATEGORY, "convert"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report")
+    OUTPUT_TOOLTIPS = output_tooltips(RETURN_NAMES)
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"weight_format": combo(core.FORMATS[1:], "bf16"), "components": combo(SCOPES)},
+        return describe_inputs({"required": {"weight_format": combo(core.FORMATS[1:], "bf16"), "components": combo(SCOPES)},
                 "optional": {"model": ("MODEL",), "clip": ("CLIP",), "vae": ("VAE",),
                              "model_data": ("RAY_MODEL_DATA",), "path": text()},
-                "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}}
+                "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}})
 
     @classmethod
     def IS_CHANGED(cls, path="", prompt=None, unique_id=None, **_):
@@ -270,17 +346,18 @@ class RayModelSave:
     DESCRIPTION = "Save a connected MODEL or model_data as <filename_prefix>.safetensors in the output folder, without a counter. MODEL saves bake active patches; connect CLIP/VAE to include them. Connect metadata to merge or replace the source metadata. Existing files require overwrite."
     CATEGORY, FUNCTION, OUTPUT_NODE = CATEGORY, "save", True
     RETURN_TYPES, RETURN_NAMES = ("RAY_MODEL_DATA", "STRING"), ("model_data", "saved_path")
+    OUTPUT_TOOLTIPS = output_tooltips(RETURN_NAMES)
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"filename_prefix": text("Ray_Model", tooltip="Filename stem, without .safetensors. No counter is added; spaces and unsupported characters become underscores."),
+        return describe_inputs({"required": {"filename_prefix": text("Ray_Model", tooltip="Filename stem, without .safetensors. No counter is added; spaces and unsupported characters become underscores."),
                              "metadata_mode": combo(["merge", "replace"], tooltip="Merge preserves source metadata and adds connected fields. Replace keeps only connected fields, required quantization metadata and save history."),
                              "overwrite": ("BOOLEAN", {"default": False, "tooltip": "Allow replacing an existing file. Off preserves it and reports a filename collision."}),
                              "output_folder": text("model_tools", tooltip="Destination folder on the server. Blank uses ComfyUI output; relative folders are inside output. Missing folders are created when saving.")},
                 "optional": {"model": ("MODEL",), "clip": ("CLIP",), "vae": ("VAE",),
                              "model_data": ("RAY_MODEL_DATA",), "metadata": ("RAY_MODEL_METADATA",),
                              # Hidden compatibility values preserve saved workflows and connected legacy inputs.
-                             "metadata_json": text("", True), "path": text(), "output_path": text()}}
+                             "metadata_json": text("", True), "path": text(), "output_path": text()}})
 
     def save(self, filename_prefix="Ray_Model", metadata_mode="merge", overwrite=False,
              model=None, clip=None, vae=None, model_data=None, metadata=None, metadata_json="", path="", output_path="",
@@ -313,11 +390,12 @@ class RayModelMetadata:
     DESCRIPTION = "Load model metadata or a JSON sidecar. Use Load / Edit to populate the editable table. Strings remain strings; nested JSON can be expanded without changing it."
     CATEGORY, FUNCTION, OUTPUT_NODE = CATEGORY, "load", True
     RETURN_TYPES, RETURN_NAMES = ("RAY_MODEL_METADATA", "STRING"), ("metadata", "metadata_json")
+    OUTPUT_TOOLTIPS = output_tooltips(RETURN_NAMES)
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"path": text(), "editor_json": text("", True), "editor_source": text()},
-                "optional": {"model_data": ("RAY_MODEL_DATA",), "metadata": ("RAY_MODEL_METADATA",)}}
+        return describe_inputs({"required": {"path": text(), "editor_json": text("", True), "editor_source": text()},
+                "optional": {"model_data": ("RAY_MODEL_DATA",), "metadata": ("RAY_MODEL_METADATA",)}})
 
     IS_CHANGED = staticmethod(changed_path)
 
@@ -336,13 +414,14 @@ class RayModelMetadataSave:
     DESCRIPTION = "Save metadata as a structured JSON sidecar, or apply it to a safetensors copy without changing any tensor bytes."
     CATEGORY, FUNCTION, OUTPUT_NODE = CATEGORY, "save", True
     RETURN_TYPES, RETURN_NAMES = ("STRING",), ("saved_path",)
+    OUTPUT_TOOLTIPS = output_tooltips(RETURN_NAMES)
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"mode": combo(["json_sidecar", "model_copy"]), "filename_prefix": text("model_tools/Ray_Metadata"),
+        return describe_inputs({"required": {"mode": combo(["json_sidecar", "model_copy"]), "filename_prefix": text("model_tools/Ray_Metadata"),
                              "overwrite": ("BOOLEAN", {"default": False})},
                 "optional": {"metadata": ("RAY_MODEL_METADATA",), "metadata_json": text("", True),
-                             "source_model_path": text(), "output_path": text()}}
+                             "source_model_path": text(), "output_path": text()}})
 
     def save(self, mode="json_sidecar", filename_prefix="model_tools/Ray_Metadata", overwrite=False,
              metadata=None, metadata_json="", source_model_path="", output_path=""):
@@ -370,10 +449,11 @@ class RayModelMerge:
     CATEGORY, FUNCTION = CATEGORY, "merge"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report", "merge_name")
+    OUTPUT_TOOLTIPS = output_tooltips(RETURN_NAMES)
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {
+        return describe_inputs({"required": {
             "strategy": combo(core.STRATEGIES, tooltip="Merge method. LERP is a fast weighted average; SLERP blends along layer angles. TIES, DARE, DELLA and Breadcrumbs merge changes from a compatible base model. Open node Help for each method's strengths and limitations."),
             "weight_a": number(.5, tooltip="Contribution of A; B uses 1 minus this value. For LERP/SLERP, 1 selects A and 0 selects B. Other methods apply this ratio to pruned changes from the base. Matching block_weights entries override it."),
             "weight_format": combo(core.FORMATS[1:], "bf16", tooltip="Storage format for merged floating-point weights. Quantized formats target eligible Linear layers; other merged layers stay bf16. Higher precision needs more RAM and disk space and cannot restore precision already lost in a source."),
@@ -401,7 +481,7 @@ class RayModelMerge:
                 "base_path": text(tooltip="Legacy base-model path retained for saved workflows. Connect a compatible base to base_data or base_model instead."),
                 "block_weights": text("{}", True, forceInput=True, tooltip='Connect a STRING containing a JSON map of tensor prefixes to A ratios between 0 and 1, for example {"diffusion_model.blocks.0.": 0.7}. The longest prefix wins. Leave disconnected for the global Weight A ratio.'),
                 "fast_merge": ("BOOLEAN", {"default": False, "tooltip": "High RAM usage: retain the entire merged model in system RAM until ComfyUI releases its cache. A data-only connection to Save Model avoids intermediate disk writes. Insufficient RAM can cause paging or failure."})},
-            "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}}
+            "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}})
 
     @classmethod
     def IS_CHANGED(cls, path_a="", path_b="", base_path="", prompt=None, unique_id=None, **_):
@@ -441,11 +521,12 @@ class RayModelInspector:
     DESCRIPTION = "Inspect safetensors/sharded files without loading weights. Optional GGUF inspection needs gguf. A MODEL connection is exported in its effective state first."
     CATEGORY, FUNCTION, OUTPUT_NODE = CATEGORY, "inspect", True
     RETURN_TYPES, RETURN_NAMES = ("STRING", "RAY_MODEL_METADATA"), ("report", "metadata")
+    OUTPUT_TOOLTIPS = output_tooltips(RETURN_NAMES)
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"path": text(), "max_rows": ("INT", {"default": 5000, "min": 1, "max": 100000})},
-                "optional": {"model": ("MODEL",), "model_data": ("RAY_MODEL_DATA",)}}
+        return describe_inputs({"required": {"path": text(), "max_rows": ("INT", {"default": 5000, "min": 1, "max": 100000})},
+                "optional": {"model": ("MODEL",), "model_data": ("RAY_MODEL_DATA",)}})
 
     IS_CHANGED = staticmethod(changed_path)
 
@@ -459,12 +540,13 @@ class RayModelCompare:
     DESCRIPTION = "Compare tensor names, shapes and dtypes before merging. Header comparison does not measure weight similarity."
     CATEGORY, FUNCTION, OUTPUT_NODE = CATEGORY, "compare", True
     RETURN_TYPES, RETURN_NAMES = ("STRING", "BOOLEAN"), ("report", "structurally_compatible")
+    OUTPUT_TOOLTIPS = output_tooltips(RETURN_NAMES)
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"path_a": text(), "path_b": text(), "components": combo(SCOPES)},
+        return describe_inputs({"required": {"path_a": text(), "path_b": text(), "components": combo(SCOPES)},
                 "optional": {"model_a": ("MODEL",), "model_b": ("MODEL",),
-                             "data_a": ("RAY_MODEL_DATA",), "data_b": ("RAY_MODEL_DATA",)}}
+                             "data_a": ("RAY_MODEL_DATA",), "data_b": ("RAY_MODEL_DATA",)}})
 
     @classmethod
     def IS_CHANGED(cls, path_a="", path_b="", **_):
@@ -481,14 +563,15 @@ class RayLoraBake:
     CATEGORY, FUNCTION = CATEGORY, "bake"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report")
+    OUTPUT_TOOLTIPS = output_tooltips(RETURN_NAMES)
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"lora_name": text(), "strength_model": number(1., -20., 20.),
+        return describe_inputs({"required": {"lora_name": text(), "strength_model": number(1., -20., 20.),
                              "strength_clip": number(1., -20., 20.), "weight_format": combo(core.FORMATS, "preserve")},
                 "optional": {"model": ("MODEL",), "clip": ("CLIP",), "vae": ("VAE",),
                              "model_data": ("RAY_MODEL_DATA",), "path": text(), "lora_path": text()},
-                "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}}
+                "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}})
 
     @classmethod
     def IS_CHANGED(cls, path="", lora_path="", lora_name="", prompt=None, unique_id=None, **_):
@@ -539,17 +622,18 @@ class RayLoraExtract:
     DESCRIPTION = "Extract a low-rank approximation of finetuned minus base. Supports Linear and convolution weights. Alpha=0 uses each layer's actual rank. Error is the SVD truncation error before output rounding."
     CATEGORY, FUNCTION, OUTPUT_NODE = CATEGORY, "extract", True
     RETURN_TYPES, RETURN_NAMES = ("STRING", "RAY_MODEL_DATA", "STRING"), ("saved_path", "lora_data", "report")
+    OUTPUT_TOOLTIPS = output_tooltips(RETURN_NAMES)
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {"required": {"filename_prefix": text("model_tools/Ray_Extracted_LoRA"),
+        return describe_inputs({"required": {"filename_prefix": text("model_tools/Ray_Extracted_LoRA"),
             "rank": ("INT", {"default": 16, "min": 1, "max": 4096}), "alpha": number(0., 0., 4096., 1.),
             "components": combo(["diffusion", "diffusion_and_text", "text_encoder"]),
             "weight_format": combo(["bf16", "fp16", "fp32"]), "include_embeddings": ("BOOLEAN", {"default": False})},
             "optional": {"finetuned_model": ("MODEL",), "base_model": ("MODEL",),
                 "finetuned_clip": ("CLIP",), "base_clip": ("CLIP",),
                 "finetuned_data": ("RAY_MODEL_DATA",), "base_data": ("RAY_MODEL_DATA",),
-                "finetuned_path": text(), "base_path": text(), "output_path": text()}}
+                "finetuned_path": text(), "base_path": text(), "output_path": text()}})
 
     @classmethod
     def IS_CHANGED(cls, finetuned_path="", base_path="", **_):

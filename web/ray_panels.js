@@ -71,8 +71,11 @@ export const PANEL_SPECS = {
     RayMetaInspect: { sections: [
         { title: "Metadata", fields: [
             "mode",
-            { name: "path", label: "Image file", browse: { kind: "file", title: "Choose an image", filters: IMAGE_FILTERS }, placeholder: "Path to an image (or connect one)" },
-            { name: "metadata_json", label: "Metadata to embed (JSON)", rows: 6 },
+            { name: "path", label: "Image file / output PNG", browse: node => value(node, "mode") === "Embed"
+                ? { kind: "save", title: "Save metadata PNG as", filters: [["PNG image", ["png"]]] }
+                : { kind: "file", title: "Choose an image", filters: IMAGE_FILTERS }, placeholder: "Source image, or destination .png in Embed mode" },
+            { name: "metadata_json", label: "Metadata to embed (JSON)", rows: 6, when: node => value(node, "mode") === "Embed" },
+            { name: "overwrite", when: node => value(node, "mode") === "Embed" },
         ] },
     ] },
 

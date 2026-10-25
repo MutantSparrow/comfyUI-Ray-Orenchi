@@ -156,10 +156,43 @@ def test_node_embed_invalid_json(tmp_path):
     import torch
     img = torch.zeros((1, 4, 4, 3), dtype=torch.float32)
     node = rmi.RayMetaInspect()
-    out = node.process(mode="Embed", path=str(tmp_path / "x.png"),
-                       image=img, metadata_json="not json{")
-    raw = json.loads(out[10])
-    assert "error" in raw
+    with pytest.raises(ValueError, match="metadata_json invalid"):
+        node.process(mode="Embed", path=str(tmp_path / "x.png"),
+                     image=img, metadata_json="not json{")
+
+
+@pytest.mark.parametrize("metadata", ['{"same":1,"same":2}', '{"x":NaN}', '[]'])
+def test_embed_rejects_invalid_metadata_without_writing(tmp_path, metadata):
+    import torch
+    target = tmp_path / "invalid.png"
+    with pytest.raises(ValueError):
+        rmi.RayMetaInspect().process("Embed", str(target), torch.zeros((1,4,4,3)), metadata)
+    assert not target.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_embed_preserves_existing_file_unless_overwrite_enabled(tmp_path):
+    target = tmp_path / "existing.png"
+    _png(target, {"parameters": "original"})
+    original = target.read_bytes()
+    with pytest.raises(FileExistsError):
+        rmi.embed_file(Image.new("RGB", (8,8), "blue"), {"parameters":"replacement"}, target)
+    assert target.read_bytes() == original
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["existing.png"]
+    rmi.embed_file(Image.new("RGB", (8,8), "blue"), {"parameters":"replacement"}, target, overwrite=True)
+    assert rmi.inspect_file(target)["prompt_positive"] == "replacement"
+
+
+def test_embed_validates_suffix_and_cleans_failed_writes(tmp_path, monkeypatch):
+    image = Image.new("RGB", (8,8))
+    with pytest.raises(ValueError, match=".png"):
+        rmi.embed_file(image, {}, tmp_path / "wrong.jpg")
+    def fail(*args, **kwargs):
+        raise OSError("simulated disk failure")
+    monkeypatch.setattr(image, "save", fail)
+    with pytest.raises(OSError, match="disk failure"):
+        rmi.embed_file(image, {}, tmp_path / "failed.png")
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_input_types_declares_required_widgets():

@@ -54,6 +54,7 @@ class RayQueuedModelLoader:
 
     RETURN_TYPES = ("MODEL",)
     RETURN_NAMES = ("MODEL",)
+    OUTPUT_TOOLTIPS = ("Native ComfyUI MODEL list in selected row order. Downstream nodes process each model in one execution, reusing singleton prompts, seeds, and settings.",)
     OUTPUT_IS_LIST = (True,)
     FUNCTION = "load"
     CATEGORY = "👑 Ray/🧰 Model Tools"

@@ -424,8 +424,8 @@ class RayFolders:
             "folder": ("STRING", {"default": "", "tooltip": "Browse or connect an absolute folder path."}),
             "name_filter": ("STRING", {"default": "", "tooltip": "Fuzzy filename and prompt search; all words must match."}),
         }, "optional": {
-            "selected_files": ("STRING", {"default": "{}"}),
-            "settings_json": ("STRING", {"default": "{}"}),
+            "selected_files": ("STRING", {"default": "{}", "tooltip": "Media chosen in the gallery, retained with the workflow. Click to select one file; Ctrl/Cmd-click toggles additional selections."}),
+            "settings_json": ("STRING", {"default": "{}", "tooltip": "Gallery sorting, media types, recursion, color/NSFW filters, and prompt options. Change these through the top-right settings cog."}),
         }, "hidden": {"node_id": "UNIQUE_ID"}}
 
     RETURN_TYPES = ("IMAGE", "VIDEO", "AUDIO", "STRING", "STRING")

@@ -54,6 +54,13 @@ Use these exact category and display-title patterns:
   terminal action when required by its execution semantics.
 - MUST provide backend defaults and numeric limits; the frontend must agree.
   Tooltips explain units, special values, formats, and constraints.
+- MUST document every required/optional input and every native output through
+  schema tooltips, including optional and mode-dependent controls. Shared
+  panels read the registered schema from `node.constructor.nodeData`; do not
+  rely on ComfyUI copying tooltip text into the native widget object. Custom
+  controls use the shared `inputTooltip()` helper where their meaning matches
+  a native field. Keep [NODE_REFERENCE.md](NODE_REFERENCE.md) synchronized with
+  the registered schemas using `scripts/update_node_reference.py --check`.
 - SHOULD keep connected data as typed sockets and editable settings as native
   widgets. Use `forceInput` when a value is intentionally connection-only.
 - MUST preserve serialization and migration of existing workflows. A new UI may
@@ -225,6 +232,20 @@ rows as the output labels and sockets on the right.
 - MUST check both Nodes 2.0 and the legacy canvas at normal and narrow widths,
   including long labels, linked inputs, and all default ports. A supported
   stacked fallback is preferable to clipped labels or intercepted links.
+
+Use `installOutputLane()` in [web/output_lane.js](web/output_lane.js) for this
+policy. Standard unmounted panels install it automatically; custom Folders
+uses the same helper. It measures native output labels and socket geometry,
+reserves that lane beside the first visible section, and restores stacked rows
+when controls do not fit or native inputs need the space. Never copy the old
+Folders-only `widgets_start_y=0` override.
+
+**Current renderer support:** the legacy canvas exposes `widgets_start_y` for
+safe row sharing. Nodes 2.0 in frontend 1.57.1 places native slots and DOM
+widgets in separate vertical rows and exposes no equivalent placement hook;
+the shared helper deliberately uses stacked rows there. Keep this supported
+fallback until the frontend provides safe layout support. Do not simulate
+support with negative margins, native-template CSS selectors, or port overlays.
 
 ## 5. Icons and file/folder actions
 
@@ -498,6 +519,9 @@ an undocumented private function or copying it.
 | Need | Existing implementation to use or extend |
 | --- | --- |
 | Standard controls, sections, path rows, sizing, settings dialog | [web/ray_panel.js](web/ray_panel.js): `installPanel`, `ensurePanelStyles`, `openPanelSettings` |
+| Custom popup surface and controls | [web/ray_panel.js](web/ray_panel.js): `.rp-surface`, `.rp-title`, `.rp-section`, `toggleButton`; keep only content-specific layout in popup CSS |
+| Schema descriptions on custom controls | [web/ray_panel.js](web/ray_panel.js): `inputTooltip(node, name, fallback)` |
+| Measured content/output lanes and renderer fallback | [web/output_lane.js](web/output_lane.js): `installOutputLane`, `measureOutputLane` |
 | Declarative layouts for ordinary nodes | [web/ray_panels.js](web/ray_panels.js): `PANEL_SPECS` |
 | Shared SVGs and icon buttons | [web/ray_panel.js](web/ray_panel.js): `ICONS`, `iconButton` |
 | Settings cog and node action placement | [web/ray_panel.js](web/ray_panel.js): `iconButton("settings", ...)`, `createNodeHeader`, `installPanel` headerActions / section actions; standard and custom panels use the same API |
@@ -509,6 +533,7 @@ an undocumented private function or copying it.
 | Image saver, output folder semantics, comparison preview | [ray_save_image.py](ray_save_image.py), [web/ray_save_image.js](web/ray_save_image.js) |
 | Model source resolution, snapshots, native loading, output paths, progress | [ray_model_tools.py](ray_model_tools.py): `resolve_file`, `source_path`, `load_asset`, `save_path`, `progress` |
 | Tensor sources/assets, conversion, merging, safe writers, model metadata | [model_tools.py](model_tools.py): `TensorSource`, `ModelAsset`, `TensorWriter`, `commit_file` and operation helpers |
+| Dependency-free atomic commits and duplicate-key JSON parsing | [data_io.py](data_io.py): `commit_file`, `parse_metadata_json`; Model Tools re-exports both for existing callers |
 | Model metadata table/raw editor and paged report | [web/ray_model_tools.js](web/ray_model_tools.js), [web/model_tools_ui.mjs](web/model_tools_ui.mjs) |
 | Read-only model previews | [model_tools_routes.py](model_tools_routes.py) |
 | Folder/media selection and server asset handling | [web/folders_gallery.js](web/folders_gallery.js), [folders_routes.py](folders_routes.py), [ray_folders.py](ray_folders.py) |

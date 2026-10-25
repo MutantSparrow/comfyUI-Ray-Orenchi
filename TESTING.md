@@ -39,6 +39,31 @@ prove that controls are usable or correctly placed.
 For `tests/shared_actions_browser.cjs`, the optional `RAY_BROWSER_CHANNEL`
 environment variable selects an installed browser such as `msedge` or `chrome`.
 
+## Node contract and documentation
+
+```shell
+python scripts/update_node_reference.py --url http://127.0.0.1:8194 --check
+node tests/node_contract_browser.cjs http://127.0.0.1:8194
+node tests/output_lane_browser.cjs http://127.0.0.1:8194
+python -m pytest tests/test_meta_inspect.py tests/test_model_tools.py
+```
+
+The contract browser check instantiates every registered node in both renderers.
+It verifies input/output help, custom-panel tooltip binding, magenta section
+headings and dividers, shared settings placement, popup controls, keyboard
+isolation, Apply/Cancel behavior, and mode-dependent image/PNG dialogs. Set
+`RAY_BROWSER_CHANNEL` when selecting an installed browser. It never runs models
+or opens a real native file dialog.
+
+The output-lane check exercises measured legacy row sharing, native socket hit
+targets, unchanged port coordinates, settings containment, narrow/long-label
+and native-input fallbacks, teardown, and the supported Nodes 2.0 stacked layout.
+
+After a schema change, update `NODE_REFERENCE.md` by running the reference
+command without `--check` against the isolated instance with empty model folders.
+The metadata tests cover PNG round trips, duplicate/invalid JSON, no-clobber
+saving, explicit overwrite, suffix validation, and temporary-file cleanup.
+
 ## Loader dropdowns
 
 ```shell

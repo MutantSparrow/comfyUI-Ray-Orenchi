@@ -7,7 +7,7 @@ class RayKnob:
         "studio hardware. Drag turns the knob or moves the slider cap; "
         "outputs both an INT (quantized by `clamp`) and a raw FLOAT so it "
         "plugs into either side without a converter.\n\n"
-        "Right-click for the style picker (nine knobs, five sliders), Mute "
+        "Right-click for the 31 shared hardware styles, Mute "
         "sound (knobs, sliders and switches make hardware sounds), Compact "
         "mode (the faceplate alone: no title bar, pins, setup panel or node "
         "background; drag it by its frame, links meet it under the face), and "
@@ -20,9 +20,9 @@ class RayKnob:
         return {
             "required": {
                 "min_value":      ("FLOAT",   {"default": -100.0, "min": -1e9, "max": 1e9, "step": 0.1,
-                                                "tooltip": "Range minimum."}),
+                                                "tooltip": "Lowest allowed output value. Negative limits apply only when Allow negative is enabled."}),
                 "max_value":      ("FLOAT",   {"default":  100.0, "min": -1e9, "max": 1e9, "step": 0.1,
-                                                "tooltip": "Range maximum."}),
+                                                "tooltip": "Highest allowed output value. A value below the effective minimum collapses the range to that minimum."}),
                 "clamp":          ("FLOAT",   {"default":    0.0, "min":  0.0, "max": 1024.0, "step": 0.1,
                                                 "tooltip": "Quantization step for the INT output. 0 truncates."}),
                 "allow_negative": ("BOOLEAN", {"default": True,

@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { setWidgetHidden } from "./_common.js";
 import { installLegacyLinkLayout } from "./legacy_panel_links.js";
+import { installOutputLane } from "./output_lane.js";
 import { browsePath, notify } from "./browse_common.js";
 
 // The Ray panel: every Ray node draws its controls in one black, compact panel, in the style of Save Image
@@ -88,11 +89,47 @@ export function humanize(name) {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+export function inputTooltip(node, name, fallback = "") {
+    const input = node.constructor?.nodeData?.input;
+    const spec = input?.required?.[name] || input?.optional?.[name];
+    return spec?.[1]?.tooltip || fallback;
+}
+
+export function toggleButton(title, value, onChange) {
+    injectStyles();
+    const button = el("button", "rp-toggle");
+    button.type = "button";
+    button.title = title;
+    button.setAttribute("role", "switch");
+    button.setAttribute("aria-label", title);
+    button.setAttribute("aria-checked", String(!!value));
+    isolateKeys(button);
+    button.addEventListener("pointerdown", event => { if (event.button === 0) event.stopPropagation(); });
+    button.addEventListener("click", event => {
+        event.stopPropagation();
+        if (button.disabled) return;
+        const next = button.getAttribute("aria-checked") !== "true";
+        onChange(next);
+        button.setAttribute("aria-checked", String(next));
+    });
+    return button;
+}
+
 export const PANEL_CSS = `
 .dom-widget:has(> .rp-host) {pointer-events:none !important}
 .rp-host {width:100%;height:100%;overflow:hidden;pointer-events:none}
 .rp {box-sizing:border-box;width:100%;padding:6px 6px 8px;display:flex;flex-direction:column;gap:6px;background:#000;color:#eee;font:12px system-ui,sans-serif;color-scheme:dark;pointer-events:none;border-radius:8px}
 .rp * {box-sizing:border-box}
+.rp-surface {background:#000;color:#eee;border:1px solid #383838;border-radius:8px;font:12px system-ui,sans-serif;color-scheme:dark}
+.rp-surface * {box-sizing:border-box}
+.rp-surface button {min-height:28px;padding:4px 9px;font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:5px;cursor:pointer}
+.rp-surface button:hover:not(:disabled) {background:#454753}
+.rp-surface button:disabled {opacity:.4;cursor:default}
+.rp-surface button[data-primary] {background:#e2e2e2;border-color:#e2e2e2;color:#111}
+.rp-surface :is(input[type=text],input[type=number],textarea,select) {min-width:0;padding:4px 9px;background:#141414;color:#eee;border:1px solid #3a3a3a;border-radius:5px;font:inherit}
+.rp-surface :is(input[type=text],input[type=number],select) {height:28px}
+.rp-surface :is(input,textarea,select):disabled {opacity:.55}
+.rp-surface :focus-visible {outline:2px solid #b9a4fa;outline-offset:1px}
 .rp[hidden], .rp-row[hidden], .rp-section[hidden] {display:none !important}
 .rp-section {display:flex;flex-direction:column;gap:6px;min-width:0}
 .rp-section:not([hidden]) ~ .rp-section:not([hidden]) {border-top:1px solid #2b2b2b;padding-top:8px}
@@ -122,9 +159,9 @@ export const PANEL_CSS = `
 .rp .rp-icon.rp-settings, button.rp-icon.rp-settings {width:30px;height:30px}
 .rp-icon svg {width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .rp-seg {display:flex;flex:0 1 auto;min-width:0;border:1px solid #444;border-radius:5px;overflow:hidden}
-.rp .rp-seg button {flex:1 1 auto;min-width:0;height:26px;padding:3px 8px;font-size:12px;background:transparent;border:0;border-radius:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rp .rp-seg button + button {border-left:1px solid #2f2f2f}
-.rp .rp-seg button[aria-pressed=true], .rp .rp-seg button[aria-pressed=true]:hover {background:#e2e2e2;color:#111}
+:is(.rp,.rp-surface) .rp-seg button {flex:1 1 auto;min-width:0;min-height:0;height:26px;padding:3px 8px;font-size:12px;background:transparent;border:0;border-radius:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:is(.rp,.rp-surface) .rp-seg button + button {border-left:1px solid #2f2f2f}
+:is(.rp,.rp-surface) .rp-seg button[aria-pressed=true], :is(.rp,.rp-surface) .rp-seg button[aria-pressed=true]:hover {background:#e2e2e2;color:#111}
 .rp-number {display:flex;flex:1 1 0;min-width:0;height:28px;border:1px solid #3a3a3a;border-radius:5px;background:#141414;overflow:hidden}
 .rp-number .rp-input {border:0;border-radius:0;background:transparent;text-align:center;padding:4px 2px;cursor:ew-resize}
 .rp-number .rp-input:focus {cursor:text}
@@ -137,12 +174,14 @@ export const PANEL_CSS = `
 .rp-fill {position:absolute;left:0;top:13px;height:3px;border-radius:2px;background:#d6d6d6}
 .rp-thumb {position:absolute;top:8px;width:13px;height:13px;margin-left:-6.5px;border-radius:50%;background:#eee;box-shadow:0 0 0 3px #000}
 .rp-slider .rp-input {flex:0 0 58px;text-align:right;padding:4px 7px}
-.rp .rp-toggle {position:relative;flex:0 0 auto;width:34px;height:18px;padding:0;border-radius:9px;background:#2a2a2a;border:1px solid #444}
-.rp .rp-toggle::after {content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#8a8a8a;transition:left .12s}
-.rp .rp-toggle[aria-checked=true] {background:#e2e2e2;border-color:#e2e2e2}
-.rp .rp-toggle[aria-checked=true]::after {left:18px;background:#111}
-.rp .rp-toggle:hover:not(:disabled) {background:#3a3a3a}
-.rp .rp-toggle[aria-checked=true]:hover:not(:disabled) {background:#fff}
+.rp .rp-toggle, button.rp-toggle[role=switch] {position:relative;flex:0 0 auto;width:34px;min-height:0;height:18px;padding:0;border-radius:9px;background:#2a2a2a;border:1px solid #444;cursor:pointer;pointer-events:auto}
+.rp-toggle[role=switch]::after {content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#8a8a8a;transition:left .12s}
+.rp-toggle[role=switch][aria-checked=true] {background:#e2e2e2;border-color:#e2e2e2}
+.rp-toggle[role=switch][aria-checked=true]::after {left:18px;background:#111}
+.rp-toggle[role=switch]:hover:not(:disabled) {background:#3a3a3a}
+.rp-toggle[role=switch][aria-checked=true]:hover:not(:disabled) {background:#fff}
+button.rp-toggle[role=switch]:focus-visible {outline:2px solid #b9a4fa;outline-offset:1px}
+button.rp-toggle[role=switch]:disabled {opacity:.4;cursor:default}
 .rp-link .rp-unlink {width:22px;height:22px;border:0;background:transparent;color:#9a9a9a;display:grid;place-items:center;padding:0;border-radius:4px;cursor:pointer}
 .rp-link .rp-unlink:hover {background:#2a2a2a;color:#eee}
 .rp-link {display:flex;flex:1 1 0;min-width:0;align-items:center;gap:6px;height:28px;padding:0 4px 0 9px;border:1px dashed #4a4a4a;border-radius:5px;color:#bdbdbd;font-size:11px}
@@ -301,6 +340,8 @@ export function installPanel(node, spec = {}) {
     // and is measured on its own; measuring the stretched element would feed its height back into itself.
     const host = el("div", "rp-host");
     const root = el("div", "rp");
+    // Custom editors mounted in sections need the same keyboard isolation as native rows.
+    isolateKeys(root);
     host.append(root);
     const rows = [];
     const panel = { node, root, rows, refresh, schedule, fit, destroy, widgetEl: null };
@@ -339,7 +380,7 @@ export function installPanel(node, spec = {}) {
         const full = field.full ?? (["textarea", "path"].includes(kind) && field.labelAbove !== false);
         const row = { name: widget.name, widget, when: field.when, kind, element: el("div", `rp-row${full ? " rp-full" : ""}${kind === "toggle" ? " rp-bool" : ""}`) };
         const label = el("label", "rp-label", field.label || humanize(widget.name));
-        const tooltip = field.tooltip || widget.tooltip || widget.options?.tooltip || "";
+        const tooltip = field.tooltip || inputTooltip(node, widget.name, widget.tooltip || widget.options?.tooltip || "");
         label.title = tooltip || widget.name;
         row.element.title = tooltip;
         const control = el("div", "rp-control");
@@ -370,7 +411,15 @@ export function installPanel(node, spec = {}) {
             linkBox.style.display = info ? "flex" : "none";
             for (const b of row.actions || []) b.disabled = !!info;
             if (info) linkText.textContent = `From ${info.origin?.title || info.origin?.type || "a link"}${info.output ? ` · ${info.output}` : ""}`;
-            else editor.update();
+            else {
+                editor.update();
+                if (tooltip) {
+                    editor.element.title = tooltip;
+                    if (editor.focusable) editor.focusable.title = tooltip;
+                    if (kind === "segment") for (const button of editor.element.children)
+                        button.title = `${tooltip}\n${button.textContent}`;
+                }
+            }
         };
         return row;
     }
@@ -457,9 +506,7 @@ export function installPanel(node, spec = {}) {
 
     function buildControl(kind, widget, field, row) {
         if (kind === "toggle") {
-            const button = el("button", "rp-toggle");
-            button.type = "button"; button.setAttribute("role", "switch");
-            button.addEventListener("click", () => write(widget, !widget.value));
+            const button = toggleButton(field.label || humanize(widget.name), widget.value, next => write(widget, next));
             return { element: button, focusable: button, update() { button.setAttribute("aria-checked", String(!!widget.value)); } };
         }
         if (kind === "segment") {
@@ -533,11 +580,16 @@ export function installPanel(node, spec = {}) {
                 try {
                     const { kind: pick = "folder", title, filters } = options();
                     const picked = await browsePath(pick, String(widget.value ?? ""), { title, filters });
-                    if (picked) write(widget, picked);
+                    if (picked && !linkOf(node, widget.name) && (options().kind || "folder") === pick) write(widget, picked);
                 } catch (error) { notify(error.message); }
             });
             wrap.append(input, browse);
-            return { element: wrap, focusable: input, update() { if (document.activeElement !== input) input.value = String(widget.value ?? ""); } };
+            return { element: wrap, focusable: input, update() {
+                const current = options();
+                browse.title = current.title || (current.kind === "save" ? "Choose a save file" : current.kind === "file" ? "Choose a file" : "Choose a folder");
+                browse.setAttribute("aria-label", browse.title);
+                if (document.activeElement !== input) input.value = String(widget.value ?? "");
+            } };
         }
         if (kind === "slider") {
             const wrap = el("div", "rp-slider"), track = el("div", "rp-track"), fill = el("div", "rp-fill"), thumb = el("div", "rp-thumb");
@@ -595,6 +647,8 @@ export function installPanel(node, spec = {}) {
             };
             const minus = el("button"); minus.type = "button"; minus.innerHTML = ICONS.minus; minus.setAttribute("aria-label", "Decrease"); minus.tabIndex = -1;
             const plus = el("button"); plus.type = "button"; plus.innerHTML = ICONS.plus; plus.setAttribute("aria-label", "Increase"); plus.tabIndex = -1;
+            minus.title = `Decrease ${field.label || humanize(widget.name)} by ${stepOf(widget)}`;
+            plus.title = `Increase ${field.label || humanize(widget.name)} by ${stepOf(widget)}`;
             minus.addEventListener("click", e => { e.stopPropagation(); nudge(-1); });
             plus.addEventListener("click", e => { e.stopPropagation(); nudge(1); });
             box.append(minus, input, plus);
@@ -660,7 +714,7 @@ export function installPanel(node, spec = {}) {
     }
 
     // ---- refresh -------------------------------------------------------------------------------------------
-    let queued = false, lastHeight = 0;
+    let queued = false, lastHeight = 0, outputLane;
     function schedule() {
         if (queued) return;
         queued = true;
@@ -695,6 +749,7 @@ export function installPanel(node, spec = {}) {
     const minWidth = spec.minWidth || 340;
     function fit() {
         if (spec.settings) return;
+        outputLane?.refresh();
         const h = height();
         // node.size is a typed array, not an Array.
         const hasSize = node.size && node.size.length >= 2;
@@ -714,7 +769,7 @@ export function installPanel(node, spec = {}) {
     // Values also change from outside (control after generate, other extensions, a loaded workflow).
     const timer = setInterval(() => { if (root.isConnected) refresh(); }, 400);
     function destroy() {
-        clearInterval(timer); unregister();
+        clearInterval(timer); unregister(); outputLane?.destroy();
         for (const section of sections) section.header.destroy();
         if (spec.settings) for (const row of rows) if (row.widget?.rayPanel === panel) delete row.widget.rayPanel;
     }
@@ -736,6 +791,10 @@ export function installPanel(node, spec = {}) {
         let at = spec.before ? list.findIndex(w => w.name === spec.before) : -1;
         if (at < 0) at = list.findIndex(w => w.element && w.type !== "customtext");
         list.splice(at < 0 ? list.length : at, 0, domWidget);
+        if (!spec.settings) {
+            outputLane = installOutputLane(node, root, {onChange() {lastHeight = -1; schedule();}});
+            panel.outputLane = outputLane;
+        }
     }
     node[panelKey] = panel;
     const unregister = spec.settings ? () => {} : registerLinkTargets(node, rows, refresh);

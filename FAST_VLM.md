@@ -1,73 +1,64 @@
 # Fast Qwen3-VL Infer
 
-Implemented on branch `FastVLM` in `G:\AI_APPS\_APPS\_MyApps\_ComfyUI_A1111_etc\comfyUI-Ray-Orenchi` and installed in the local ComfyUI copy of that pack. Existing uncommitted work was preserved. No core ComfyUI source, checkpoint, or dependency was changed.
+Generate text with a native generative Qwen CLIP already loaded in ComfyUI.
+Qwen3-VL accepts optional images and can use the fast decode path. Compatible
+text-only Qwen models, including native Qwen3 and Qwen3.5 wrappers, use their
+native generator and ignore the image input. The node keeps its existing name
+and `RayFastQwen3VL` identifier for saved workflows.
 
-## Use
+## Connect and run
 
-Connect `CLIPLoader (type: qwen_image)` → **Ray's LLM: Fast Qwen3-VL Infer**, plus `IMAGE` and a plain prompt. Connect its `STRING` output to Preview as Text or another text consumer. Branch the **same CLIPLoader output** to conditioning nodes to reuse the same model.
+For image understanding, connect a full Qwen3-VL 4B or 8B checkpoint from
+**CLIPLoader** with type `qwen_image` (or a compatible `krea2` loader), connect
+**image**, and enter the instruction in **prompt**. Use the loader's default GPU
+device. Connect **text** to Preview as Text or another text consumer. The same
+CLIP can also feed conditioning nodes; the node reuses its weights.
 
-The node takes max tokens, temperature, top-p, top-k, seed, and optional thinking. Temperature zero uses greedy decoding. `mode=native` provides an A/B baseline. `sync_interval=8` checks stopping every eight tokens; it returns only through the first stop token, but may compute up to seven discarded tokens. Set it to 1 for immediate stopping. Cancellation is checked at every step. An image batch is a single multi-image conversation, following the native tokenizer; it is not a batch of independent captions.
+For a text-only native Qwen model, connect its generative CLIP and a prompt.
+An ordinary non-generative text-conditioning encoder is unsuitable. The
+connected tokenizer supplies its own chat template and thinking behavior.
 
-The separate development folder and ComfyUI's installed custom-node folder are ordinary directories, not a junction. Both received the new module and registration.
+An image batch is one multi-image conversation. Use **Folder Captioner** when
+you want independent captions for individual images. The decoded answer is
+returned as one STRING; reaching **Max tokens** can truncate it.
 
-## Measured results
+## Controls
 
-Local RTX 5090 (32 GB), Windows, PyTorch 2.12.1+cu130, ComfyUI v0.35.2 / commit `85eecc613aac153c2a3dfd6322434597c048ea05`, `qwen3vl_8b_fp8_scaled.safetensors`. Dynamic VRAM was enabled. One native model was loaded once and reused sequentially. Test image: 640×480 white background with red rectangle, blue circle, green triangle. Prompt requested shape/color/position descriptions. Every timed run generated 160 tokens; timing was capped, so the responses are not complete captions.
+| Control | Behavior |
+|---|---|
+| **Max tokens** | Upper bound on generated tokens; default 256. |
+| **Temperature** | 0 uses greedy decoding; positive values sample with the configured seed. |
+| **Top P / Top K** | Native sampling filters. Top K 0 disables that filter; greedy decoding ignores both. |
+| **Seed** | Reproducible sampling seed when temperature is positive. |
+| **Generation preset** | `custom` uses the penalty controls, with neutral defaults. `anti_loop` explicitly uses repetition 1.0 and presence 1.5 and can change the answer. |
+| **Repeat penalty / Presence penalty** | Penalize previously generated tokens. Neutral values are 1.0 and 0.0 respectively. |
+| **Mode** | `fast` uses the optimized path on compatible Qwen3-VL models and otherwise falls back to native. `native` always uses the stock generator for comparison. |
+| **Sync interval** | Fast Qwen3-VL stop-check interval, default 8. It may compute up to N-1 extra tokens, which are discarded after the first stop token. Set 1 for immediate stop checks. |
+| **Thinking** | Requests the tokenizer/checkpoint's supported thinking mode; its effect depends on the model. |
+| **Repeat guard** | Fast Qwen3-VL only: stops when the same 8-256-token phrase repeats three times. |
 
-| Path | Whole request | Decode tokens/s | Time to first token |
-|---|---:|---:|---:|
-| Native, warmed | 10.252 s | 15.77 | 168 ms |
-| Fast, first switch | 2.346 s | 94.05 | 653 ms |
-| Fast, repeated | 1.868 s | 94.13 | 176 ms |
-| Kitchen decode without graphs | 9.303 s | 17.47 | 202 ms |
-| Fast, seeded sampling | 2.386 s | 89.13 | 599 ms |
-| Kitchen without graphs, sampled | 9.121 s | 17.77 | 170 ms |
-| Native after switching back | 10.020 s | 16.20 | 205 ms |
+## Compatibility and resources
 
-The repeated greedy request was **5.49× faster overall and 5.97× faster during decode** than the warmed native run. These are local measurements on this workload, not universal guarantees. CUDA events measured decode between the first and last sampled tokens; wall time includes vision/prefill, loading transitions, generation, and graph cleanup. Small diagnostic hooks were present in both paths. Cold checkpoint construction is excluded; the first native generation took 12.451 s including initial residency setup.
+Fast initialization targets compatible full Qwen3-VL models and the native
+ComfyUI 0.42.x interfaces. An incompatible model or API uses native generation.
+Truncated conditioning-only models cannot act as full generative models.
+Other Qwen families keep their native generator.
 
-All 36 decoder blocks captured native managed graphs. Python-level Kitchen decode calls dropped to 72 per request (warmup/capture); the remaining invocations execute through graph replay. Native baseline made zero calls to this decode kernel. Ordinary torch peak-memory statistics do not account fully for Comfy's dynamic allocator, so no peak VRAM reduction is claimed.
+Graph acceleration depends on a supported CUDA device, native dynamic memory
+management/compiler support and the decode kernel. If those capabilities are
+unavailable, expect less acceleration or the native path. The node does not
+convert checkpoint weights or keep a second full copy of them. Generation
+buffers and graphs are released after each request, including failures.
 
-## What was slow
+Fast and native attention can produce different tokens because of floating-point
+rounding. A fixed sampling seed does not guarantee identical text across different
+attention backends or checkpoints. Full image preprocessing remains enabled;
+very large images can dominate prompt processing time. Resize upstream when
+appropriate for the task. Model weights and request buffers must fit available
+resources.
 
-`qwen3vl.py` wraps `Llama2_` and `BaseGenerate` in the normal CLIP stack. The tokenizer inserts image embeddings, native preprocessing resizes/normalizes images to [-1,1], and the vision model produces the main embedding plus DeepStack features. Image processing and vision encoding happen once per request. DeepStack features are injected only during prefill. They are not recomputed per generated token.
-
-`BaseGenerate` already allocates the full KV capacity (`prompt length + max_length`) once per request. The ordinary attention path writes into this cache and slices it; it does not ordinarily concatenate/recreate the whole cache every token. Keeping KV across unrelated images would be incorrect without prefix identity and patch invalidation. This node keeps KV request-local.
-
-The important missing optimizations were:
-
-1. Qwen3-VL inherits `fixed_kv=False`. Therefore the existing `FixedKV` / `comfy_kitchen.flash_attention_decode` path was unused.
-2. Qwen3-VL leaves native block graph support and dynamic block prefetch disabled. Sequential decode repeatedly dispatches all projections, normalization, rotary operations, MLP operations, cache writes, and attention through Python/PyTorch and weight management. Enabling graphs with valid stable inputs provides most of the measured gain.
-3. The native loop calls `.item()` on the generated token every step, synchronizing the host with the GPU. It also creates a new position tensor from a Python scalar each decode step and updates progress every token. The new loop keeps position and output IDs on device, uses the existing sampler, and transfers IDs in bounded groups.
-
-Specialized engines combine model-specific fused kernels, graph execution, memory layouts, KV management, and decode-oriented matrix operations. Their continuous batching also matters for serving throughput. ComfyUI's generic conditioning-oriented path does not automatically enable those optimizations for this model. No llama.cpp/vLLM engine benchmark was run, so this work does not claim parity with them.
-
-## ComfyKitchen: the distinction that matters
-
-Text attention in `llama.py` and vision attention in `qwen35.py` call `optimized_attention_for_device(..., small_input=True)`. In this install, that dispatch returns PyTorch attention (or basic attention), bypassing the global Kitchen INT8 attention selection. Merely enabling `--use-ck-attention` therefore does not enable Kitchen attention in those Qwen paths.
-
-The separate `flash_attention_decode` kernel is already integrated into native `Attention.forward` for `FixedKV` and a one-token query. This node enables that route on supported CUDA devices. It does not force approximate INT8 attention for prefill or vision; both keep the native behavior. See the upstream [attention dispatcher](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/ldm/modules/attention.py), [native decoder](https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/text_encoders/llama.py), and [Kitchen exports](https://github.com/Comfy-Org/comfy-kitchen/blob/main/comfy_kitchen/__init__.py). The findings above are from the installed commit, not an assumption that upstream will remain identical.
-
-## Graph correctness and memory management
-
-Simply setting the native graph flags produced corrupted output in both the original loop and the initial prototype. Inspection showed hidden-state and RoPE input addresses changing after capture while graph replay validated weight signatures only. This was reproduced with the native loop unchanged.
-
-The final node uses small stable, request-local hidden-state/RoPE buffers for decode and calls the existing decoder layers through native `model_prefetch`. It preserves native cache prepare/advance operations, GQA layout, MRoPE continuation, quantized layers, and final normalization. There is no alternate model implementation or weight conversion.
-
-`clip.clone()` clones the wrapper/patcher metadata only: `cond_stage_model`, tokenizer, and all weights remain the same objects. All behavior changes are registered through `ModelPatcher.add_object_patch`, including the native dynamic block registration. `CLIP.generate` still performs loading, CUDA context selection, and `use_quantized_matmul`; FP8-scaled weights retain the existing Comfy kernels and cast/offload handling. The node does not use `.cuda()` on the model, force full residency, or create a permanent dequantized copy.
-
-Graphs, KV and activation buffers are discarded after each request, including exceptions. Native graph cleanup runs before local buffers expire. Normal Comfy patcher transitions restore behavior when the original CLIP is next used. Graph capture and eviction validation remain owned by Comfy's allocator. With dynamic VRAM/Comfy compiler disabled or the decode kernel unavailable, graph acceleration is skipped; the large speedup should not be expected in that configuration.
-
-## Validation and limits
-
-- Nine regression tests passed: chunked EOS trimming, immediate stopping, partial final chunks, one-token requests, MRoPE continuation, prefill-only DeepStack, cancellation, graph cleanup on success/error, graph-input lifetime through cleanup, and invalid input bounds (some cases share a test).
-- Full 160-token greedy output matched the non-graph Kitchen reference exactly across repeated requests.
-- Seeded sampling at temperature 0.7, top-k 40, top-p 0.9, seed 1234 matched the non-graph Kitchen reference exactly.
-- Original native output was unchanged after switching back. Normal text conditioning returned finite tensors. Unload/reload followed by another VLM call succeeded.
-- Object identity checks confirmed all compared wrappers shared the same model.
-- The real ComfyUI API workflow completed through CLIPLoader, the new node, and Preview as Text. The server confirmed FP8 MixedPrecisionOps, Kitchen decode and graph eligibility, with zero native compiler graph breaks/rogues. The temporary test server was stopped afterward. Start ComfyUI normally to use the installed node.
-- Kitchen and native PyTorch attention can produce different tokens from floating-point differences; exact token parity with the original PyTorch attention path is not promised.
-- Tested with the 8B checkpoint above. The node permits the full native 4B model, but 4B was not benchmarked. It rejects truncated 32B conditioning models. GPU-pressure eviction under competing workloads and other hardware were not stress-tested.
-- Full image preprocessing is intentionally preserved. Very high-resolution images can still dominate prefill; resize upstream if appropriate for your task.
-
-Files added to the development pack: `ray_fast_vlm.py`, `tests/test_fast_vlm.py`, and `FAST_VLM.md`; the package initializer registers the node. No additional packages are required. Regression tests need the ComfyUI Python environment and ComfyUI on `PYTHONPATH`.
+A historical RTX 5090 test with an 8B FP8-scaled checkpoint measured a repeated
+160-token greedy request at 1.868 seconds versus 10.252 seconds for the warmed
+native path. This is one workload, not a general speed guarantee; 4B performance
+was not benchmarked. Full measurements, environment, methodology and validation
+limits are in [the benchmark notes](developer/FAST_VLM_BENCHMARKS.md).

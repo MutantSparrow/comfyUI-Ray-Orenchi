@@ -3,7 +3,7 @@ import { api } from "../../scripts/api.js";
 import { findWidget, setWidgetHidden } from "./_common.js";
 import { browsePath, notify } from "./browse_common.js";
 import { installNameBuilder, openNameBuilder, resolveOnQueue } from "./save_name.js";
-import { ensurePanelStyles, linkChip, registerLinkTargets } from "./ray_panel.js";
+import { ensurePanelStyles, iconButton, inputTooltip, linkChip, registerLinkTargets } from "./ray_panel.js";
 
 const modes = ["none", "1", "2", "both"];
 const DEFAULT_PREFIX_HINT = "Ray_{date}_{counter}";
@@ -47,7 +47,7 @@ function styles() {
 .ray-save {box-sizing:border-box;width:100%;height:100%;padding:2px;display:flex;flex-direction:column;gap:2px;background:#000;color:#eee;font:12px system-ui;border-radius:8px;overflow:hidden;pointer-events:none}
 .ray-save button,.ray-save select,.ray-save input,.ray-save-handle {pointer-events:auto}
 .ray-save * {box-sizing:border-box}
-.ray-save button,.ray-save select {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:4px;padding:3px 6px;min-width:0}
+.ray-save button:not(.rp-icon),.ray-save select {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:5px;padding:3px 6px;min-width:0}
 .ray-save button:disabled {opacity:.4}
 .ray-save button:hover:not(:disabled) {background:#454753}
 .ray-save :focus-visible {outline:2px solid #b9a4fa;outline-offset:2px}
@@ -60,8 +60,6 @@ function styles() {
 .ray-save-input {flex:1 1 0;width:auto;min-width:0;height:28px;padding:4px 9px;background:#141414;color:#eee;border:1px solid #3a3a3a;border-radius:5px;font:12px system-ui}
 .ray-save-input::placeholder {color:#6f6f6f}
 .ray-save-input:disabled {opacity:.55}
-.ray-save button.ray-save-icon {flex:0 0 auto;width:32px;height:28px;padding:0;display:grid;place-items:center;font:600 13px ui-monospace,monospace}
-.ray-save-icon svg {width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
 .ray-save-dir {font-size:11px;color:#a3a3a3;white-space:nowrap}
 .ray-save-path {position:relative;flex:1 1 auto;min-width:90px;display:flex}
 .ray-save-path .ray-save-input {padding-right:26px}
@@ -96,6 +94,7 @@ function styles() {
 function textField(node, name) {
     const input = element("input", "ray-save-input");
     input.type = "text"; input.spellcheck = false; input.autocomplete = "off";
+    input.title = inputTooltip(node, name, name === "directory" ? "Destination folder on the ComfyUI server; blank uses output" : "Filename stem or token template, without the PNG extension");
     let editing = false;
     input.addEventListener("focus", () => { if (!editing) { node.graph?.beforeChange?.(); editing = true; } });
     input.addEventListener("input", () => {
@@ -130,9 +129,7 @@ function build(node) {
     const prefixLabel = element("label", "ray-save-label", "Filename prefix");
     const prefix = textField(node, "filename_prefix");
     prefix.id = `ray-save-prefix-${++fieldIds}`; prefixLabel.htmlFor = prefix.id;
-    const tokens = button("{ }", () => openNameBuilder(node));
-    tokens.className = "ray-save-icon"; tokens.title = "Build the filename from tokens: date, counter, hash, widget values…";
-    tokens.setAttribute("aria-label", "Build filename");
+    const tokens = iconButton("", "Build filename", () => openNameBuilder(node), {label: "{ }"});
     const prefixRow = element("div", "ray-save-row ray-save-fixed");
     // A linked field shows where its value comes from, with a button to unlink it.
     const prefixLink = linkChip(node, "filename_prefix", () => ui.sync());
@@ -142,9 +139,7 @@ function build(node) {
     stops.setAttribute("role", "group"); stops.setAttribute("aria-label", "Save Image");
     modes.forEach(mode => stops.append(button(mode === "none" ? "None" : mode === "both" ? "Both" : mode, () => update(node, "save_image", mode))));
     const dirLabel = element("label", "ray-save-dir", "Directory");
-    const browse = button("", () => browseFolder(node));
-    browse.className = "ray-save-icon"; browse.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h6l2 2h10v10H3z"/></svg>';
-    browse.title = "Choose the save folder"; browse.setAttribute("aria-label", "Choose the save folder");
+    const browse = iconButton("folder", "Choose the save folder", () => browseFolder(node));
     const directory = textField(node, "directory");
     directory.id = `ray-save-dir-${fieldIds}`; dirLabel.htmlFor = directory.id;
     const recent = element("select"); recent.title = "Last three save folders"; recent.setAttribute("aria-label", "Recent save folders");

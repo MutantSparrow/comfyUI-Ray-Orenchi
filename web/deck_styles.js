@@ -255,25 +255,18 @@ export function getDeckStyleCSS() {
 .ray-deck-readout { min-width:0; max-width:94%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ray-deck-empty { grid-column:1/-1; align-self:center; text-align:center; font:11px ui-monospace,monospace; opacity:.75; }
 .ray-deck-editor {
-    width:min(560px,92vw); max-height:84vh; padding:16px; border:1px solid #62616d; border-radius:10px;
-    background:#24252b; color:#eee; font:13px system-ui,sans-serif;
+    width:min(560px,92vw); max-height:84vh; padding:16px;
 }
 .ray-deck-editor::backdrop { background:#0008; }
 .ray-deck-editor * { box-sizing:border-box; }
-.ray-deck-editor h3 { margin:0 0 4px; font-size:16px; }
+.ray-deck-editor h3 { margin:0 0 8px; }
 .ray-deck-editor p { margin:0 0 10px; color:#b9b8c2; }
 .ray-deck-editor textarea {
-    display:block; width:100%; height:260px; padding:8px; resize:vertical; color:#eee; background:#14151a;
-    border:1px solid #383840; border-radius:6px; font:13px/1.5 ui-monospace,Consolas,monospace; white-space:pre; overflow:auto;
+    display:block; width:100%; height:260px; padding:8px; resize:vertical;
+    font-family:ui-monospace,Consolas,monospace; line-height:1.5; white-space:pre; overflow:auto;
 }
 .ray-deck-editor-info { min-height:18px; margin:8px 0; color:#c0bdc8; font-size:12px; }
 .ray-deck-editor-actions { display:flex; justify-content:flex-end; gap:8px; }
-.ray-deck-editor button {
-    padding:5px 14px; color:inherit; background:#171717; border:1px solid #383838; border-radius:4px; font:inherit; cursor:pointer;
-}
-.ray-deck-editor button:hover { background:#454753; }
-.ray-deck-editor button[data-primary] { background:#2c5f86; border-color:#3c7aa8; }
-.ray-deck-editor :focus-visible { outline:2px solid #b9a4fa; outline-offset:2px; }
 @media (prefers-reduced-motion:reduce) { .ray-deck-button svg [data-toggle] { transition:none; } }
 `;
 }

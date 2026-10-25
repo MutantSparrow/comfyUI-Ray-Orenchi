@@ -1,4 +1,5 @@
 import { app } from "../../scripts/app.js";
+import { ensurePanelStyles } from "./ray_panel.js";
 
 // Filename builder for Save Image: the pure rules below mirror filename_template.py character for character
 // (tests/filename_cases.json runs against both), and the popup lets you assemble a prefix from tokens.
@@ -219,26 +220,23 @@ if (typeof window !== "undefined") {
 }
 
 function injectStyles() {
+    ensurePanelStyles();
     if (document.getElementById("ray-name-style")) return;
     const style = document.createElement("style");
     style.id = "ray-name-style";
     style.textContent = `
 .ray-name { position:fixed; z-index:100000; box-sizing:border-box; width:380px; max-width:calc(100vw - 16px); padding:10px 12px 12px;
-    background:#1b1c1f; color:#e6e6e6; border:1px solid #4a4c52; border-radius:8px; box-shadow:0 10px 30px #000a; font:12px/1.35 system-ui,sans-serif; }
+    box-shadow:0 10px 30px #000a; line-height:1.35; }
 .ray-name * { box-sizing:border-box; }
-.ray-name-title { margin:-10px -12px 10px; padding:8px 12px; border-bottom:1px solid #2c2f35; border-radius:8px 8px 0 0; background:#202226;
-    font:600 10px system-ui; letter-spacing:.08em; text-transform:uppercase; color:#8d9096; cursor:move; user-select:none; touch-action:none; }
+.ray-name-title { margin:-10px -12px 10px; padding:8px 12px; border-bottom:1px solid #2c2f35; border-radius:8px 8px 0 0; cursor:move; user-select:none; touch-action:none; }
 .ray-name-title::before { content:"⠿"; margin-right:7px; letter-spacing:0; opacity:.7; }
 .ray-name label { display:block; margin:0 0 4px; font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:#8d9096; }
-.ray-name input[type=text] { width:100%; padding:6px 8px; border:1px solid #4a4c52; border-radius:5px; background:#101214; color:#f3f1ea; font:12px ui-monospace,monospace; }
-.ray-name input[type=text]:focus-visible, .ray-name button:focus-visible, .ray-name input[type=number]:focus-visible { outline:2px solid #185d89; outline-offset:1px; }
+.ray-name input[type=text] { width:100%; font-family:ui-monospace,monospace; }
 .ray-name-chips { display:flex; flex-wrap:wrap; gap:5px; margin:8px 0; }
-.ray-name button { padding:5px 8px; border:1px solid #4a4c52; border-radius:5px; background:#24262a; color:inherit; font:inherit; cursor:pointer; }
-.ray-name button:hover { background:#2f3237; }
 .ray-name-with { display:inline-flex; align-items:stretch; }
 .ray-name-with button { border-radius:5px 0 0 5px; border-right:0; }
-.ray-name-with input[type=number] { width:44px; padding:0 4px; border:1px solid #4a4c52; border-radius:0 5px 5px 0; background:#101214; color:inherit; font:inherit; }
-.ray-name-preview { margin:8px 0 4px; padding:8px; border-radius:5px; background:#101214; font:12px ui-monospace,monospace; color:#e5b567; overflow-wrap:anywhere; min-height:2.6em; }
+.ray-name-with input[type=number] { width:44px; padding:0 4px; border-radius:0 5px 5px 0; }
+.ray-name-preview { margin:8px 0 4px; padding:8px; border-radius:5px; background:#101214; font:12px ui-monospace,monospace; color:#ddd; overflow-wrap:anywhere; min-height:2.6em; }
 .ray-name-preview[data-error="true"] { color:#ffb1aa; }
 .ray-name-note { margin:0 0 8px; font-size:10px; color:#8d9096; }
 .ray-name-widgets { margin:6px 0; border:1px solid #33363c; border-radius:5px; background:#15171a; pointer-events:auto; }
@@ -248,7 +246,7 @@ function injectStyles() {
 .ray-name-list button { display:flex; width:100%; gap:8px; justify-content:space-between; border:0; background:transparent; text-align:left; padding:4px 6px; }
 .ray-name-list button span:last-child { color:#8d9096; font-family:ui-monospace,monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:55%; }
 .ray-name-empty { padding:10px; color:#8d9096; }
-.ray-name-done { width:100%; background:#33363c; color:#fff; }
+.ray-name-done { width:100%; }
 `;
     document.head.appendChild(style);
 }
@@ -267,15 +265,16 @@ export function openNameBuilder(node, options = {}) {
     const widget = node.widgets?.find(w => w.name === widgetName);
     if (!widget) return null;
     const graph = node.graph;
-    const panel = el("div", "ray-name");
+    const panel = el("div", "ray-name rp-surface");
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", options.title || "Build filename");
-    const title = el("div", "ray-name-title", options.title || "Build filename");
+    const title = el("div", "ray-name-title rp-title", options.title || "Build filename");
     title.title = "Drag to move";
     const label = el("label", "", options.label || "File name (saved as name.png)");
     const input = el("input");
     input.type = "text"; input.spellcheck = false; input.autocomplete = "off";
     input.value = String(widget.value ?? "");
+    input.title = options.note || "Filename stem with optional date, counter, and workflow-widget tokens; the preview shows the result";
     input.id = "ray-name-input"; label.htmlFor = input.id;
     const chips = el("div", "ray-name-chips");
     const preview = el("div", "ray-name-preview");
@@ -283,6 +282,7 @@ export function openNameBuilder(node, options = {}) {
     const note = el("p", "ray-name-note", options.note || "Spaces and characters a filename cannot hold become _. Nothing is overwritten: {counter} continues from the files in the folder, and otherwise -2, -3… is added.");
     const done = el("button", "ray-name-done", "Done");
     done.type = "button";
+    done.title = "Close the builder; changes are already saved with the workflow";
     const picker = el("div", "ray-name-widgets");
     picker.hidden = true;
     panel.append(title, label, input, chips, picker, preview, note, done);
@@ -331,7 +331,7 @@ export function openNameBuilder(node, options = {}) {
     const withDigits = (text, name, min, max, fallback, tip) => {
         const wrap = el("span", "ray-name-with"), digits = el("input");
         digits.type = "number"; digits.min = String(min); digits.max = String(max); digits.value = String(fallback);
-        digits.setAttribute("aria-label", `${text} digits`); digits.title = "Digits";
+        digits.setAttribute("aria-label", `${text} digits`); digits.title = `Number of ${text.toLowerCase()} digits, from ${min} to ${max}`;
         const b = el("button", "", text); b.type = "button"; b.title = tip;
         b.addEventListener("click", () => {
             const n = Math.min(max, Math.max(min, Math.trunc(Number(digits.value)) || fallback));

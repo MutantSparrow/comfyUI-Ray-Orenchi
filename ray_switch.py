@@ -2,9 +2,8 @@ class RaySwitch:
     DESCRIPTION = (
         "Analog-style boolean toggle. Click the switch face to flip "
         "state. Emits a single BOOLEAN output.\n\n"
-        "Six physical styles (Chrome Rocker, Bakelite Flip, Silver "
-        "Paddle, Brass Slider, Minimal Pill, Dark Studio Dome), each "
-        "modeled with the correct on/off geometry. Right-click for style "
+        "Choose from 31 shared hardware styles with distinct on/off "
+        "geometry. Right-click for the style "
         "picker, Compact mode (the faceplate alone: no title bar, pins "
         "or node background; drag it by its frame, links meet it under the "
         "face), and Edit label — the "
@@ -17,7 +16,7 @@ class RaySwitch:
         return {
             "required": {
                 "state": ("BOOLEAN", {"default": False,
-                                       "tooltip": "Analog toggle state."}),
+                                       "tooltip": "Switch output: on emits True and off emits False. Click the face or use Space or Enter to toggle."}),
             }
         }
 

@@ -19,6 +19,11 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from collections import Counter
 
+if __package__:
+    from .data_io import commit_file, parse_metadata_json
+else:
+    from data_io import commit_file, parse_metadata_json
+
 import torch
 from safetensors import safe_open, SafetensorError
 
@@ -63,17 +68,6 @@ def metadata_fields(value):
     return dict(value)
 
 
-def parse_metadata_json(text):
-    def object_pairs(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError(f"Duplicate JSON key: {key}")
-            result[key] = value
-        return result
-    return json.loads(text, object_pairs_hook=object_pairs)
-
-
 def embedded_metadata(value):
     return {k: v if isinstance(v, str) else json.dumps(v, ensure_ascii=False, allow_nan=False)
             for k, v in metadata_fields(value).items()}
@@ -110,20 +104,6 @@ def read_header(path):
     except SafetensorError as exc:
         raise ValueError(f"Invalid safetensors file: {exc}") from exc
     return header, 8 + size
-
-
-def commit_file(temp, destination, overwrite=False):
-    destination = clean_path(destination)
-    if overwrite:
-        os.replace(temp, destination)
-    elif os.name == "nt":
-        # Windows rename is atomic and refuses an existing destination, including
-        # on exFAT volumes that do not support hard links.
-        os.rename(temp, destination)
-    else:
-        # POSIX rename replaces existing files; a hard link keeps no-clobber atomic.
-        os.link(temp, destination)
-        os.unlink(temp)
 
 
 def atomic_json(path, value, overwrite=False):

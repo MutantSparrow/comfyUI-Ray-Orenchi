@@ -62,14 +62,15 @@ class RayLoraQKVLoader:
     @classmethod
     def INPUT_TYPES(cls):
         return {"required": {
-            "model": ("MODEL",),
+            "model": ("MODEL", {"tooltip": "Diffusion model to patch. The selected LoRAs are applied in row order to a clone; text encoders are not modified."}),
             "lora_name": ("STRING", {"default": "", "tooltip": "Select a registered LoRA from the searchable folder dropdown. Search includes every subfolder."}),
-            "strength": ("FLOAT", {"default": 1., "min": -100., "max": 100., "step": .01}),
+            "strength": ("FLOAT", {"default": 1., "min": -100., "max": 100., "step": .01, "tooltip": "First LoRA's model-strength multiplier. Zero skips it; negative values reverse its direction. Each additional row has its own strength."}),
             "additional_loras": ("STRING", {"default": "[]", "tooltip": "Additional LoRA rows with independent strengths, applied in order."}),
         }}
 
     RETURN_TYPES = ("MODEL",)
     RETURN_NAMES = ("MODEL",)
+    OUTPUT_TOOLTIPS = ("Cloned model with compatible LoRAs applied in row order at their individual strengths. The original model and text encoders are unchanged.",)
     FUNCTION = "load"
     CATEGORY = "👑 Ray/🧰 Model Tools"
     DESCRIPTION = "Load and stack LoRAs with +, trash and a strength per row. Automatically checks the connected model's native parameter map, repairs unambiguous trainer naming and supported fused/separate QKV mismatches, and otherwise uses native adapters. Applies to the MODEL only. Zero strength skips a row; an empty list passes the model through. Incompatible or unsafe repairs are reported."

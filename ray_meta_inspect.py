@@ -29,10 +29,16 @@ import json
 import os
 import pathlib
 import re
+import tempfile
 from typing import Optional
 
 import numpy as np
 from PIL import Image, PngImagePlugin
+
+if __package__:
+    from .data_io import commit_file, parse_metadata_json
+else:
+    from data_io import commit_file, parse_metadata_json
 
 try:
     import torch
@@ -471,6 +477,7 @@ def embed_file(
     pil_image: Image.Image,
     metadata: dict,
     output_path: pathlib.Path,
+    overwrite: bool = False,
 ) -> None:
     """Write `pil_image` to `output_path` (PNG) with chunks from `metadata`.
 
@@ -483,7 +490,12 @@ def embed_file(
       • any other scalar   → embedded as a flat iTXt key (JustRayzist style)
     """
     if not isinstance(metadata, dict):
-        metadata = {}
+        raise ValueError("Metadata must be a JSON object.")
+    json.dumps(metadata, allow_nan=False)
+    output_path = pathlib.Path(output_path)
+    if output_path.suffix.lower() != ".png":
+        raise ValueError("Embed output path must end in .png.")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     pnginfo = PngImagePlugin.PngInfo()
 
@@ -534,9 +546,15 @@ def embed_file(
             except Exception:
                 continue
 
-    tmp = output_path.with_suffix(output_path.suffix + ".tmp")
-    pil_image.save(tmp, "PNG", pnginfo=pnginfo)
-    os.replace(tmp, output_path)
+    fd, tmp = tempfile.mkstemp(prefix=".ray-", suffix=".tmp", dir=output_path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            pil_image.save(stream, "PNG", pnginfo=pnginfo)
+        with Image.open(tmp) as check:
+            check.verify()
+        commit_file(tmp, output_path, overwrite)
+    finally:
+        pathlib.Path(tmp).unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -559,7 +577,8 @@ class RayMetaInspect:
         "back to disk at `path`, then re-parses the file for round-trip "
         "verification.\n\n"
         "In Inspect, connect a Load Image node to read that file's metadata "
-        "(a connected image wins), or leave it unconnected and enter a path."
+        "(its source file takes precedence when found), or enter a path. "
+        "Embed writes PNG only and preserves existing files unless Overwrite is enabled."
     )
 
     @classmethod
@@ -574,17 +593,19 @@ class RayMetaInspect:
                     "default": "",
                     "multiline": False,
                     "placeholder": "Path to image (Inspect) or output path (Embed)",
-                    "tooltip": "Inspect: source file, used when no image is connected. Embed: destination file.",
+                    "tooltip": "Inspect: source file, used when no source file can be traced from the connected image. Embed: explicit destination .png file on the server; relative paths use the server working directory.",
                 }),
             },
             "optional": {
-                "image": ("IMAGE", {"tooltip": "Inspect: connect a Load Image node (or one that passes its image on) to read that file's metadata; this wins over `path`. Embed: tensor to write."}),
+                "image": ("IMAGE", {"tooltip": "Inspect: trace a Load Image node through the connected image. A resolved source file wins over `path`; otherwise the typed path is used. Embed: tensor to write."}),
                 "metadata_json": ("STRING", {
                     "default": "",
                     "multiline": True,
                     "placeholder": "Embed mode: JSON dict of metadata fields",
-                    "tooltip": "Embed mode: JSON dict of metadata fields to attach.",
+                    "tooltip": "Embed mode: JSON object of metadata fields to attach. Duplicate keys, non-finite numbers, and malformed JSON are rejected.",
                 }),
+                "overwrite": ("BOOLEAN", {"default": False,
+                    "tooltip": "Embed only: allow replacing an existing destination PNG. Off preserves existing files and reports a collision."}),
             },
             "hidden": {"node_id": "UNIQUE_ID", "prompt": "PROMPT"},
         }
@@ -620,12 +641,12 @@ class RayMetaInspect:
     def IS_CHANGED(cls, *args, **kwargs):
         return float("nan")
 
-    def process(self, mode, path, image=None, metadata_json="", node_id=None, prompt=None):
+    def process(self, mode, path, image=None, metadata_json="", node_id=None, prompt=None, overwrite=False):
         mode = (mode or MODE_INSPECT).strip()
         path_str = (path or "").strip()
 
         if mode == MODE_EMBED:
-            return self._do_embed(path_str, image, metadata_json)
+            return self._do_embed(path_str, image, metadata_json, overwrite)
         if image is not None:
             source = trace_source_file(prompt, node_id)
             if source is not None:
@@ -661,22 +682,22 @@ class RayMetaInspect:
 
     # --- Embed ------------------------------------------------------------
 
-    def _do_embed(self, path_str, image, metadata_json):
+    def _do_embed(self, path_str, image, metadata_json, overwrite=False):
         if not path_str:
-            return self._empty_outputs("output path is empty")
+            raise ValueError("Embed requires a destination .png path.")
         if image is None:
-            return self._empty_outputs("Embed mode requires an image input")
+            raise ValueError("Embed mode requires an image input.")
         try:
-            meta = json.loads(metadata_json) if metadata_json.strip() else {}
-        except json.JSONDecodeError as e:
-            return self._empty_outputs(f"metadata_json invalid: {e}")
+            meta = parse_metadata_json(metadata_json) if metadata_json.strip() else {}
+            json.dumps(meta, allow_nan=False)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"metadata_json invalid: {e}") from e
         if not isinstance(meta, dict):
-            return self._empty_outputs("metadata_json must be a JSON object")
+            raise ValueError("metadata_json must be a JSON object")
 
-        out_path = pathlib.Path(path_str).expanduser()
-        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path = pathlib.Path(_strip_path_quotes(path_str)).expanduser()
         pil = _tensor_to_pil(image)
-        embed_file(pil, meta, out_path)
+        embed_file(pil, meta, out_path, overwrite=overwrite)
         # Re-inspect so downstream sees the written-back metadata
         return self._do_inspect(str(out_path))
 

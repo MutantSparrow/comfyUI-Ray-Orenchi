@@ -1,7 +1,6 @@
-# Ray - Folders
+# Ray's Tools: Folders
 
-`📁 Ray - Folders` (`RayFolders`) lives under `👑 Ray/🔧 Tools`.
-Restart ComfyUI and refresh its browser after installing the feature.
+`🔧 Ray's Tools: Folders` (`RayFolders`) lives under `👑 Ray/🔧 Tools`.
 
 Choose a local folder using the pack's folder picker, paste a path, or connect a
 STRING to **folder**. **name_filter** accepts a fuzzy filename query, either typed
@@ -98,17 +97,11 @@ checkbox. No media is sent to an outside classification service.
 - Right-click offers Copy image, Copy prompt and Copy ComfyUI workflow. Missing
   metadata disables the corresponding action. Clipboard access uses the browser's
   normal clipboard permissions.
+- Right-click → **Delete asset** opens a confirmation. Confirming moves the source
+  file to the server's Recycle Bin / Trash and removes it from the current selection;
+  it can be restored there. **Cancel** or Escape leaves the file unchanged.
 - Drag an image onto the canvas to create Load Image, or onto an existing Load
   Image to replace it. A copy is imported into ComfyUI's input directory; the source
   file is not moved. Source generation metadata is retained in the imported file.
 
-## Development checks
-
-Run `tests/test_folders.py` using pytest and ComfyUI's Python environment.
-`tests/serve_folders.py [port]` serves the real HTTP routes with generated disposable
-image/video/audio fixtures; open `/tests/folders_browser.html` for interaction,
-virtualization, error recovery and real local model-inference checks. It does not
-modify the user's media folders.
-
-Offline classifier rebuilding and license information are in
-`scripts/build_folders_nsfw.cjs` and `web/vendor/nsfw/NOTICE.md`.
+Classifier license information is in [the bundled notices](web/vendor/nsfw/NOTICE.md).

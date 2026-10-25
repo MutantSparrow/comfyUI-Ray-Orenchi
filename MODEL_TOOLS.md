@@ -117,8 +117,9 @@ underscores. Connect **metadata** from Metadata Load / Edit for custom fields.
 For Metadata Save and LoRA Extract, the file icon beside **Output file** opens Save As; Metadata Save switches
 between JSON and safetensors according to its mode. Leave Output file blank to
 use the filename prefix and ComfyUI output folder. Choosing a path does not
-write a file; run the node to save it, with **overwrite** controlling replacement
-of an existing file.
+write a file; run the node to save it. Metadata Save's **overwrite** controls
+replacement. LoRA Extract has no overwrite switch and preserves existing files
+with a collision error.
 
 A connected MODEL takes priority over model_data and path inputs. Operations on
 a live MODEL export its effective weights through ComfyUI's save API first.
@@ -191,7 +192,7 @@ explicit option. Operations append recipes to `ray.model_tools.history`.
 Metadata Save and LoRA Extract use a counter under `output/model_tools` by
 default; an explicit output path must include the extension. Save Model uses its
 folder and prefix directly. Files are published atomically. An existing filename
-is an error unless **overwrite** is enabled.
+is an error unless the node provides **overwrite** and it is enabled.
 
 ## Merging and extraction
 

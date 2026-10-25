@@ -11,6 +11,8 @@ export const POINT_LIMIT = 16;
 export const MIN_GAP = 0.01;       // closest two points may sit on the x axis
 const TABLE = 512;
 
+import { ensurePanelStyles } from "./ray_panel.js";
+
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const round = v => Math.round(v * 10000) / 10000;
 
@@ -130,61 +132,58 @@ if (typeof window !== "undefined") {
 }
 
 function injectStyles() {
+    ensurePanelStyles();
     if (document.getElementById("ray-curve-editor-style")) return;
     const style = document.createElement("style");
     style.id = "ray-curve-editor-style";
     style.textContent = `
 .ray-curve-editor {
     position:fixed; z-index:100000; box-sizing:border-box; width:${SIZE + 24}px; padding:10px 12px 12px;
-    background:#1b1c1f; color:#e6e6e6; border:1px solid #4a4c52; border-radius:8px;
-    box-shadow:0 10px 30px #000a; font:12px/1.35 system-ui,sans-serif;
+    box-shadow:0 10px 30px #000a; line-height:1.35;
 }
 .ray-curve-title {
-    margin:-10px -12px 10px; padding:8px 12px; border-bottom:1px solid #2c2f35; border-radius:8px 8px 0 0; background:#202226;
-    font:600 10px system-ui; letter-spacing:.08em; text-transform:uppercase; color:#8d9096;
+    margin:-10px -12px 10px; padding:8px 12px; border-bottom:1px solid #2c2f35; border-radius:8px 8px 0 0;
     cursor:move; user-select:none; touch-action:none;
 }
 .ray-curve-title::before { content:"⠿"; margin-right:7px; letter-spacing:0; opacity:.7; }
 .ray-curve-row { display:flex; gap:6px; align-items:center; margin-bottom:8px; }
 .ray-curve-row > * { flex:1 1 0; min-width:0; }
-.ray-curve-mode { display:flex; border:1px solid #4a4c52; border-radius:5px; overflow:hidden; }
-.ray-curve-mode button { flex:1; padding:5px 0; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
-.ray-curve-mode button[aria-pressed="true"] { background:#33363c; color:#fff; font-weight:600; }
 .ray-curve-presets { display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:8px; }
 .ray-curve-presets button {
-    padding:5px 4px; border:1px solid #4a4c52; border-radius:5px; background:#24262a; color:inherit; font:inherit; cursor:pointer;
+    padding:4px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.ray-curve-presets button:hover, .ray-curve-presets button:focus-visible { background:#2f3237; outline:none; }
-.ray-curve-presets button[aria-pressed="true"] { background:#5a4a2a; border-color:#e5b567; color:#fff; font-weight:600; }
+.ray-curve-presets button[aria-pressed="true"] { background:#e2e2e2; border-color:#e2e2e2; color:#111; font-weight:600; }
 .ray-curve-editor canvas { display:block; width:${SIZE}px; height:${SIZE}px; border-radius:4px; background:#101214; touch-action:none; outline:none; cursor:crosshair; }
-.ray-curve-editor canvas:focus-visible { outline:2px solid #185d89; outline-offset:2px; }
+.ray-curve-editor canvas:focus-visible { outline:2px solid #b9a4fa; outline-offset:2px; }
 .ray-curve-info { min-height:2.7em; margin:7px 0 8px; font:11px/1.35 ui-monospace,monospace; color:#b9bdc4; }
 .ray-curve-hint { margin:0 0 8px; font-size:10px; color:#8d9096; }
-.ray-curve-done { width:100%; padding:6px 0; border:1px solid #4a4c52; border-radius:5px; background:#33363c; color:#fff; font:inherit; cursor:pointer; }
-.ray-curve-done:hover, .ray-curve-done:focus-visible { background:#3d4148; outline:none; }
+.ray-curve-done { width:100%; }
 `;
     document.head.appendChild(style);
 }
 
 // `info()` returns { title, range: [lo, hi], format(value) }; `changed()` redraws the control after any edit.
+let activeEditor;
 export function openCurveEditor(node, { title = "Response curve", range = () => [0, 1], format = v => String(+Number(v).toPrecision(4)), changed = () => {} } = {}) {
     injectStyles();
-    document.querySelector(".ray-curve-editor")?.remove();
+    activeEditor?.close();
     const panel = document.createElement("div");
-    panel.className = "ray-curve-editor";
+    panel.className = "ray-curve-editor rp-surface";
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Response curve");
-    const heading = Object.assign(document.createElement("p"), { className: "ray-curve-title", textContent: title, title: "Drag to move" });
+    const heading = Object.assign(document.createElement("p"), { className: "ray-curve-title rp-title", textContent: title, title: "Drag to move" });
 
     const modeRow = document.createElement("div");
     modeRow.className = "ray-curve-row";
     const mode = document.createElement("div");
-    mode.className = "ray-curve-mode";
+    mode.className = "ray-curve-mode rp-seg";
     mode.setAttribute("role", "group");
     mode.setAttribute("aria-label", "Response");
     const linearButton = Object.assign(document.createElement("button"), { type: "button", textContent: "Linear" });
     const curveButton = Object.assign(document.createElement("button"), { type: "button", textContent: "Curve" });
+    linearButton.title = "Map the control position evenly onto its output range";
+    curveButton.title = "Use the editable response curve to map the control position onto its output range";
     mode.append(linearButton, curveButton);
     modeRow.append(mode);
     // Plain buttons, not a drop-down: a native list is drawn by the browser outside the page, and opening it
@@ -194,6 +193,7 @@ export function openCurveEditor(node, { title = "Response curve", range = () => 
     presets.setAttribute("role", "group");
     presets.setAttribute("aria-label", "Presets");
     const presetButtons = PRESETS.slice(1).map(p => Object.assign(document.createElement("button"), { type: "button", textContent: p.name }));
+    for (const button of presetButtons) button.title = `Apply the ${button.textContent} response curve`;
     presets.append(...presetButtons);
 
     const canvas = document.createElement("canvas");
@@ -207,6 +207,7 @@ export function openCurveEditor(node, { title = "Response curve", range = () => 
     const hint = Object.assign(document.createElement("p"), { className: "ray-curve-hint",
         textContent: "Click to add a point · drag to shape · double-click or Delete removes · [ ] pick a point" });
     const done = Object.assign(document.createElement("button"), { type: "button", className: "ray-curve-done", textContent: "Done" });
+    done.title = "Close the editor; response changes are already saved with the workflow";
     panel.append(heading, modeRow, presets, canvas, info, hint, done);
     document.body.append(panel);
 
@@ -379,7 +380,11 @@ export function openCurveEditor(node, { title = "Response curve", range = () => 
 
     // ---- closing and placing -----------------------------------------------------------------------
     const stop = new AbortController();
-    function close() { endDrag(); stop.abort(); panel.remove(); }
+    function close() {
+        endDrag(); stop.abort(); panel.remove();
+        if (node._rayCurveEditor?.panel === panel) node._rayCurveEditor = null;
+        if (activeEditor?.panel === panel) activeEditor = null;
+    }
     done.addEventListener("click", close);
     panel.addEventListener("keydown", event => event.stopPropagation());
     // Escape closes it wherever the keyboard focus is (after dragging the title bar it is no longer inside).
@@ -411,7 +416,7 @@ export function openCurveEditor(node, { title = "Response curve", range = () => 
         savedPosition = place(event.clientX - moving.dx, event.clientY - moving.dy);
     });
     for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) heading.addEventListener(type, () => { moving = null; });
-    node._rayCurveEditor = { close };
+    node._rayCurveEditor = activeEditor = { close, panel };
     draw(); sync();
     (isCurve() ? canvas : curveButton).focus({ preventScroll: true });
     return panel;

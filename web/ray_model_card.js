@@ -67,6 +67,7 @@ export function installModelCard(node, defaultConfig) {
             const row = document.createElement("div"); row.className = "rp-control";
             const button = document.createElement("button"); button.type = "button";
             button.textContent = "Copy Config"; button.dataset.action = "copy-config";
+            button.title = "Copy the editable benchmark configuration to connect through the config input";
             Object.assign(button.style, { flex: "1", height: "28px" });
             button.onclick = copy; row.append(button);
             return row;

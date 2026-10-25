@@ -18,7 +18,12 @@ const el = (tag, text, className) => {
     return element;
 };
 const button = (label, callback) => {
-    const b = el("button", label); b.type = "button"; b.onclick = callback; return b;
+    const b = el("button", label); b.type = "button"; b.onclick = callback;
+    b.title = ({"Load / Edit": "Read the selected file's metadata into the editor; it does not rewrite the file",
+        "Table / JSON": "Switch between the field table and raw JSON while preserving values",
+        "Copy report": "Copy the current operation report as JSON text",
+        "Preview files": "Inspect the selected files without initializing an inference model"})[label] || label;
+    return b;
 };
 function setValue(node, name, next) {
     const target = widget(node, name);
@@ -39,8 +44,10 @@ function styles() {
     document.head.append(style);
 }
 
-async function preview(node, action) {
+const previewSignature = node => JSON.stringify([value(node,"path"),value(node,"path_a"),value(node,"path_b"),value(node,"components")]);
+async function preview(node, action, signal) {
     const response = await api.fetchApi("/ray/model-tools/preview", { method: "POST",
+        signal,
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, path: value(node, "path"),
             path_a: value(node, "path_a"), path_b: value(node, "path_b"), components: value(node, "components") || "diffusion" }) });
     const data = await response.json();
@@ -48,11 +55,11 @@ async function preview(node, action) {
     return data;
 }
 
-function watchHeight(node, root) {
+function watchHeight(node, root, cleanup = () => {}) {
     const observer = new ResizeObserver(() => node._rayPanel?.schedule());
     observer.observe(root);
     const removed = node.onRemoved;
-    node.onRemoved = function () { observer.disconnect(); return removed?.apply(this, arguments); };
+    node.onRemoved = function () { observer.disconnect(); cleanup(); return removed?.apply(this, arguments); };
 }
 
 export function createMetadataEditor(node) {
@@ -60,7 +67,8 @@ export function createMetadataEditor(node) {
     const toolbar = el("div", undefined, "rmt-toolbar"), message = el("div", "Load a model or JSON file, or add fields below.", "rmt-message");
     const scroll = el("div", undefined, "rmt-scroll"), raw = el("textarea", undefined, "rmt-raw");
     raw.setAttribute("aria-label", "Raw metadata JSON"); raw.hidden = true;
-    let rows = [], rawMode = false, request = 0, active = false;
+    raw.title = "Edit a JSON object. Duplicate keys, malformed JSON, and unsafe integer edits are rejected before execution.";
+    let rows = [], rawMode = false, request = 0, active = false, dead = false, controller;
     const fields = () => rows.map(r => ({ key: r.key.value, type: r.type.value, value: r.value.value }));
     const serialize = () => rawMode ? JSON.stringify(rowsToMetadata(metadataRows(parseMetadataJSON(raw.value)))) : JSON.stringify(rowsToMetadata(fields()));
     const commit = () => {
@@ -81,11 +89,14 @@ export function createMetadataEditor(node) {
             const row = el("div", undefined, "rmt-row"), keyBox = el("div", undefined, "rmt-key");
             const key = el("input"), type = el("select"), text = el("textarea"), valueBox = el("div");
             key.value = item.key; key.setAttribute("aria-label", "Metadata key");
+            key.title = "Metadata field name. Each name must be unique.";
             text.value = item.value; text.setAttribute("aria-label", `Value for ${item.key}`);
+            text.title = "Field value. Text is stored verbatim; JSON value parses numbers, booleans, arrays, and objects.";
             for (const [v, label] of [["text", "Text"], ["json", "JSON value"]]) {
                 const option = el("option", label); option.value = v; type.append(option);
             }
             type.value = item.type; type.setAttribute("aria-label", `Type for ${item.key}`);
+            type.title = "Choose literal text or a typed JSON value for this field.";
             const record = { key, type, value: text };
             const details = el("details"), nested = el("pre");
             details.append(el("summary", "Expand JSON"), nested);
@@ -115,13 +126,20 @@ export function createMetadataEditor(node) {
     };
     toolbar.append(button("Load / Edit", async () => {
         const ticket = ++request;
+        const source = previewSignature(node);
+        controller?.abort();controller=new AbortController();
         try {
             if (!String(value(node, "path")).trim()) {
                 hydrate(node._rayModelToolsReport?.metadata || {}, ""); return;
             }
-            const data = await preview(node, "metadata");
-            if (ticket === request) hydrate(data.metadata_json ? parseMetadataJSON(data.metadata_json) : data.metadata, data.source);
-        } catch (error) { message.textContent = error.message; message.classList.add("rmt-error"); }
+            const data = await preview(node, "metadata", controller.signal);
+            if (!dead && ticket === request && source === previewSignature(node))
+                hydrate(data.metadata_json ? parseMetadataJSON(data.metadata_json) : data.metadata, data.source);
+        } catch (error) {
+            if (!dead && ticket === request && source === previewSignature(node) && error.name !== "AbortError") {
+                message.textContent = error.message; message.classList.add("rmt-error");
+            }
+        }
     }), button("Table / JSON", () => {
         try {
             const object = JSON.parse(serialize());
@@ -133,7 +151,7 @@ export function createMetadataEditor(node) {
     const target = widget(node, "editor_json");
     if (target) target.serializeValue = async () => active ? serialize() : "";
     root.append(toolbar, message, scroll, raw);
-    watchHeight(node, root);
+    watchHeight(node, root, () => {dead=true;request++;controller?.abort();});
     const reload = () => {
         active = !!String(value(node, "editor_json")).trim();
         try { draw(parseMetadataJSON(value(node, "editor_json") || "{}")); }
@@ -148,8 +166,9 @@ export function createReport(node, id) {
     const root = el("div", undefined, "rmt"), toolbar = el("div", undefined, "rmt-toolbar");
     const summary = el("div", "Run the node to see its report.", "rmt-message");
     const content = el("div", undefined, "rmt-scroll");
-    let report = null, query = "", page = 0;
+    let report = null, query = "", page = 0, request = 0, dead = false, controller;
     const search = el("input"); search.placeholder = "Filter tensors…"; search.setAttribute("aria-label", "Filter tensors"); search.hidden = true;
+    search.title = "Filter the current tensor report by name. This changes the displayed rows, not the model.";
     const paging = el("div", undefined, "rmt-toolbar"), count = el("span", "", "rmt-message"); paging.hidden = true;
     const render = () => {
         content.replaceChildren();
@@ -180,8 +199,16 @@ export function createReport(node, id) {
         summary.classList.remove("rmt-error"); render();
     };
     if (["RayModelInspector", "RayModelCompare"].includes(id)) toolbar.append(button("Preview files", async () => {
-        try { show(await preview(node, id === "RayModelInspector" ? "inspect" : "compare")); }
-        catch (error) { summary.textContent = error.message; summary.classList.add("rmt-error"); }
+        const ticket=++request,source=previewSignature(node);
+        controller?.abort();controller=new AbortController();
+        try {
+            const data=await preview(node, id === "RayModelInspector" ? "inspect" : "compare",controller.signal);
+            if(!dead && ticket===request && source===previewSignature(node))show(data);
+        } catch (error) {
+            if(!dead && ticket===request && source===previewSignature(node) && error.name!=="AbortError") {
+                summary.textContent = error.message; summary.classList.add("rmt-error");
+            }
+        }
     }));
     search.oninput = () => { query = search.value; page = 0; render(); };
     const previous = button("‹", () => { page--; render(); }), next = button("›", () => { page++; render(); });
@@ -190,7 +217,7 @@ export function createReport(node, id) {
     paging.append(previous, count, next);
     if (toolbar.childElementCount) root.append(toolbar);
     root.append(summary, search, paging, content);
-    watchHeight(node, root);
+    watchHeight(node, root, () => {dead=true;request++;controller?.abort();});
     node._rayModelToolsView = { show, root };
     return root;
 }

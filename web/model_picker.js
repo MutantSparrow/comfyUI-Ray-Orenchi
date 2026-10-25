@@ -60,7 +60,8 @@ export function createModelPicker({ group, label, value = "", placeholder, onSel
     const multiple = Array.isArray(group);
     const displayName = name => multiple ? name.replace(/^diffusion_models: /, "Diffusion models/").replace(/^checkpoints: /, "Checkpoints/") : name;
     const update = name => { selected = String(name ?? ""); text.textContent = displayName(selected) || placeholder;
-        element.title = selected || `Select ${group === "loras" ? "a LoRA" : "a diffusion model"}. Search includes every subfolder.`; };
+        const help = `Select ${group === "loras" ? "a LoRA" : multiple ? "a checkpoint or diffusion model" : "a diffusion model"}. Search includes every registered subfolder.`;
+        element.title = selected ? `${help}\nSelected: ${selected}` : help; };
     update(value);
 
     async function open() {

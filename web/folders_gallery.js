@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { createNodeHeader, iconButton, ensurePanelStyles, linkChip, registerLinkTargets } from "./ray_panel.js";
+import { createNodeHeader, iconButton, inputTooltip, ensurePanelStyles, linkChip, registerLinkTargets } from "./ray_panel.js";
 import { browseInto, notify } from "./browse_common.js";
 import { options, searchFilenames, colorSignature, matchesAnalysis, analysisScore, nsfwScore, promptText } from "./folders_filters.js";
 import { settingsPopup } from "./folders_settings.js";
@@ -49,6 +49,8 @@ export function createGallery(node) {
     path.type=filter.type="text";path.spellcheck=filter.spellcheck=false;
     path.setAttribute("aria-label","Folder");path.placeholder="Choose a folder…";
     filter.setAttribute("aria-label","Filename or prompt filter");filter.placeholder="Fuzzy filename or prompt filter…";
+    path.title=inputTooltip(node,"folder","Folder of media on the ComfyUI server");
+    filter.title=inputTooltip(node,"name_filter","Filter filenames and extracted prompts");
     const browse=iconButton("folder","Browse folder",async()=>{if(await browseInto(node,"folder",{title:"Choose a media folder"})){resolved=null;sync(true);}});
     const refresh=iconButton("refresh","Refresh folder",()=>sync(true));
     const cog=iconButton("settings","Folders settings",()=>{popupClose?.();popupClose=settingsPopup(opts,value=>{change(node,"settings_json",JSON.stringify(value));sync(true);},cog);});
@@ -406,9 +408,9 @@ export function createGallery(node) {
     function confirmDelete(item) {
         deleteClose?.();hideTooltip();
         const token=rootToken,sourceFolder=folder,key=cacheKey(item),abort=new AbortController();
-        const backdrop=element("div","rf-backdrop"),panel=element("section","rf-delete-dialog"),error=element("p","rf-delete-error");
+        const backdrop=element("div","rf-backdrop"),panel=element("section","rf-delete-dialog rp-surface"),error=element("p","rf-delete-error");
         panel.setAttribute("role","dialog");panel.setAttribute("aria-modal","true");panel.setAttribute("aria-label","Delete asset?");
-        panel.append(element("h3","","Delete asset?"),element("p","rf-delete-name",item.id),element("p","","Move this asset to the Recycle Bin / Trash. You can restore it there."),error);
+        panel.append(element("h3","rp-title","Delete asset?"),element("p","rf-delete-name",item.id),element("p","","Move this asset to the Recycle Bin / Trash. You can restore it there."),error);
         error.setAttribute("role","alert");error.hidden=true;
         const actions=element("div","rf-actions"),cancel=element("button","","Cancel"),remove=element("button","rf-danger","Delete asset");
         cancel.type=remove.type="button";

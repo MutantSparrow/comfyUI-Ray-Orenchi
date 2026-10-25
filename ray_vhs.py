@@ -688,7 +688,7 @@ class RayVHS:
         _override = "-1 uses the preset value; 0..1 overrides."
         return {
             "required": {
-                "image": ("IMAGE", {"tooltip": "Source image."}),
+                "image": ("IMAGE", {"tooltip": "Source image batch to process with the selected VHS preset and tape artifacts."}),
                 "preset": (PRESET_NAMES, {
                     "default": "Worn EP",
                     "tooltip": "Tape and deck: sets softness, halos, colour, levels and the starting value of every slider below.",
