@@ -63,12 +63,13 @@ try{
     vueWidget.style.cssText='display:flex;flex-direction:column';root.style.flex='1';
     host.style.cssText='width:540px;min-height:620px;display:flex;flex-direction:column';
     vueWidget.append(root);vueGrid.append(vueWidget);vueBody.append(slots,vueGrid);host.append(vueBody);await frame();
+    LiteGraph.vueNodesMode=true;node._rayFoldersOutputLane.refresh();
     check(root.clientHeight<=620&&root.querySelector('.rf-viewport').clientHeight<620&&controls().length<82,'Nodes 2.0 auto-sized flex/grid hosts keep the gallery bounded and virtualized');
     const folderBox=root.querySelector('.rf-row').getBoundingClientRect(),outputBox=outputs.getBoundingClientRect();
-    check(Math.abs(folderBox.top-outputBox.top)<12&&folderBox.right<outputBox.left,'Nodes 2.0 controls and native outputs share a top row without overlap');
-    check(node.widgets_start_y===0&&getComputedStyle(root).backgroundColor==='rgba(0, 0, 0, 0)','Legacy widgets start beside output sockets and leave canvas labels visible');
+    check(folderBox.top>=outputBox.bottom&&node._rayFoldersOutputLane.state.reason==='native-renderer-stacks-slots','Nodes 2.0 keeps controls below the native output lane without overlapping ports');
+    check(!Object.hasOwn(node,'widgets_start_y'),'Stacked layout does not force a node-local widget start');
     host.style.minHeight='780px';await frame();
-    check(root.clientHeight===780&&controls().length<82,'Nodes 2.0 resizing expands the viewport without expanding to every file');
+    check(Math.abs(root.clientHeight+outputs.clientHeight-780)<=2&&controls().length<82,'Nodes 2.0 resizing accounts for native outputs and keeps the gallery virtualized');
     host.append(root);vueBody.remove();host.classList.remove('lg-node');root.style.removeProperty('flex');host.style.cssText='width:540px;height:620px';await frame();
     for(const columns of [2,3,4,5,6,7])for(const width of [280,320,399.5,400,459.25,540,760.75,980]) {
         host.style.width=width+'px';layoutSettings.value=JSON.stringify({columns});node._rayFolders.sync();await frame();
@@ -133,9 +134,9 @@ try{
     await until(()=>ready(root.querySelector('[data-file="dog.png"]')));
     cat().click();
     root.querySelector('[data-file="dog.png"]').dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}));
-    function promptCheckbox(){return [...document.querySelectorAll('.rf-settings label')].find(label=>label.textContent==='Hide images without prompts')?.querySelector('input');}
+    function promptCheckbox(){return document.querySelector('.rf-settings [role="switch"][aria-label="Hide images without prompts"]');}
     root.querySelector('[aria-label="Folders settings"]').click();
-    check(promptCheckbox()&&!promptCheckbox().checked,'Hide images without prompts is available and off by default');
+    check(promptCheckbox()?.getAttribute('aria-checked')==='false','Hide images without prompts is available and off by default');
     promptCheckbox().click();[...document.querySelectorAll('.rf-settings button')].find(button=>button.textContent==='Cancel').click();
     check(!JSON.parse(layoutSettings.value).hide_no_prompt&&selected(node).includes('dog.png'),'Cancel leaves the prompt-presence setting and selection unchanged');
     root.querySelector('[aria-label="Folders settings"]').click();promptCheckbox().click();
@@ -178,7 +179,7 @@ try{
     const ranges=popup.querySelectorAll('input[type=range]');ranges[0].value=7;ranges[0].dispatchEvent(new Event('input'));
     check(ranges[1].min==='0.01','NSFW threshold supports stricter filtering down to 1%');
     const regions=[...popup.querySelectorAll('label')].find(el=>el.textContent.includes('Check image regions'));
-    check(regions.querySelector('input').checked,'Regional NSFW checks are enabled by default');
+    check(regions.querySelector('[role="switch"]').getAttribute('aria-checked')==='true','Regional NSFW checks are enabled by default');
     [...popup.querySelectorAll('button')].find(b=>b.textContent==='Apply').click();
     await until(()=>JSON.parse(node.widgets.find(w=>w.name==='settings_json').value).columns===7);
     check(JSON.parse(node.widgets.find(w=>w.name==='settings_json').value).prompt_format==='single','Prompt format persists in native settings');

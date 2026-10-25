@@ -847,7 +847,7 @@ class RayFilmStock:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image": ("IMAGE", {"tooltip": "Source image."}),
+                "image": ("IMAGE", {"tooltip": "Source image batch to process with the selected film stock, exposure, grain, and halation settings."}),
                 "preset": (STOCK_NAMES, {
                     "default": "Kodak Portra 400",
                     "tooltip": "Film-stock analytical curve preset.",

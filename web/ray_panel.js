@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { setWidgetHidden } from "./_common.js";
 import { installLegacyLinkLayout } from "./legacy_panel_links.js";
+import { installOutputLane } from "./output_lane.js";
 import { browsePath, notify } from "./browse_common.js";
 
 // The Ray panel: every Ray node draws its controls in one black, compact panel, in the style of Save Image
@@ -15,7 +16,9 @@ export const ICONS = {
     folder: '<svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10v10H3z"/></svg>',
     file: '<svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>',
     refresh: '<svg viewBox="0 0 24 24"><path d="M19 8a7.5 7.5 0 1 0 1.2 6"/><path d="M19.5 3.5V8H15"/></svg>',
+    settings: '<svg viewBox="0 0 24 24"><path d="m10 3-1 3-3 1-3 3 2 2-1 3 3 3 3-1 2 2 3-1 1-3 3-1 1-3-2-2 1-3-3-3-3 1z"/><circle cx="12" cy="12" r="3"/></svg>',
     edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+    remove: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/></svg>',
     unlink: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     minus: '<svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg>',
     plus: '<svg viewBox="0 0 24 24"><path d="M6 12h12M12 6v12"/></svg>',
@@ -35,13 +38,43 @@ const el = (tag, className, text) => {
     return node;
 };
 export function iconButton(icon, title, onClick, { label } = {}) {
-    const b = el("button", "rp-icon");
+    injectStyles();
+    const b = el("button", `rp-icon${icon === "settings" ? " rp-settings" : ""}`);
     b.type = "button";
     b.title = title;
+    b.dataset.icon = icon;
     b.setAttribute("aria-label", title);
     if (label) b.textContent = label; else b.innerHTML = ICONS[icon] || "";
-    b.addEventListener("click", event => { event.stopPropagation(); onClick(event); });
+    b.querySelector("svg")?.setAttribute("aria-hidden", "true");
+    b.addEventListener("pointerdown", event => { if (event.button === 0) event.stopPropagation(); });
+    isolateKeys(b);
+    b.addEventListener("click", event => { event.stopPropagation(); if (!b.disabled) onClick(event); });
     return b;
+}
+
+const actionElements = actions => (actions || []).map(action => action instanceof HTMLElement
+    ? action : iconButton(action.icon, action.title, action.onClick, { label: action.label }));
+
+// The same first-content header serves ordinary panels and custom galleries.
+// Actions may be shared icon buttons or { icon, title, onClick, label? } specs.
+export function createNodeHeader(title, actions = []) {
+    injectStyles();
+    const element = el("div", "rp-header"), heading = el("div", "rp-title", title);
+    const group = el("div", "rp-header-actions");
+    element.append(heading, group);
+    let current = [];
+    function setActions(actions) {
+        const next = actionElements(actions);
+        // Keep settings rightmost without changing the order of contextual actions.
+        next.sort((a, b) => Number(a.dataset.icon === "settings") - Number(b.dataset.icon === "settings"));
+        if (next.length !== current.length || next.some((button, index) => button !== current[index])) {
+            group.replaceChildren(...next);
+            current = next;
+        }
+        group.hidden = !next.length;
+    }
+    setActions(actions);
+    return { element, heading, actions: group, setActions, destroy() { current = []; element.remove(); } };
 }
 
 // How an option reads: the layout's label, or a snake_case value written out ("error_diffusion" -> "Error diffusion").
@@ -56,15 +89,55 @@ export function humanize(name) {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+export function inputTooltip(node, name, fallback = "") {
+    const input = node.constructor?.nodeData?.input;
+    const spec = input?.required?.[name] || input?.optional?.[name];
+    return spec?.[1]?.tooltip || fallback;
+}
+
+export function toggleButton(title, value, onChange) {
+    injectStyles();
+    const button = el("button", "rp-toggle");
+    button.type = "button";
+    button.title = title;
+    button.setAttribute("role", "switch");
+    button.setAttribute("aria-label", title);
+    button.setAttribute("aria-checked", String(!!value));
+    isolateKeys(button);
+    button.addEventListener("pointerdown", event => { if (event.button === 0) event.stopPropagation(); });
+    button.addEventListener("click", event => {
+        event.stopPropagation();
+        if (button.disabled) return;
+        const next = button.getAttribute("aria-checked") !== "true";
+        onChange(next);
+        button.setAttribute("aria-checked", String(next));
+    });
+    return button;
+}
+
 export const PANEL_CSS = `
 .dom-widget:has(> .rp-host) {pointer-events:none !important}
 .rp-host {width:100%;height:100%;overflow:hidden;pointer-events:none}
 .rp {box-sizing:border-box;width:100%;padding:6px 6px 8px;display:flex;flex-direction:column;gap:6px;background:#000;color:#eee;font:12px system-ui,sans-serif;color-scheme:dark;pointer-events:none;border-radius:8px}
 .rp * {box-sizing:border-box}
+.rp-surface {background:#000;color:#eee;border:1px solid #383838;border-radius:8px;font:12px system-ui,sans-serif;color-scheme:dark}
+.rp-surface * {box-sizing:border-box}
+.rp-surface button {min-height:28px;padding:4px 9px;font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:5px;cursor:pointer}
+.rp-surface button:hover:not(:disabled) {background:#454753}
+.rp-surface button:disabled {opacity:.4;cursor:default}
+.rp-surface button[data-primary] {background:#e2e2e2;border-color:#e2e2e2;color:#111}
+.rp-surface :is(input[type=text],input[type=number],textarea,select) {min-width:0;padding:4px 9px;background:#141414;color:#eee;border:1px solid #3a3a3a;border-radius:5px;font:inherit}
+.rp-surface :is(input[type=text],input[type=number],select) {height:28px}
+.rp-surface :is(input,textarea,select):disabled {opacity:.55}
+.rp-surface :focus-visible {outline:2px solid #b9a4fa;outline-offset:1px}
 .rp[hidden], .rp-row[hidden], .rp-section[hidden] {display:none !important}
 .rp-section {display:flex;flex-direction:column;gap:6px;min-width:0}
-.rp-section + .rp-section {border-top:1px solid #2b2b2b;padding-top:8px}
+.rp-section:not([hidden]) ~ .rp-section:not([hidden]) {border-top:1px solid #2b2b2b;padding-top:8px}
 .rp-title {font:600 10px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#d43aa8}
+.rp-header {display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.rp-header > .rp-title {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-header-actions {display:flex;align-items:center;justify-content:flex-end;gap:6px;flex:0 0 auto;pointer-events:auto}
+.rp-header-actions[hidden] {display:none}
 .rp-row {display:grid;grid-template-columns:minmax(64px,34%) minmax(0,1fr);gap:8px;align-items:center;min-height:28px;border-radius:5px;position:relative}
 .rp-row.rp-full {grid-template-columns:minmax(0,1fr);gap:4px}
 .rp-row.rp-bool {grid-template-columns:minmax(0,1fr) auto}
@@ -78,16 +151,17 @@ export const PANEL_CSS = `
   background-position:calc(100% - 13px) 12px,calc(100% - 9px) 12px;background-size:4px 4px;background-repeat:no-repeat}
 .rp-select option {background:#141414;color:#eee}
 .rp :is(.rp-input,.rp-select,.rp-textarea):disabled {opacity:.55}
-.rp :focus-visible {outline:2px solid #b9a4fa;outline-offset:1px}
-.rp button {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:5px;cursor:pointer}
-.rp button:hover:not(:disabled) {background:#454753}
-.rp button:disabled {opacity:.4;cursor:default}
-.rp .rp-icon {flex:0 0 auto;width:32px;height:28px;padding:0;display:grid;place-items:center;font:600 13px ui-monospace,monospace}
+.rp :focus-visible, button.rp-icon:focus-visible {outline:2px solid #b9a4fa;outline-offset:1px}
+.rp button, button.rp-icon {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:5px;cursor:pointer}
+.rp button:hover:not(:disabled), button.rp-icon:hover:not(:disabled) {background:#454753}
+.rp button:disabled, button.rp-icon:disabled {opacity:.4;cursor:default}
+.rp .rp-icon, button.rp-icon {box-sizing:border-box;flex:0 0 auto;width:32px;height:28px;padding:0;display:grid;place-items:center;font:600 13px ui-monospace,monospace;pointer-events:auto}
+.rp .rp-icon.rp-settings, button.rp-icon.rp-settings {width:30px;height:30px}
 .rp-icon svg {width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .rp-seg {display:flex;flex:0 1 auto;min-width:0;border:1px solid #444;border-radius:5px;overflow:hidden}
-.rp .rp-seg button {flex:1 1 auto;min-width:0;height:26px;padding:3px 8px;font-size:12px;background:transparent;border:0;border-radius:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rp .rp-seg button + button {border-left:1px solid #2f2f2f}
-.rp .rp-seg button[aria-pressed=true], .rp .rp-seg button[aria-pressed=true]:hover {background:#e2e2e2;color:#111}
+:is(.rp,.rp-surface) .rp-seg button {flex:1 1 auto;min-width:0;min-height:0;height:26px;padding:3px 8px;font-size:12px;background:transparent;border:0;border-radius:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:is(.rp,.rp-surface) .rp-seg button + button {border-left:1px solid #2f2f2f}
+:is(.rp,.rp-surface) .rp-seg button[aria-pressed=true], :is(.rp,.rp-surface) .rp-seg button[aria-pressed=true]:hover {background:#e2e2e2;color:#111}
 .rp-number {display:flex;flex:1 1 0;min-width:0;height:28px;border:1px solid #3a3a3a;border-radius:5px;background:#141414;overflow:hidden}
 .rp-number .rp-input {border:0;border-radius:0;background:transparent;text-align:center;padding:4px 2px;cursor:ew-resize}
 .rp-number .rp-input:focus {cursor:text}
@@ -100,12 +174,14 @@ export const PANEL_CSS = `
 .rp-fill {position:absolute;left:0;top:13px;height:3px;border-radius:2px;background:#d6d6d6}
 .rp-thumb {position:absolute;top:8px;width:13px;height:13px;margin-left:-6.5px;border-radius:50%;background:#eee;box-shadow:0 0 0 3px #000}
 .rp-slider .rp-input {flex:0 0 58px;text-align:right;padding:4px 7px}
-.rp .rp-toggle {position:relative;flex:0 0 auto;width:34px;height:18px;padding:0;border-radius:9px;background:#2a2a2a;border:1px solid #444}
-.rp .rp-toggle::after {content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#8a8a8a;transition:left .12s}
-.rp .rp-toggle[aria-checked=true] {background:#e2e2e2;border-color:#e2e2e2}
-.rp .rp-toggle[aria-checked=true]::after {left:18px;background:#111}
-.rp .rp-toggle:hover:not(:disabled) {background:#3a3a3a}
-.rp .rp-toggle[aria-checked=true]:hover:not(:disabled) {background:#fff}
+.rp .rp-toggle, button.rp-toggle[role=switch] {position:relative;flex:0 0 auto;width:34px;min-height:0;height:18px;padding:0;border-radius:9px;background:#2a2a2a;border:1px solid #444;cursor:pointer;pointer-events:auto}
+.rp-toggle[role=switch]::after {content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#8a8a8a;transition:left .12s}
+.rp-toggle[role=switch][aria-checked=true] {background:#e2e2e2;border-color:#e2e2e2}
+.rp-toggle[role=switch][aria-checked=true]::after {left:18px;background:#111}
+.rp-toggle[role=switch]:hover:not(:disabled) {background:#3a3a3a}
+.rp-toggle[role=switch][aria-checked=true]:hover:not(:disabled) {background:#fff}
+button.rp-toggle[role=switch]:focus-visible {outline:2px solid #b9a4fa;outline-offset:1px}
+button.rp-toggle[role=switch]:disabled {opacity:.4;cursor:default}
 .rp-link .rp-unlink {width:22px;height:22px;border:0;background:transparent;color:#9a9a9a;display:grid;place-items:center;padding:0;border-radius:4px;cursor:pointer}
 .rp-link .rp-unlink:hover {background:#2a2a2a;color:#eee}
 .rp-link {display:flex;flex:1 1 0;min-width:0;align-items:center;gap:6px;height:28px;padding:0 4px 0 9px;border:1px dashed #4a4a4a;border-radius:5px;color:#bdbdbd;font-size:11px}
@@ -258,11 +334,14 @@ function isolateKeys(element) {
 
 export function installPanel(node, spec = {}) {
     injectStyles();
-    if (node._rayPanel) return node._rayPanel;
+    const panelKey = spec.settings ? "_raySettingsPanel" : "_rayPanel";
+    if (node[panelKey]) return node[panelKey];
     // ComfyUI stretches the element it is given to the height it reserves, so the panel content sits in a host
     // and is measured on its own; measuring the stretched element would feed its height back into itself.
     const host = el("div", "rp-host");
     const root = el("div", "rp");
+    // Custom editors mounted in sections need the same keyboard isolation as native rows.
+    isolateKeys(root);
     host.append(root);
     const rows = [];
     const panel = { node, root, rows, refresh, schedule, fit, destroy, widgetEl: null };
@@ -301,7 +380,9 @@ export function installPanel(node, spec = {}) {
         const full = field.full ?? (["textarea", "path"].includes(kind) && field.labelAbove !== false);
         const row = { name: widget.name, widget, when: field.when, kind, element: el("div", `rp-row${full ? " rp-full" : ""}${kind === "toggle" ? " rp-bool" : ""}`) };
         const label = el("label", "rp-label", field.label || humanize(widget.name));
-        label.title = widget.tooltip || widget.options?.tooltip || widget.name;
+        const tooltip = field.tooltip || inputTooltip(node, widget.name, widget.tooltip || widget.options?.tooltip || "");
+        label.title = tooltip || widget.name;
+        row.element.title = tooltip;
         const control = el("div", "rp-control");
         row.element.append(label, control);
         const linkBox = el("div", "rp-link");
@@ -330,20 +411,29 @@ export function installPanel(node, spec = {}) {
             linkBox.style.display = info ? "flex" : "none";
             for (const b of row.actions || []) b.disabled = !!info;
             if (info) linkText.textContent = `From ${info.origin?.title || info.origin?.type || "a link"}${info.output ? ` · ${info.output}` : ""}`;
-            else editor.update();
+            else {
+                editor.update();
+                if (tooltip) {
+                    editor.element.title = tooltip;
+                    if (editor.focusable) editor.focusable.title = tooltip;
+                    if (kind === "segment") for (const button of editor.element.children)
+                        button.title = `${tooltip}\n${button.textContent}`;
+                }
+            }
         };
         return row;
     }
 
     function detectKind(widget, field) {
+        const type = widget._rayOrigType || widget.type;
         if (field.browse) return "path";
-        if (widget.type === "toggle") return "toggle";
-        if (widget.type === "customtext") return "textarea";
-        if (widget.type === "combo") {
+        if (type === "toggle") return "toggle";
+        if (type === "customtext") return "textarea";
+        if (type === "combo") {
             const values = valuesOf(widget);
             return values.length >= 2 && values.length <= 4 && values.every(v => String(v).length <= 9) ? "segment" : "select";
         }
-        if (widget.type === "number") {
+        if (type === "number") {
             if ((widget.linkedWidgets || []).some(w => w.name === "control_after_generate")) return "seed";
             const { min, max } = widget.options || {};
             return Number.isFinite(min) && Number.isFinite(max) && max - min <= 10 && precisionOf(widget) > 0 ? "slider" : "number";
@@ -416,9 +506,7 @@ export function installPanel(node, spec = {}) {
 
     function buildControl(kind, widget, field, row) {
         if (kind === "toggle") {
-            const button = el("button", "rp-toggle");
-            button.type = "button"; button.setAttribute("role", "switch");
-            button.addEventListener("click", () => write(widget, !widget.value));
+            const button = toggleButton(field.label || humanize(widget.name), widget.value, next => write(widget, next));
             return { element: button, focusable: button, update() { button.setAttribute("aria-checked", String(!!widget.value)); } };
         }
         if (kind === "segment") {
@@ -483,16 +571,25 @@ export function installPanel(node, spec = {}) {
         if (kind === "path") {
             const wrap = el("div", "rp-control");
             wrap.style.flex = "1 1 0";
-            const input = textInput(widget, { placeholder: field.placeholder ?? (field.browse?.kind === "file" ? "Path to a file" : "Path to a folder"), ...field });
-            const { kind: pick = "folder", title, filters } = field.browse || {};
-            const browse = iconButton(pick === "file" ? "file" : "folder", pick === "file" ? "Choose a file" : "Choose a folder", async () => {
+            const options = () => (typeof field.browse === "function" ? field.browse(node) : field.browse) || {};
+            const pick = options().kind || "folder";
+            const input = textInput(widget, { placeholder: field.placeholder ?? (pick === "folder" ? "Path to a folder" : "Path to a file"), ...field });
+            const browse = iconButton(pick === "folder" ? "folder" : "file",
+                pick === "save" ? "Choose a save file" : pick === "file" ? "Choose a file" : "Choose a folder", async () => {
+                if (linkOf(node, widget.name)) return;
                 try {
+                    const { kind: pick = "folder", title, filters } = options();
                     const picked = await browsePath(pick, String(widget.value ?? ""), { title, filters });
-                    if (picked) write(widget, picked);
+                    if (picked && !linkOf(node, widget.name) && (options().kind || "folder") === pick) write(widget, picked);
                 } catch (error) { notify(error.message); }
             });
             wrap.append(input, browse);
-            return { element: wrap, focusable: input, update() { if (document.activeElement !== input) input.value = String(widget.value ?? ""); } };
+            return { element: wrap, focusable: input, update() {
+                const current = options();
+                browse.title = current.title || (current.kind === "save" ? "Choose a save file" : current.kind === "file" ? "Choose a file" : "Choose a folder");
+                browse.setAttribute("aria-label", browse.title);
+                if (document.activeElement !== input) input.value = String(widget.value ?? "");
+            } };
         }
         if (kind === "slider") {
             const wrap = el("div", "rp-slider"), track = el("div", "rp-track"), fill = el("div", "rp-fill"), thumb = el("div", "rp-thumb");
@@ -550,6 +647,8 @@ export function installPanel(node, spec = {}) {
             };
             const minus = el("button"); minus.type = "button"; minus.innerHTML = ICONS.minus; minus.setAttribute("aria-label", "Decrease"); minus.tabIndex = -1;
             const plus = el("button"); plus.type = "button"; plus.innerHTML = ICONS.plus; plus.setAttribute("aria-label", "Increase"); plus.tabIndex = -1;
+            minus.title = `Decrease ${field.label || humanize(widget.name)} by ${stepOf(widget)}`;
+            plus.title = `Increase ${field.label || humanize(widget.name)} by ${stepOf(widget)}`;
             minus.addEventListener("click", e => { e.stopPropagation(); nudge(-1); });
             plus.addEventListener("click", e => { e.stopPropagation(); nudge(1); });
             box.append(minus, input, plus);
@@ -581,9 +680,12 @@ export function installPanel(node, spec = {}) {
 
     // ---- sections ----------------------------------------------------------------------------------------
     const sections = [];
+    const nodeActions = actionElements(typeof spec.headerActions === "function" ? spec.headerActions(panel) : spec.headerActions);
     function addSection(section) {
         const box = el("div", "rp-section");
-        if (section.title) box.append(el("div", "rp-title", section.title));
+        const actions = actionElements(typeof section.actions === "function" ? section.actions(panel) : section.actions);
+        const header = createNodeHeader(section.title || "Settings", actions);
+        box.append(header.element);
         const own = [];
         for (const field of section.fields || []) {
             const row = makeRow(typeof field === "string" ? { name: field } : field);
@@ -591,14 +693,14 @@ export function installPanel(node, spec = {}) {
             own.push(row); rows.push(row);
             box.append(row.element);
         }
-        sections.push({ box, rows: own, when: section.when });
+        sections.push({ box, rows: own, when: section.when, header, actions });
         root.append(box);
     }
     for (const section of spec.sections || []) addSection(section);
     // Anything the layout forgot is still editable, at the end.
-    const rest = (node.widgets || []).filter(w => !mentioned.has(w.name) && w.serialize !== false && w.type !== "button"
+    const rest = (spec.settings ? [] : node.widgets || []).filter(w => !mentioned.has(w.name) && w.serialize !== false && w.type !== "button"
         && !(w.element && w.type !== "customtext") && !String(w.type).startsWith("RAY_") && w.options?.serialize !== false);
-    if (rest.length) addSection({ title: spec.sections?.length ? "More" : undefined, fields: rest.map(w => w.name) });
+    if (rest.length) addSection({ title: "Additional settings", fields: rest.map(w => w.name) });
 
     // Hide the native widgets the panel now draws. Code that hides them by mode still decides whether the
     // row shows (setWidgetHidden records it as widget.rayLogicHidden).
@@ -606,13 +708,13 @@ export function installPanel(node, spec = {}) {
         if (!row.widget) continue;
         const hiddenNow = !!row.widget.hidden;
         setWidgetHidden(node, row.widget, true);
-        row.widget.rayLogicHidden = hiddenNow;
+        row.widget.rayLogicHidden = spec.settings ? false : hiddenNow;
         row.widget.rayPanel = panel;
         for (const linked of row.widget.linkedWidgets || []) { setWidgetHidden(node, linked, true); linked.rayPanel = panel; linked.rayLogicHidden = true; }
     }
 
     // ---- refresh -------------------------------------------------------------------------------------------
-    let queued = false, lastHeight = 0;
+    let queued = false, lastHeight = 0, outputLane;
     function schedule() {
         if (queued) return;
         queued = true;
@@ -628,6 +730,8 @@ export function installPanel(node, spec = {}) {
             }
             section.box.hidden = !any || (section.when && !section.when(node));
         }
+        const first = sections.find(section => !section.box.hidden);
+        for (const section of sections) section.header.setActions([...section.actions, ...(section === first ? nodeActions : [])]);
         const empty = sections.every(s => s.box.hidden);
         root.hidden = empty;
         host.hidden = empty;
@@ -644,6 +748,8 @@ export function installPanel(node, spec = {}) {
     panel.height = height;
     const minWidth = spec.minWidth || 340;
     function fit() {
+        if (spec.settings) return;
+        outputLane?.refresh();
         const h = height();
         // node.size is a typed array, not an Array.
         const hasSize = node.size && node.size.length >= 2;
@@ -662,7 +768,11 @@ export function installPanel(node, spec = {}) {
     }
     // Values also change from outside (control after generate, other extensions, a loaded workflow).
     const timer = setInterval(() => { if (root.isConnected) refresh(); }, 400);
-    function destroy() { clearInterval(timer); unregister(); }
+    function destroy() {
+        clearInterval(timer); unregister(); outputLane?.destroy();
+        for (const section of sections) section.header.destroy();
+        if (spec.settings) for (const row of rows) if (row.widget?.rayPanel === panel) delete row.widget.rayPanel;
+    }
 
     root.addEventListener("pointerdown", e => { if (e.button === 0 && e.target !== root) e.stopPropagation(); });
     // The legacy canvas insets a DOM widget by its margin on each side; keep it small and count it.
@@ -681,12 +791,65 @@ export function installPanel(node, spec = {}) {
         let at = spec.before ? list.findIndex(w => w.name === spec.before) : -1;
         if (at < 0) at = list.findIndex(w => w.element && w.type !== "customtext");
         list.splice(at < 0 ? list.length : at, 0, domWidget);
+        if (!spec.settings) {
+            outputLane = installOutputLane(node, root, {onChange() {lastHeight = -1; schedule();}});
+            panel.outputLane = outputLane;
+        }
     }
-    node._rayPanel = panel;
-    const unregister = registerLinkTargets(node, rows, refresh);
-    const removed = node.onRemoved;
-    node.onRemoved = function () { destroy(); return removed?.apply(this, arguments); };
+    node[panelKey] = panel;
+    const unregister = spec.settings ? () => {} : registerLinkTargets(node, rows, refresh);
+    if (!spec.settings) {
+        const removed = node.onRemoved;
+        node.onRemoved = function () { destroy(); return removed?.apply(this, arguments); };
+    }
     refresh();
     requestAnimationFrame(() => { lastHeight = -1; refresh(); });
     return panel;
+}
+
+// Secondary settings reuse the same native-widget editors as the graph panel.
+export function openPanelSettings(node, spec, title = "Ray settings", options = {}) {
+    node._raySettingsClose?.();
+    const dialog = document.createElement("dialog");
+    dialog.className = "rp-dialog";
+    dialog.setAttribute("aria-label", title);
+    Object.assign(dialog.style, { width: "440px", maxWidth: "calc(100vw - 24px)", maxHeight: "85vh",
+        overflow: "auto", padding: "10px", background: "#000", color: "#eee", border: "1px solid #383838", borderRadius: "8px" });
+    const heading = el("h3", "rp-title", title);
+    const mount = el("div");
+    dialog.append(heading, mount);
+    document.body.append(dialog);
+    const panel = installPanel(node, { ...spec, mount, settings: true });
+    const actions = el("div", "rp rp-control");
+    Object.assign(actions.style, { flexDirection: "row", justifyContent: "flex-end" });
+    dialog.append(actions);
+    let closed = false;
+    const close = () => {
+        if (closed) return;
+        closed = true;
+        panel.destroy();
+        delete node._raySettingsPanel;
+        delete node._raySettingsClose;
+        dialog.close();
+        dialog.remove();
+        options.onClose?.();
+    };
+    for (const action of options.actions || [{ label: "Done" }]) {
+        const control = el("button", "rp-input", action.label);
+        control.type = "button";
+        control.onclick = () => { try { action.onClick?.(); } finally { close(); } };
+        actions.append(control);
+    }
+    dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
+    dialog.addEventListener("click", event => { if (event.target === dialog) close(); });
+    for (const type of ["keydown", "keyup", "keypress"]) dialog.addEventListener(type, event => event.stopPropagation());
+    if (!node._raySettingsLifecycle) {
+        node._raySettingsLifecycle = true;
+        const removed = node.onRemoved;
+        node.onRemoved = function () { this._raySettingsClose?.(); return removed?.apply(this, arguments); };
+    }
+    node._raySettingsClose = close;
+    dialog.showModal();
+    actions.querySelector("button")?.focus();
+    return { dialog, panel, close };
 }

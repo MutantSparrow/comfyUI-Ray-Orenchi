@@ -167,7 +167,7 @@ function buildDeck(node, widget) {
     ui.openEditor = () => {
         node._rayDeckEditor?.remove();
         node._rayDeckEditor?.close();
-        const dialog = element("dialog", "ray-deck-editor");
+        const dialog = element("dialog", "ray-deck-editor rp-surface");
         const area = element("textarea");
         area.value = String(entriesWidget?.value ?? "");
         area.spellcheck = false;
@@ -178,6 +178,8 @@ function buildDeck(node, widget) {
         // Remove the dialog right away; the browser's close event (Escape) only fires a tick later.
         const dismiss = () => { dialog.close(); dialog.remove(); if (node._rayDeckEditor === dialog) node._rayDeckEditor = null; };
         cancel.type = apply.type = "button";
+        cancel.title = "Close without changing the deck entries";
+        apply.title = "Apply the listed entries and keep the selected value when it is still present";
         apply.dataset.primary = "";
         const refresh = () => {
             const list = parseEntries(area.value);
@@ -204,7 +206,7 @@ function buildDeck(node, widget) {
         });
         dialog.addEventListener("close", () => { dialog.remove(); if (node._rayDeckEditor === dialog) node._rayDeckEditor = null; node.setDirtyCanvas?.(true, true); });
         dialog.append(
-            element("h3", "", "Button deck entries"),
+            element("h3", "rp-title", "Button deck entries"),
             element("p", "", "One value per line. Each line becomes a button, and the pressed button's text is the output. Blank and repeated lines are ignored."),
             area, info,
         );

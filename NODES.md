@@ -1,12 +1,17 @@
 # Node Documentation
 
+See [the complete control and connection reference](NODE_REFERENCE.md) for every
+current input, output, default, choice, range, and tooltip. Mode-dependent and
+saved-state fields are included alongside the visible controls.
+
 All nodes live under `👑 Ray/` in the ComfyUI add-node menu, split across
-four bucket sub-categories:
+five bucket sub-categories:
 
 - `👑 Ray/✨ VFX` — image-space effects (CRT, Offset Print, PixelArt, FilmStock, VHS).
 - `👑 Ray/🎛️ Analog` — analog-style UI widgets (Control: knob / slider, Switch, Button Deck, Fader Bank), all sharing one list of 31 styles.
-- `👑 Ray/🔧 Tools` — prompt scraper, metadata inspector, TXT folder, Save Image.
+- `👑 Ray/🔧 Tools` — prompt scraper, metadata inspector, TXT folder, Folders, Save Image, Model Card.
 - `👑 Ray/💬 LLM` — local vision-language inference and folder captioning.
+- `👑 Ray/🧰 Model Tools` — model loading/conversion/saving, metadata editing, merging, inspection/comparison, LoRA baking/extraction. See [MODEL_TOOLS.md](MODEL_TOOLS.md).
 
 Every node is black, body and title bar alike, so it reads the same under any
 ComfyUI theme. Workflows saved with the old colored title bars turn black when
@@ -15,6 +20,8 @@ they load; a color you set on a node yourself is kept.
 ---
 
 ## ✨ Ray's VFX: CRT (`RayCRT`)
+
+![✨ Ray's VFX: CRT](screenshots/RayCRT.png)
 
 **Purpose.** Image-space CRT display effect. Simulates phosphor mask (aperture / shadow / slot), scanline beam, halation + bloom, NTSC chroma bleed, barrel curvature, vignette, and reflection gloss. Multiple SOTA-inspired presets covering classic monitors and gaming consoles.
 
@@ -33,6 +40,8 @@ they load; a color you set on a node yourself is kept.
 ---
 
 ## ✨ Ray's VFX: Offset Print (`RayOffsetPrint`)
+
+![✨ Ray's VFX: Offset Print](screenshots/RayOffsetPrint.png)
 
 **Purpose.** Image-space CMYK / duotone offset print simulation. Per-plate halftone screen at SWOP angles, plate misregistration, dot gain, ink bleed, paper substrate (tint + grain + texture), optional sepia / vignette / posterize.
 
@@ -55,7 +64,9 @@ they load; a color you set on a node yourself is kept.
 
 ## ✨ Ray's VFX: Pixel Art (`RayPixelArtDetector`)
 
-**Purpose.** Repair an existing pixel grid or abstract illustrations/photos into readable regions. Preserve exact aspect ratio, fit perceptual palettes and optionally add restrained dithering or colored outlines.
+![✨ Ray's VFX: Pixel Art](screenshots/RayPixelArtDetector.png)
+
+**Purpose.** Repair an existing pixel grid or abstract illustrations/photos into readable regions. Repair preserves the exact aspect-ratio lattice; illustration/photo mode fixes the requested long edge and rounds the other dimension. Fit perceptual palettes and optionally add restrained dithering or colored outlines.
 
 **Category:** `👑 Ray/✨ VFX`
 
@@ -64,12 +75,16 @@ they load; a color you set on a node yourself is kept.
 | `image` | Source image or batch. |
 | `input_kind` | `repair_pixel_art` or `illustration_photo`. |
 | `mode` | `manual_resize`, `auto_pixel_size`, `pixel_size`. Illustration auto uses target_resolution. |
-| `target_resolution`, `pixel_size` | Desired longest side or source pixels per output pixel; exact-aspect dimensions only. |
+| `target_resolution`, `pixel_size` | Desired longest side or source pixels per output pixel. Repair snaps to exact-aspect dimensions without upscaling; illustration/photo mode rounds the other dimension to the nearest pixel. |
 | `sampling` | `grid_snap` structural processing, `nearest` sampling, `area` averaging. |
 | `reduce_palette`, `max_colors` | Fit a generated palette within its color budget. |
 | `palette_style` | `source` shading or `distinct` colors; distinct also consolidates weak isolated shades in undithered illustrations. |
 | `palette_strategy` | Build a generated palette with color_families, Lab/RGB clustering, simple quantization, OkLab source colors, or ramps. |
 | `palette_mapping` | Choose assignment independently: auto, legacy_oklab, oklab, lab, rgb, or color_families. Applies to supplied palettes too. |
+| `palette_allocation` | `area_preserving` favors coherent color areas; `frequency` follows ordinary color frequency. Neither identifies semantic objects or materials. |
+| `protect_highlights`, `highlight_threshold` | Protect bright source colors within the generated palette's budget; threshold is CIE Lab lightness. Supplied palette colors stay unchanged. |
+| `ramp_levels` | Lightness bands per chroma family for `ramps_oklab`, within the same total color budget. |
+| `color_grid` | Replace preview with a labeled comparison of the current result and six generated color methods. Main image output stays unchanged; extra processing is required. |
 | `palette_image` (optional) | Preserve up to 256 exact swatch colors; larger references are reduced to max_colors. Overrides generated palette settings. |
 | `dither`, `dither_strength` | `none`, `ordered`, `error_diffusion`; protect flat fills, strong edges and busy texture. |
 | `outline` | `none`, dark `silhouette`, or shading-guided colored `selective`. |
@@ -84,13 +99,15 @@ Grid detection uses the attributed MIT-licensed Pixel Art Fixer detector locally
 
 ## The node panels
 
-Every Ray node shows its settings in one black panel, laid out like Save Image: a small grey label on the left, the control on the right, related settings grouped under short headings, and only the settings that apply to the current mode. Numbers have − and + buttons (or drag sideways on the number; Shift is finer); bounded values have a slider with a value box; short choices are segmented buttons; on/off settings are switches; the seed has an icon that cycles what happens after each run (random, fixed, +1, −1).
+Standard Ray controls use one black panel: small grey labels, controls beside or below them, and short magenta headings separating related settings. Only settings for the current mode appear. Numbers have − and + buttons (or drag sideways on the number; Shift is finer); bounded values have a slider with a value box; short choices are segmented buttons; on/off settings are switches; the native seed icon cycles what happens after each run (random, fixed, +1, −1). Analog faces, galleries and previews provide controls suited to their content.
+
+Nodes with secondary settings use the cog at the top right of their content header. A pencil edits content, such as Button Deck entries. **+** beside a list heading adds an item; each row's trash icon removes that item. File/folder icons stay beside the path they control. Icon tooltips identify their action.
 
 **Links.** Drag a link from another node onto any row of the panel to connect it to that setting; the row then shows `From <node> · <output>` with a button to unlink it. Saved workflows, queued prompts and links work exactly as with ComfyUI's own widgets.
 
 ### Browse (folder and file paths)
 
-Every folder or file path has a folder or file icon at the right of its field: **Save Image** (Directory), **Folder Captioner** and **Prompt Scraper** (Folder of images, the scraper's only in Local Folder mode), **TXT Folder** (its folder), **Film Stock** (LUT / XMP folder) and **Metadata Inspector** (Image file, filtered to images). The icon opens your operating system's own dialog, then writes the chosen path into the field exactly as if you had typed it. Typing or pasting a path still works, and a linked path cannot be browsed.
+Server-path fields have a folder or file icon at the right: **Save Image** (Directory), **Folder Captioner** and **Prompt Scraper** (Folder of images, the scraper's only in Local Folder mode), **TXT Folder** (its folder), **Film Stock** (LUT / XMP folder), **Metadata Inspector** (source image or PNG destination), and Model Tools source/output paths. The icon opens the appropriate system folder, source-file or Save As dialog, then fills that field. Typing or pasting a path still works, and a linked path cannot be browsed. Registered-model pickers instead use ComfyUI's searchable folder lists; they do not open a desktop file dialog.
 
 A browser never tells a page where a picked file lives on disk, so the ComfyUI server shows the dialog and sends the path back: Python's built-in Tk dialog, which is the standard system dialog on Windows and macOS (on Linux, install `python3-tk`). That means **ComfyUI must be running on the computer you are sitting at** (ComfyUI Desktop and local installs do); opened from another machine, Browse says so and you type the path. The dialog starts in the folder currently in the widget, or the nearest parent that exists.
 
@@ -177,6 +194,8 @@ The plate passes the pointer through in normal mode too, so you can drag any ana
 
 ## 🎛️ Ray's Analog: Control (`RayKnob`)
 
+![🎛️ Ray's Analog: Control (Knob / Slider)](screenshots/RayKnob.png)
+
 **Purpose.** Analog-style float control, either a rotary knob or a slider, themed after studio hardware. Drag rotates a knob face or moves a slider cap; outputs both an `INT` (quantized by `clamp`) and a raw `FLOAT` so it plugs into either side without a converter. The node keeps its original `RayKnob` ID, so existing workflows load unchanged.
 
 **Category:** `👑 Ray/🎛️ Analog`
@@ -207,6 +226,8 @@ The plate passes the pointer through in normal mode too, so you can drag any ana
 
 ## 🎛️ Ray's Analog: Switch (`RaySwitch`)
 
+![🎛️ Ray's Analog: Switch](screenshots/RaySwitch.png)
+
 **Purpose.** Boolean toggle widget in any of the 31 shared styles, nine of them hand-drawn for it. Rockers and illuminated keys show their active state; lever handles point up for ON, and horizontal paddles/sliders move toward the ON label.
 
 **Category:** `👑 Ray/🎛️ Analog`
@@ -221,6 +242,8 @@ The plate passes the pointer through in normal mode too, so you can drag any ana
 ---
 
 ## 🎛️ Ray's Analog: Button Deck (`RayButtonDeck`)
+
+![🎛️ Ray's Analog: Button Deck](screenshots/RayButtonDeck.png)
 
 **Purpose.** A bank of analog push buttons that replaces a dropdown. Enter one value per line; each line becomes a button, and the pressed button's text comes out as a `STRING`. Styled after retro console hardware, in the same family as the Control and Switch.
 
@@ -256,6 +279,8 @@ Pressing a button plays its latch sound, followed by a softer release as the pre
 
 ## 🎛️ Ray's Analog: Fader Bank (`RayFaderBank`)
 
+![🎛️ Ray's Analog: Fader Bank](screenshots/RayFaderBank.png)
+
 **Purpose.** A bank of vertical faders, like a small mixing desk: two to ten in a row, in up to four rows (forty faders). Each fader outputs a float from 0 to 1, and the whole bank comes out as a list too. Good for blend weights, strengths and anything else you want to balance by eye.
 
 **Category:** `👑 Ray/🎛️ Analog`
@@ -281,6 +306,8 @@ Pressing a button plays its latch sound, followed by a softer release as the pre
 ---
 
 ## 🔧 Ray's Tools: Prompt Scraper (`RayPromptFetcher`)
+
+![🔧 Ray's Tools: Prompt Scraper](screenshots/RayPromptFetcher.png)
 
 **Purpose.** One node, three prompt sources. A `scraper_mode` dropdown picks between `Local Folder`, `PromptDexter`, and `CivitAI`; the frontend hides widgets that don't belong to the active mode. Outputs are harmonized to the local-scraper shape `(prompt_single, prompt_multiline, image, image_path)` so any mode is drop-in compatible with downstream wiring.
 
@@ -345,6 +372,8 @@ Supported file extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`, `.
 
 ## 🔧 Ray's Tools: Metadata Inspector (`RayMetaInspect`)
 
+![🔧 Ray's Tools: Metadata Inspector](screenshots/RayMetaInspect.png)
+
 **Purpose.** Read or write image generation metadata. Two modes:
 
 - `Inspect` — parses every known chunk (A1111 `parameters`, ComfyUI `prompt` / `workflow` graph, EXIF UserComment, sidecar text) and exposes the extracted fields as separate STRING outputs plus the raw JSON blob.
@@ -360,6 +389,7 @@ In `Inspect`, connect a **Load Image** node to `image` and the node reads the me
 | **Control** `path` | string | Inspect: source file, used when no image is connected (absolute, `input/...` or `name [input]`). Embed: destination file. |
 | **Input** `image` (optional) | IMAGE | Inspect: connect a Load Image node to read that file's metadata. Embed: tensor to write. |
 | **Control** `metadata_json` (optional) | string (multiline) | Embed mode: JSON dict of metadata fields to attach. Visible only in Embed mode. |
+| **Control** `overwrite` (optional) | bool | Embed mode: allow replacing an existing PNG. Off by default. |
 | **Output** `prompt_positive` | STRING | Positive prompt extracted from the file. |
 | **Output** `prompt_negative` | STRING | Negative prompt extracted from the file. |
 | **Output** `seed` | STRING | Seed if present. |
@@ -373,9 +403,16 @@ In `Inspect`, connect a **Load Image** node to `image` and the node reads the me
 | **Output** `raw_metadata_json` | STRING | Full raw metadata JSON — for debugging or downstream tools. |
 | **Output** `image` | IMAGE | Source image tensor. |
 
+In Inspect, the file icon chooses an existing image. In Embed, it opens Save As
+for PNG; enter a `.png` destination and a JSON object, then run to write the file.
+The write is atomic and an existing file is preserved unless **Overwrite** is on.
+Invalid Embed input fails execution. Choosing a destination alone does not write it.
+
 ---
 
 ## ✨ Ray's VFX: Film Stock (`RayFilmStock`)
+
+![✨ Ray's VFX: Film Stock](screenshots/RayFilmStock.png)
 
 **Purpose.** Analytical film-stock emulation. Applies a per-stock tonal curve + color response, optional grain and halation, and (optionally) layers a real graded look from a `.cube` / `.3dl` LUT or Photoshop / Lightroom `.xmp` develop-setting file.
 
@@ -397,6 +434,8 @@ In `Inspect`, connect a **Load Image** node to `image` and the node reads the me
 ---
 
 ## ✨ Ray's VFX: VHS / Tape (`RayVHS`)
+
+![✨ Ray's VFX: VHS / Tape](screenshots/RayVHS.png)
 
 **Purpose.** Videotape degradation modeled as a signal chain in YUV space, plus a VCR or camcorder on-screen display (OSD) that is burned into the picture rather than laid over it. The stages follow the path a tape signal takes: soft luma with deck sharpening halos, low-bandwidth colour that smears and lags behind the picture, cross-colour rainbows around fine detail, smooth line-level time-base wobble with tracking bands and a bent top edge, the torn head-switching band at the bottom, streaky tape noise, and dropouts.
 
@@ -449,6 +488,8 @@ Each slider defaults to `-1.0` (meaning "use the preset value") and `0..1` overr
 
 ## 🔧 Ray's Tools: TXT Folder (`RayTextFolder`)
 
+![🔧 Ray's Tools: TXT Folder](screenshots/RayTextFolder.png)
+
 **Category:** `👑 Ray/🔧 Tools`
 
 Read UTF-8 .txt files from one folder, alphabetically by filename; subfolders
@@ -468,14 +509,30 @@ Empty files are skipped, but still count toward start_index and limit.
 No usable prompts produces an actionable error instead of a blank generation.
 Read/decode failures stop execution before any prompt list is emitted.
 
-Connect `prompt` to RayKrea2Sampler's text input and `filename_prefix` to
-Save Image's filename_prefix input. Connect the sampler image to Save Image.
+Connect `prompt` to a text encoder and use its conditioning with your sampler.
+Connect `filename_prefix` to Save Image's filename_prefix input and the decoded
+sampler image to Save Image.
 ComfyUI maps the paired lists automatically; no extra loop is needed.
 Keep the sampler batch size at 1 for one image per file. Save Image saves
 each file under exactly that name (it adds `-2`, `-3`, … only if the name is
 taken). Use limit 3 for a small test, then -1 for the folder.
 
+## 💬 Ray's LLM: Fast Qwen3-VL Infer (`RayFastQwen3VL`)
+
+![💬 Ray's LLM: Fast Qwen3-VL Infer](screenshots/RayFastQwen3VL.png)
+
+**Purpose.** Generate text using an already loaded native Qwen CLIP. Qwen3-VL
+accepts optional images and a fast decode path; compatible text-only Qwen models
+ignore images and use native generation. Connect `clip` and enter a prompt;
+output `text` contains the decoded answer. Sampling, seed, penalties, Thinking,
+fast/native mode, stop-check interval and repeat guard are available in the panel.
+See [FAST_VLM.md](FAST_VLM.md) for supported models, loading and runtime behavior.
+
+---
+
 ## 💬 Ray's LLM: Folder Captioner (`RayVLMFolder`)
+
+![💬 Ray's LLM: Folder Captioner](screenshots/RayVLMFolder.png)
 
 **Category:** `👑 Ray/💬 LLM`
 
@@ -498,9 +555,12 @@ sidecars, resize source images, or add a conversation history.
 | `repetition_penalty` | Native repetition penalty; 1 is neutral |
 | `seed` | -1 selects a random seed per image; a fixed seed is reused per image for repeatability |
 | `thinking` | Requests model-supported thinking; any decoded reasoning is retained in text |
+| `return_images` | Off by default: image output is empty. Enable to decode and return original-size images after captioning finishes |
+| `cleanup_every` | Release transient objects and unused VRAM caches every N captions; 0 disables periodic cleanup. Low-memory cleanup still applies |
 
-Outputs `text`, `image`, and `image_path` are aligned lists. Each image is
-a separate RGB tensor with EXIF orientation applied, so mixed sizes work.
+Outputs `text` and `image_path` are aligned lists. With **Return images** enabled,
+`image` is also aligned: each item is a separate RGB tensor with EXIF orientation
+applied, so mixed sizes work. Otherwise `image` is an empty list.
 Connect an output to a display, save, or downstream processing node to run.
 
 Supported formats: JPEG, PNG, WebP, BMP, TIFF, GIF. Animated/multipage files use
@@ -508,30 +568,41 @@ their first frame. HEIC is not included. Folder contents are rescanned each run.
 Unreadable files, absent vision tokens, CPU fallback, and empty answers stop the
 run with an error rather than emitting misleading captions. No files are modified.
 
-All outputs become available after the selected range finishes. Full-resolution
-images accumulate in RAM; use a small `limit` and advance `start_index` for
-large folders. ComfyUI manages model offloading; CPU staging is allowed, but
+All outputs become available after the selected range finishes. Returned full-resolution
+images accumulate in RAM only when **Return images** is enabled; use a small
+`limit` and advance `start_index` for large image outputs. Sources are checked for
+changes while returning images so captions stay paired with the original files.
+ComfyUI manages model offloading; CPU staging is allowed, but
 the inference device must be a GPU. The checkpoint must fit the available resources.
 
 
 ## 🔧 Ray's Tools: Save Image (`RaySaveImage`)
 
+![🔧 Ray's Tools: Save Image](screenshots/RaySaveImage.png)
+
 **Category:** `👑 Ray/🔧 Tools`. Output node; no output sockets.
+
+Completed previews return when you switch back to a workflow tab or open its
+completed run from history, including runs that finish while another workflow
+tab is active. Temporary previews remain available until ComfyUI clears its temp files.
 
 | Input | Purpose |
 |---|---|
 | `image_1` | Required IMAGE batch. |
 | `image_2` | Optional IMAGE batch; enables comparison. |
+| `metadata` | Optional STRING socket. Unconnected keeps the default ComfyUI prompt/workflow and extra PNG metadata. Connected replaces it with the exact string in the PNG `parameters` field; an empty string also replaces the defaults. |
 | `save_image` | `none`, `1` (default), `2`, or `both`; presented as compact segmented buttons. |
 | `directory` | Blank for ComfyUI output (shown as `/output`), relative to output, or an absolute destination. The folder button opens your system's folder dialog; the ▾ in the field recalls the last three save folders. |
 | `filename_prefix` | The file's name without the extension, built from text and tokens such as `{date}` and `{counter}`. See Filename builder below. |
-| `save_without_metadata` | Right-click toggle; removes prompt/workflow PNG text metadata. Defaults to false. |
+| `save_without_metadata` | Right-click toggle; omits all PNG text metadata, including connected `metadata`. Defaults to false. ComfyUI's global metadata-disable option also takes precedence. |
 
 Saving happens on execution. Selecting 2 without image_2 gives an actionable
 error; Both with only image_1 saves that input. Preview-only mode writes only to
 ComfyUI's temporary folder. All saved images retain resolution and alpha. The
 comparison fits each image without stretching; a singleton repeats across the
 other batch, and unequal non-singleton batches show unpaired trailing images.
+Click the preview to advance to the next image pair; the last pair wraps back
+to the first. The arrow buttons also step through the batch.
 Drag the divider or focus it and use Left/Right/Home/End. Folder history holds
 three successful destinations per browser, independently of workflow values.
 
@@ -548,7 +619,7 @@ Files are saved as exactly **`<filename_prefix>.png`**: the prefix is the whole 
 | `{counter}` or `{counter:N}` | The next unused number in the folder, padded to N digits (default 4, up to 12). Counts files that share the rest of the name. Use it once | `0007` |
 | `{index}` or `{index:N}` | Position of the image in its batch, from 1 | `3` |
 | `{input}` | Which image input the file came from, 1 or 2 | `2` |
-| `{hash}` or `{hash:N}` | N random hex characters (default 8, from 4 to 32), so two names can never clash | `a1b2c3d4` |
+| `{hash}` or `{hash:N}` | N random hex characters (default 8, from 4 to 32); normal collision-safe saving still applies | `a1b2c3d4` |
 | `{widget:ID.NAME}` | The value of widget NAME on the node with that id. Add `\|N` to keep at most N characters (default 60) | `{widget:12.seed}` → `42` |
 
 **Made safe automatically.** Characters Windows, macOS and Linux reject (`< > : " / \ | ? *` and control characters) and spaces become `_`, so a prefix can never choose a folder. Widget values are also trimmed, cut to length and have repeated underscores collapsed, and braces in them are dropped so a value such as `{hash}` cannot be mistaken for a token. Leading and trailing dots and spaces are removed, Windows device names such as `CON` and `NUL` get a `_` in front, and the name is cut at 180 characters. A blank prefix uses the default.
@@ -567,8 +638,327 @@ the next destination or run preview-only. Explorer opens on the Windows ComfyUI 
 
 ---
 
-## 📁 Ray - Folders (`RayFolders`)
+## 🔧 Ray's Tools: Folders (`RayFolders`)
 
-Resizable local media gallery with folder browsing, fuzzy filename search, multi-selection, prompt extraction, color/NSFW filters, viewers and drag-to-Load-Image. Both folder and name filter accept STRING inputs. All five outputs are optional ComfyUI lists: `images` (IMAGE), `videos` (VIDEO), `audio` (AUDIO), `prompt` (STRING), `paths` (STRING). Native dimensions/sample rates are preserved. With no selection, paths outputs the folder and media lists are empty. Refreshes on every workflow run, including when no outputs are connected.
+![🔧 Ray's Tools: Folders](screenshots/RayFolders.png)
 
-See [FOLDERS.md](FOLDERS.md) for settings, output pairing, error recovery and interactions.
+Resizable local media gallery with folder browsing, fuzzy filename search, multi-selection, prompt extraction, color/NSFW filters, viewers and drag-to-Load-Image. Both folder and name filter accept STRING inputs. All five outputs are optional ComfyUI lists: `images` (IMAGE), `videos` (VIDEO), `audio` (AUDIO), `prompt` (STRING), `paths` (STRING). Native dimensions/sample rates are preserved. With no selection, paths outputs the folder and media lists are empty. The gallery refreshes after the workflow finishes, so newly saved outputs appear, including when no outputs are connected.
+
+Selected media feed the current workflow as usual. Connected folder and filter values appear when that run finishes. The refresh button rescans immediately.
+
+Click selects one item; Ctrl/Cmd-click toggles extra selections. The top-right
+cog beside **Folder** opens media, sort, recursion, column, prompt and color/NSFW
+settings; **Apply** saves them to the workflow. Hover for file details, hold Shift
+for a prompt, double-click for the viewer, or right-click for copy/delete actions.
+See [the Folders guide](FOLDERS.md) for mixed-list outputs, filtering and file actions.
+
+---
+
+## 🔧 Ray's Tools: Model Card (`RayModelCard`)
+
+![🔧 Ray's Tools: Model Card](screenshots/RayModelCard.png)
+
+Connect **MODEL**, **CLIP** and **VAE**, choose the model's usual generation settings,
+and run. The node generates a full benchmark internally. Leave the optional
+**config** STRING socket disconnected for the built-in **66-image, eleven-category**
+benchmark. **Copy Config** copies that exact default; paste it into a multiline
+text node, edit it and connect it to customize the benchmark.
+
+| Output | Type | Contents |
+|:--|:--|:--|
+| `model_card` | IMAGE | Completed black model card at the requested width; height is automatic |
+| `preview` | IMAGE | High-quality downscale of the completed card, capped by preview width |
+| `images` | IMAGE | All source generations as one batch, in card order |
+| `report` | STRING | Markdown text with runtime, exact config, settings, positions, prompts, negatives and actual seeds |
+
+Runtime is shown as `HH:MM:SS.ss` and seconds. It measures this node's validation,
+image generation/decoding, card rendering and IMAGE output conversion. Queue time
+and upstream node execution are excluded.
+
+### Config
+
+```text
+=MY MODEL.v1
++PEOPLE
+Portrait::portrait of a woman in soft window light|blurry, cartoon
+an elderly man wearing glasses
++ANIMALS
+Owl::owl perched on a branch, wildlife photograph
+```
+
+`=title` is optional and wins over **Card name**. `+CATEGORY`
+starts a category. Each remaining line is `caption::positive|negative`; omit the
+caption to display the positive prompt, and omit `|negative` for an empty negative.
+Blank lines and surrounding whitespace are ignored. There are no comments or
+global negative prompts. Every category must contain a prompt; duplicate titles
+and empty titles/captions/prompts are errors.
+
+Escape literal delimiters with `\|`, `\::`, `\+`, `\=` and `\\`. Only a leading
+unescaped `+` or `=` declares structure. The first unescaped `|` splits the negative;
+the first unescaped `::` before it splits the caption. Unknown or dangling escapes
+produce a line-numbered error before any generation starts.
+
+### Settings and behavior
+
+**Card name** sits above the generation controls as an editable, connectable STRING
+widget. Its **{ }** button opens Save Image's draggable name builder with a live
+preview, date/time/hash tokens and a widget picker for values such as `unet_name`,
+`ckpt_name` or a sampler seed. Combine tokens with your own text; spaces are kept.
+Loader widget paths/extensions are removed. The workflow keeps the template and
+resolves current widget values when queued. Title priority is config `=title`,
+Card name, then `MODEL CARD` when blank. Existing name selections survive reload.
+
+The top-right **settings cog** opens source image width/height, card width,
+maximum preview width, embedded guidance and run safeguards.
+
+Generation runs categories top to bottom and prompts left to right. The largest
+category sets the column count; shorter rows leave aligned black cells. Thumbnails
+preserve the source aspect ratio. Captions have two fixed lines and ellipsis
+truncation; complete prompts remain in the report. Fonts use local Impact/condensed
+bold and sans-serif fonts with a Pillow fallback.
+
+**Fixed** repeats the initial seed. **Increment** and **decrement** advance before
+each image: initial seed 100 with increment generates 101, 102, 103, and so on.
+Seeds wrap at unsigned 64-bit boundaries. **Randomize** chooses an independent seed
+for each image. Every actual seed is recorded. The native ComfyUI seed control also
+updates the initial seed between queued runs.
+
+Sampling, model management, text encoding and decoding use ComfyUI facilities.
+Latent channels, dimensions and spatial scale come from the connected MODEL;
+single-frame image formats used by Qwen Image, Krea 2 and Anima are supported.
+SDXL, Flux/Flux 2/Klein/Flux 3, MOSS and Z-Image use the same native path. Availability
+depends on the installed ComfyUI and compatible MODEL/CLIP/VAE. **Auto** embedded
+guidance applies to models declaring `guidance_embed`; **Set** supplies the Settings
+value explicitly; **Disabled** keeps native conditioning unchanged. Apply shift,
+renorm and other MODEL patches upstream. V1 focuses on image generation.
+
+The default safeguards are 256 images and an estimated 4096 MiB CPU output/compositing
+budget; raise them deliberately for large runs. Model/VRAM memory is additional.
+All config/settings/size checks precede sampling. Failed generations identify the
+category, caption, index and config line; cancellation propagates normally. A failed
+run never emits a completed partial card. Source images and report stay in memory;
+connect Save Image or another output node when you want to save them.
+
+---
+
+## 🧰 Ray's Model Tools: Queued Model Loader (`RayQueuedModelLoader`)
+
+![🧰 Ray's Model Tools: Queued Model Loader](screenshots/RayQueuedModelLoader.png)
+
+Choose one or more diffusion models, add rows with **+** beside the Models heading,
+and remove them with the trash icons. Connect the single native **MODEL** output to your sampler or
+model processing chain. Press **Run** once to process a native model list in one
+workflow execution, in row order, with the same singleton seeds and settings. Each file uses
+ComfyUI's automatic precision and supported quantization. Keep compatible text
+encoders and VAE connected separately.
+
+The dropdown lists ComfyUI's registered diffusion models in their folder tree.
+Typing in its filter searches full paths across every subfolder; clearing the
+filter restores the tree. Selections survive workflow save/reload.
+All image results appear together in that run's preview. Use **Rebatch Images**
+after decoding when a downstream node needs one tensor batch. Each sampled model
+and its clones are explicitly offloaded through native memory management,
+including on error/cancel. DynamicVRAM also releases RAM weight buffers; legacy
+loading can retain CPU weights in the execution cache. For predictable comparisons,
+use deterministic random inputs and a non-randomized Model Card seed mode.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [queued model comparisons](MODEL_TOOLS.md#queued-model-comparisons)
+for list behavior, memory management, direct API usage and limitations.
+
+The top-right **Loader options cog** opens an optional **Spectrum** toggle, off by
+default. It automatically chooses the installed MOSS, MiniMax H3, SDXL/Anima or general
+Spectrum adapter for each loaded model. The node reports the attached adapter or
+native fallback. Spectrum approximates model evaluations and can change results;
+see [Spectrum acceleration](MODEL_TOOLS.md#optional-spectrum-acceleration) for
+optional dependencies, supported families and step-count requirements.
+
+---
+
+## 🧰 Ray's Model Tools: Load Model As (`RayModelLoadAs`)
+
+![🧰 Ray's Model Tools: Load Model As](screenshots/RayModelLoadAs.png)
+
+**Purpose.** Choose a checkpoint or diffusion model from the searchable folder dropdown. Select Auto or an explicit storage format. Also accepts a `model_data` handle; returns MODEL, CLIP, VAE, model data, metadata, and a report.
+
+For a file-only merge, connect only **model_data** and leave the format on **Auto** or **Preserve**. The node passes the source after reading its headers. Inference models load automatically when MODEL, CLIP or VAE outputs are used. Choose the final precision in Model Merge.
+
+The dropdown filter searches full paths across all registered subfolders; clear
+it to return to the tree. **Loader** chooses automatic detection, checkpoint or
+diffusion loading. **Load components** includes available checkpoint CLIP/VAE;
+diffusion-only files need those supplied separately. Connected sources replace
+the local picker with a link chip. The **Report** section updates after execution.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Convert Model (`RayModelConvert`)
+
+![🧰 Ray's Model Tools: Convert Model](screenshots/RayModelConvert.png)
+
+**Purpose.** Convert connected model weights or a safetensors source to another supported precision or quantization. Using an inference output automatically loads usable ComfyUI components alongside the file handle and report.
+
+Choose **Components** and the output **Weight format**. A connected live MODEL
+takes priority over model_data and the file path; its active patches are included.
+Quantized targets encode eligible Linear weights while other converted layers
+stay bf16. Connect **model_data** to Save Model to persist the result. Increasing
+precision cannot recover information lost in the source.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Save Model (`RayModelSave`)
+
+![🧰 Ray's Model Tools: Save Model](screenshots/RayModelSave.png)
+
+**Purpose.** Save a connected MODEL or model_data, including active patches, as `<filename_prefix>.safetensors` in the chosen output folder. Connect optional CLIP, VAE and structured metadata; returns a model-data handle and the saved path. Blank folders use ComfyUI output; relative folders are inside it. No counter is added, and existing files require overwrite.
+
+The folder icon chooses **Output folder**; the default is `model_tools` within
+ComfyUI output. Enter the filename stem without an extension, or connect Model
+Merge's **merge_name** to **filename_prefix**. Spaces and unsupported filename
+characters become underscores. Choosing a folder does not save the model; run it.
+
+**Metadata mode: Merge** retains source fields and adds connected metadata;
+**Replace** keeps supplied fields, required quantization metadata and save
+history. A live MODEL takes priority over model_data; MODEL alone does not include
+the original checkpoint's CLIP/VAE. **Report** shows the path after a successful save.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Metadata Load / Edit (`RayModelMetadata`)
+
+![🧰 Ray's Model Tools: Metadata Load / Edit](screenshots/RayModelMetadata.png)
+
+**Purpose.** Load model metadata or a JSON sidecar into an editable table and raw JSON editor. Optional metadata/model-data connections can supply the source; returns structured metadata and JSON text.
+
+Choose a file and click **Load / Edit**, or run with a connected source and a
+blank file path. **+** beside **Metadata** adds a uniquely named field; each row's
+trash icon removes it. Choose **Text** or **JSON value** for each value; **Expand
+JSON** reveals parseable nested content without changing its type. **Table /
+JSON** switches views of the same data. Edits survive reload; after changing the
+source file, use **Load / Edit** again. Invalid JSON or duplicate keys prevent execution.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Metadata Save (`RayModelMetadataSave`)
+
+![🧰 Ray's Model Tools: Metadata Save](screenshots/RayModelMetadataSave.png)
+
+**Purpose.** Save structured metadata as a JSON sidecar or embed it into a model copy while preserving the original tensor bytes. Returns the saved path.
+
+**json_sidecar** writes a structured JSON file; **model_copy** also requires a
+source model and preserves its tensor bytes and necessary quantization metadata.
+Connected metadata and **Metadata (JSON)** are combined, with JSON fields taking
+priority. The **Output file** button opens Save As with the matching extension;
+blank uses the prefix and counter under ComfyUI output. **Overwrite** controls
+replacement of existing files. Run to save; selecting a destination only fills the field.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Model Merge (`RayModelMerge`)
+
+![🧰 Ray's Model Tools: Model Merge](screenshots/RayModelMerge.png)
+
+**Purpose.** Merge compatible models connected to A, B and any required base, using MODEL or model-data inputs. Supports LERP, SLERP, TIES, DARE, DELLA, or Breadcrumbs variants, component selection and seeded controls. Connect block weights as a JSON STRING. Inference outputs load automatically when used. Fast merge holds the output in RAM; a data-only connection to Save Model avoids intermediate model files.
+
+The live **Merge name** preview follows upstream model selections and settings.
+Connect the **merge_name** STRING output to Save Model's **filename_prefix** for
+a name containing the sources, strategy, percentages, precision, settings
+fingerprint and execution datetime.
+
+Open **? Help** for each strategy's purpose, strengths and limitations. Hover
+the controls for setting-specific tooltips. Enabling Fast merge opens a RAM
+warning with **REVERT** and **CONFIRM**; both close the popup and apply the choice.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Model Inspector (`RayModelInspector`)
+
+![🧰 Ray's Model Tools: Model Inspector](screenshots/RayModelInspector.png)
+
+**Purpose.** Inspect tensor names, shapes, dtypes, parameter counts, and architecture clues from a model source. The default panel is empty until a source is inspected; returns report text and metadata.
+
+**Preview files** reads the selected file immediately. Use **Run** to inspect a
+connected MODEL/model_data and emit outputs. File inspection is header-only;
+live MODEL input is first exported with active patches. **Filter tensors** and
+the page arrows navigate the current report. Execution uses **Max rows**; the
+immediate preview includes up to 5000 rows. Optional GGUF inspection needs `gguf`.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: Model Compare (`RayModelCompare`)
+
+![🧰 Ray's Model Tools: Model Compare](screenshots/RayModelCompare.png)
+
+**Purpose.** Compare the tensor structures of two model sources before merging. Returns a report of differences in names, shapes and dtypes, plus a boolean indicating structural compatibility.
+
+Choose **Components** and provide A/B files or live MODEL/model_data connections.
+For each source, MODEL takes priority over model_data and its path. **Preview
+files** compares the selected files immediately; **Run** uses connected sources
+and emits outputs. Matching structure does not establish a common training base,
+measure weight similarity, or guarantee a useful merge.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: LoRA Bake (`RayLoraBake`)
+
+![🧰 Ray's Model Tools: LoRA Bake](screenshots/RayLoraBake.png)
+
+**Purpose.** Bake a supported LoRA adapter into a model or checkpoint source using ComfyUI's mappings. Returns effective components, a model-data handle, metadata, and a report.
+
+Choose the LoRA file and separate **Model strength** / **CLIP strength**. Zero
+disables that contribution and negative strength reverses it; connect matching
+CLIP to include supported text-encoder changes. Input branches remain unchanged.
+**Preserve** keeps the source representation; an explicit format uses fp32
+working weights before final encoding. Connect model_data to Save Model for a
+permanent file. An adapter with no matching layers fails with an actionable error.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: LoRA Extract (`RayLoraExtract`)
+
+![🧰 Ray's Model Tools: LoRA Extract](screenshots/RayLoraExtract.png)
+
+**Purpose.** Extract a LoRA from the difference between finetuned and base checkpoints using SVD, with rank, alpha and precision controls. Returns the saved path, a LoRA-data handle, and a report.
+
+Use the compatible original training base. **Rank** caps the low-rank dimension
+per layer; **Alpha = 0** uses its actual rank. **Components** selects diffusion
+and/or text weights; **Include embeddings** is separate. SVD error in the report
+is measured before output rounding. The file icon opens safetensors Save As;
+blank uses the prefix and counter under ComfyUI output. Run writes the adapter.
+Existing files are preserved with a collision error; there is no Overwrite switch.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
+
+---
+
+## 🧰 Ray's Model Tools: LoRA QKV Loader (`RayLoraQKVLoader`)
+
+![🧰 Ray's Model Tools: LoRA QKV Loader](screenshots/RayLoraQKVLoader.png)
+
+**Purpose.** Load one or more LoRAs onto a MODEL with individual strengths. Add
+rows with **+** beside the LoRAs heading, remove them with **trash**, and select
+registered files from the searchable folder dropdown. The filter searches full
+paths across every subfolder. Automatically repairs unambiguous trainer names and supported
+fused/separate QKV mismatches against the connected model, using native ComfyUI
+adapters for ordinary loading. Zero strength skips a row; an empty list passes
+the model through. Reports loaded weights, fixes and unmatched adapters. MODEL
+input/output only; no text-encoder loading.
+
+**Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md)
+for supported repairs, controls and limitations.

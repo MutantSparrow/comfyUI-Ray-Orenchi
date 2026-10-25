@@ -13,7 +13,7 @@ const MODE_EMBED = "Embed";
 // Widgets visible per mode. The `path` widget is shared.
 const MODE_VISIBLE = {
     [MODE_INSPECT]: new Set(["mode", "path"]),
-    [MODE_EMBED]: new Set(["mode", "path", "metadata_json"]),
+    [MODE_EMBED]: new Set(["mode", "path", "metadata_json", "overwrite"]),
 };
 
 // The widgets the mode decides about; anything else (the panel itself) is left alone.

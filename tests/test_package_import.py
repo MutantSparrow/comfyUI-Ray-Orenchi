@@ -41,7 +41,10 @@ def test_import_mode_and_stable_ids(package):
     assert set(namespace["NODE_CLASS_MAPPINGS"]) == {
         "RaySaveImage", "RayFolders", "RayCRT", "RayOffsetPrint", "RayPixelArtDetector",
         "RayKnob", "RaySwitch", "RayButtonDeck", "RayFaderBank", "RayTextFolder",
-        "RayVLMFolder", "RayFastQwen3VL", "RayPromptFetcher", "RayMetaInspect", "RayFilmStock", "RayVHS"}
+        "RayVLMFolder", "RayFastQwen3VL", "RayPromptFetcher", "RayMetaInspect", "RayFilmStock", "RayVHS",
+        "RayModelCard", "RayModelLoadAs", "RayQueuedModelLoader", "RayModelConvert", "RayModelSave",
+        "RayModelMetadata", "RayModelMetadataSave", "RayModelMerge", "RayModelInspector", "RayModelCompare",
+        "RayLoraBake", "RayLoraExtract", "RayLoraQKVLoader"}
     assert all(name.startswith(".") == bool(package) for name, _ in calls)
-    assert len(calls) == len(NODE_MODULES) + (5 if package else 0)
+    assert len(calls) == len(NODE_MODULES) + (7 if package else 0)
     assert registered == ([True] if package else [])

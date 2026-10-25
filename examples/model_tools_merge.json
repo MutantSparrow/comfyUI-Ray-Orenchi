@@ -1,0 +1,882 @@
+{
+  "id": "70c2b1fb-23da-4324-ad70-eb70c5a1cac3",
+  "revision": 0,
+  "last_node_id": 5,
+  "last_link_id": 5,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "RayModelLoadAs",
+      "pos": [
+        40,
+        80
+      ],
+      "size": [
+        470,
+        421
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model_data",
+          "name": "model_data",
+          "shape": 7,
+          "type": "RAY_MODEL_DATA",
+          "link": null
+        },
+        {
+          "localized_name": "model_name",
+          "name": "model_name",
+          "type": "STRING",
+          "widget": {
+            "name": "model_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "weight_format",
+          "name": "weight_format",
+          "type": "COMBO",
+          "widget": {
+            "name": "weight_format"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "loader",
+          "name": "loader",
+          "type": "COMBO",
+          "widget": {
+            "name": "loader"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "load_components",
+          "name": "load_components",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "load_components"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "path",
+          "name": "path",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "path"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "links": null
+        },
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "links": null
+        },
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "type": "VAE",
+          "links": null
+        },
+        {
+          "localized_name": "model_data",
+          "name": "model_data",
+          "type": "RAY_MODEL_DATA",
+          "links": [
+            1
+          ]
+        },
+        {
+          "localized_name": "metadata",
+          "name": "metadata",
+          "type": "RAY_MODEL_METADATA",
+          "links": null
+        },
+        {
+          "localized_name": "report",
+          "name": "report",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RayModelLoadAs",
+        "ray_model_tools_schema": 2
+      },
+      "widgets_values": [
+        "",
+        "auto",
+        "auto",
+        true,
+        ""
+      ],
+      "widgets_values_named": {
+        "model_name": "",
+        "weight_format": "auto",
+        "loader": "auto",
+        "load_components": true,
+        "path": ""
+      },
+      "color": "#000000",
+      "bgcolor": "#000000"
+    },
+    {
+      "id": 2,
+      "type": "RayModelLoadAs",
+      "pos": [
+        40,
+        680
+      ],
+      "size": [
+        470,
+        421
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model_data",
+          "name": "model_data",
+          "shape": 7,
+          "type": "RAY_MODEL_DATA",
+          "link": null
+        },
+        {
+          "localized_name": "model_name",
+          "name": "model_name",
+          "type": "STRING",
+          "widget": {
+            "name": "model_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "weight_format",
+          "name": "weight_format",
+          "type": "COMBO",
+          "widget": {
+            "name": "weight_format"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "loader",
+          "name": "loader",
+          "type": "COMBO",
+          "widget": {
+            "name": "loader"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "load_components",
+          "name": "load_components",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "load_components"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "path",
+          "name": "path",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "path"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "links": null
+        },
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "links": null
+        },
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "type": "VAE",
+          "links": null
+        },
+        {
+          "localized_name": "model_data",
+          "name": "model_data",
+          "type": "RAY_MODEL_DATA",
+          "links": [
+            2
+          ]
+        },
+        {
+          "localized_name": "metadata",
+          "name": "metadata",
+          "type": "RAY_MODEL_METADATA",
+          "links": null
+        },
+        {
+          "localized_name": "report",
+          "name": "report",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RayModelLoadAs",
+        "ray_model_tools_schema": 2
+      },
+      "widgets_values": [
+        "",
+        "auto",
+        "auto",
+        true,
+        ""
+      ],
+      "widgets_values_named": {
+        "model_name": "",
+        "weight_format": "auto",
+        "loader": "auto",
+        "load_components": true,
+        "path": ""
+      },
+      "color": "#000000",
+      "bgcolor": "#000000"
+    },
+    {
+      "id": 3,
+      "type": "RayModelMerge",
+      "pos": [
+        620,
+        80
+      ],
+      "size": [
+        470,
+        613
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model_a",
+          "name": "model_a",
+          "shape": 7,
+          "type": "MODEL",
+          "link": null
+        },
+        {
+          "localized_name": "model_b",
+          "name": "model_b",
+          "shape": 7,
+          "type": "MODEL",
+          "link": null
+        },
+        {
+          "localized_name": "base_model",
+          "name": "base_model",
+          "shape": 7,
+          "type": "MODEL",
+          "link": null
+        },
+        {
+          "localized_name": "clip_a",
+          "name": "clip_a",
+          "shape": 7,
+          "type": "CLIP",
+          "link": null
+        },
+        {
+          "localized_name": "clip_b",
+          "name": "clip_b",
+          "shape": 7,
+          "type": "CLIP",
+          "link": null
+        },
+        {
+          "localized_name": "base_clip",
+          "name": "base_clip",
+          "shape": 7,
+          "type": "CLIP",
+          "link": null
+        },
+        {
+          "localized_name": "vae_a",
+          "name": "vae_a",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        },
+        {
+          "localized_name": "data_a",
+          "name": "data_a",
+          "shape": 7,
+          "type": "RAY_MODEL_DATA",
+          "link": 1
+        },
+        {
+          "localized_name": "data_b",
+          "name": "data_b",
+          "shape": 7,
+          "type": "RAY_MODEL_DATA",
+          "link": 2
+        },
+        {
+          "localized_name": "base_data",
+          "name": "base_data",
+          "shape": 7,
+          "type": "RAY_MODEL_DATA",
+          "link": null
+        },
+        {
+          "localized_name": "block_weights",
+          "name": "block_weights",
+          "shape": 7,
+          "type": "STRING",
+          "link": null
+        },
+        {
+          "localized_name": "strategy",
+          "name": "strategy",
+          "type": "COMBO",
+          "widget": {
+            "name": "strategy"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "weight_a",
+          "name": "weight_a",
+          "type": "FLOAT",
+          "widget": {
+            "name": "weight_a"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "weight_format",
+          "name": "weight_format",
+          "type": "COMBO",
+          "widget": {
+            "name": "weight_format"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "components",
+          "name": "components",
+          "type": "COMBO",
+          "widget": {
+            "name": "components"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "mismatch",
+          "name": "mismatch",
+          "type": "COMBO",
+          "widget": {
+            "name": "mismatch"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "seed",
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "density",
+          "name": "density",
+          "type": "FLOAT",
+          "widget": {
+            "name": "density"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "lambda",
+          "name": "lambda",
+          "type": "FLOAT",
+          "widget": {
+            "name": "lambda"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "top_trim",
+          "name": "top_trim",
+          "type": "FLOAT",
+          "widget": {
+            "name": "top_trim"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "bottom_trim",
+          "name": "bottom_trim",
+          "type": "FLOAT",
+          "widget": {
+            "name": "bottom_trim"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "path_a",
+          "name": "path_a",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "path_a"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "path_b",
+          "name": "path_b",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "path_b"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "base_path",
+          "name": "base_path",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "base_path"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "fast_merge",
+          "name": "fast_merge",
+          "shape": 7,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "fast_merge"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "links": null
+        },
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "links": null
+        },
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "type": "VAE",
+          "links": null
+        },
+        {
+          "localized_name": "model_data",
+          "name": "model_data",
+          "type": "RAY_MODEL_DATA",
+          "links": [
+            3
+          ]
+        },
+        {
+          "localized_name": "metadata",
+          "name": "metadata",
+          "type": "RAY_MODEL_METADATA",
+          "links": null
+        },
+        {
+          "localized_name": "report",
+          "name": "report",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "merge_name",
+          "name": "merge_name",
+          "type": "STRING",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RayModelMerge",
+        "ray_model_tools_schema": 2
+      },
+      "widgets_values": [
+        "LERP",
+        0.5,
+        "bf16",
+        "diffusion",
+        "forbid",
+        0,
+        "randomize",
+        0.5,
+        1,
+        0.1,
+        0.01,
+        "",
+        "",
+        "",
+        false,
+        "{}"
+      ],
+      "widgets_values_named": {
+        "strategy": "LERP",
+        "weight_a": 0.5,
+        "weight_format": "bf16",
+        "components": "diffusion",
+        "mismatch": "forbid",
+        "seed": 0,
+        "control_after_generate": "randomize",
+        "density": 0.5,
+        "lambda": 1,
+        "top_trim": 0.1,
+        "bottom_trim": 0.01,
+        "path_a": "",
+        "path_b": "",
+        "base_path": "",
+        "fast_merge": false,
+        "block_weights": "{}"
+      },
+      "color": "#000000",
+      "bgcolor": "#000000"
+    },
+    {
+      "id": 4,
+      "type": "RayModelSave",
+      "pos": [
+        1780,
+        80
+      ],
+      "size": [
+        470,
+        401
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "shape": 7,
+          "type": "MODEL",
+          "link": null
+        },
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "shape": 7,
+          "type": "CLIP",
+          "link": null
+        },
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        },
+        {
+          "localized_name": "model_data",
+          "name": "model_data",
+          "shape": 7,
+          "type": "RAY_MODEL_DATA",
+          "link": 3
+        },
+        {
+          "localized_name": "metadata",
+          "name": "metadata",
+          "shape": 7,
+          "type": "RAY_MODEL_METADATA",
+          "link": 5
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": 4
+        },
+        {
+          "localized_name": "metadata_mode",
+          "name": "metadata_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "metadata_mode"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "overwrite",
+          "name": "overwrite",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "overwrite"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "output_folder",
+          "name": "output_folder",
+          "type": "STRING",
+          "widget": {
+            "name": "output_folder"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "metadata_json",
+          "name": "metadata_json",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "metadata_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "path",
+          "name": "path",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "path"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "output_path",
+          "name": "output_path",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "output_path"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "model_data",
+          "name": "model_data",
+          "type": "RAY_MODEL_DATA",
+          "links": null
+        },
+        {
+          "localized_name": "saved_path",
+          "name": "saved_path",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RayModelSave",
+        "ray_model_tools_schema": 3
+      },
+      "widgets_values": [
+        "Ray_Model",
+        "merge",
+        false,
+        "model_tools",
+        "",
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "Ray_Model",
+        "metadata_mode": "merge",
+        "overwrite": false,
+        "output_folder": "model_tools",
+        "metadata_json": "",
+        "path": "",
+        "output_path": ""
+      },
+      "color": "#000000",
+      "bgcolor": "#000000"
+    },
+    {
+      "id": 5,
+      "type": "RayModelMetadata",
+      "pos": [
+        1200,
+        680
+      ],
+      "size": [
+        470,
+        454
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model_data",
+          "name": "model_data",
+          "shape": 7,
+          "type": "RAY_MODEL_DATA",
+          "link": null
+        },
+        {
+          "localized_name": "metadata",
+          "name": "metadata",
+          "shape": 7,
+          "type": "RAY_MODEL_METADATA",
+          "link": null
+        },
+        {
+          "localized_name": "path",
+          "name": "path",
+          "type": "STRING",
+          "widget": {
+            "name": "path"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "editor_json",
+          "name": "editor_json",
+          "type": "STRING",
+          "widget": {
+            "name": "editor_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "editor_source",
+          "name": "editor_source",
+          "type": "STRING",
+          "widget": {
+            "name": "editor_source"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "metadata",
+          "name": "metadata",
+          "type": "RAY_MODEL_METADATA",
+          "links": [
+            5
+          ]
+        },
+        {
+          "localized_name": "metadata_json",
+          "name": "metadata_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RayModelMetadata",
+        "ray_model_tools_schema": 2
+      },
+      "widgets_values": [
+        "",
+        "{\"author\":\"Ray\",\"method\":\"LERP\",\"ratio\":\"50/50\"}",
+        ""
+      ],
+      "widgets_values_named": {
+        "path": "",
+        "editor_json": "{\"author\":\"Ray\",\"method\":\"LERP\",\"ratio\":\"50/50\"}",
+        "editor_source": ""
+      },
+      "color": "#000000",
+      "bgcolor": "#000000"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      3,
+      3,
+      7,
+      "RAY_MODEL_DATA"
+    ],
+    [
+      2,
+      2,
+      3,
+      3,
+      8,
+      "RAY_MODEL_DATA"
+    ],
+    [
+      3,
+      3,
+      3,
+      4,
+      3,
+      "RAY_MODEL_DATA"
+    ],
+    [
+      4,
+      3,
+      6,
+      4,
+      5,
+      "STRING"
+    ],
+    [
+      5,
+      5,
+      0,
+      4,
+      4,
+      "RAY_MODEL_METADATA"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9,
+      "offset": [
+        416,
+        110
+      ]
+    }
+  },
+  "version": 0.4
+}

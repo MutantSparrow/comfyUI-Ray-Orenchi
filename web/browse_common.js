@@ -40,7 +40,7 @@ export async function browseInto(node, targetName, { kind = "folder", title, fil
     if (linked(node, targetName)) { notify(`${targetName} is driven by a link, so there is nothing to browse.`); return false; }
     try {
         const picked = await browsePath(kind, String(target.value ?? ""), { title, filters });
-        if (!picked) return false;
+        if (!picked || linked(node, targetName)) return false;
         const graph = node.graph;
         graph?.beforeChange?.();
         try {

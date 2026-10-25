@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { ICONS, ensurePanelStyles, linkChip, registerLinkTargets } from "./ray_panel.js";
+import { createNodeHeader, iconButton, inputTooltip, ensurePanelStyles, linkChip, registerLinkTargets } from "./ray_panel.js";
 import { browseInto, notify } from "./browse_common.js";
 import { options, searchFilenames, colorSignature, matchesAnalysis, analysisScore, nsfwScore, promptText } from "./folders_filters.js";
 import { settingsPopup } from "./folders_settings.js";
@@ -9,7 +9,6 @@ import { cachedAnalysis, storeAnalysis } from "./folders_cache.js";
 import { createThumbnailCache } from "./folders_thumbnails.js";
 
 const DRAG_TYPE="application/x-ray-folders";
-const COG='<svg viewBox="0 0 24 24"><path d="m10 3-1 3-3 1-3 3 2 2-1 3 3 3 3-1 2 2 3-1 1-3 3-1 1-3-2-2 1-3-3-3-3 1z"/><circle cx="12" cy="12" r="3"/></svg>';
 const element=(tag,cls,text)=>{const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el;};
 const widget=(node,name)=>node.widgets?.find(w=>w.name===name);
 const linked=(node,name)=>node.inputs?.some(i=>(i.widget?.name===name||i.name===name)&&i.link!=null);
@@ -39,22 +38,26 @@ export function createGallery(node) {
     let selected=new Set(),resolved=null,lastNative="",lastScan="",dead=false,scanSerial=0,analysisSerial=0,counts={},message="Choose a folder to browse.";
     let tooltip,timer,hovered,hoverInfo,shift=false,viewerClose,menuClose,popupClose,promptClose,deleteClose,debounce,resizeFrame,filterFrame;
     let reading=false,hydrating=false,pendingCount=0,scrolling=false,scrollTimer;
+    let workflowRunning=false,pendingExecution=null;
     let searchRequest,searchTimer,searchSerial=0,searchQuery="",searchHideNoPrompt=false,searching=false,searchChecked=0,searchError="",searchStage="names";
     let textMatches=new Set(),searchPending=new Set();
     const meta=new Map(),analysis=new Map(),tiles=new Map();
     const thumbnails=createThumbnailCache(),jobs=new Map(),unavailable=new Map();let allowed=new Set();
     const cacheKey=item=>folder+"\0"+item.id+":"+item.revision;
-    const root=element("div","ray-folders"),controls=element("div","rf-controls"),folderRow=element("div","rf-row"),filterRow=element("div","rf-row");
+    const root=element("div","ray-folders"),controls=element("div","rf-controls rp-section"),folderRow=element("div","rf-row"),filterRow=element("div","rf-row");
     const path=element("input"),filter=element("input");
     path.type=filter.type="text";path.spellcheck=filter.spellcheck=false;
     path.setAttribute("aria-label","Folder");path.placeholder="Choose a folder…";
     filter.setAttribute("aria-label","Filename or prompt filter");filter.placeholder="Fuzzy filename or prompt filter…";
-    const browse=element("button","rf-icon");browse.type="button";browse.innerHTML=ICONS.folder;browse.title="Browse folder";browse.setAttribute("aria-label",browse.title);
-    const refresh=element("button","rf-icon");refresh.type="button";refresh.innerHTML=ICONS.refresh;refresh.title="Refresh folder";refresh.setAttribute("aria-label",refresh.title);
-    const cog=element("button","rf-icon");cog.type="button";cog.innerHTML=COG;cog.title="Folders settings";cog.setAttribute("aria-label",cog.title);
+    path.title=inputTooltip(node,"folder","Folder of media on the ComfyUI server");
+    filter.title=inputTooltip(node,"name_filter","Filter filenames and extracted prompts");
+    const browse=iconButton("folder","Browse folder",async()=>{if(await browseInto(node,"folder",{title:"Choose a media folder"})){resolved=null;sync(true);}});
+    const refresh=iconButton("refresh","Refresh folder",()=>sync(true));
+    const cog=iconButton("settings","Folders settings",()=>{popupClose?.();popupClose=settingsPopup(opts,value=>{change(node,"settings_json",JSON.stringify(value));sync(true);},cog);});
+    const header=createNodeHeader("Folder",[cog]);
     const folderChip=linkChip(node,"folder",()=>sync()),filterChip=linkChip(node,"name_filter",()=>sync());
     folderRow.append(element("label","","Folder"),path,folderChip.element,browse,refresh);
-    filterRow.append(element("label","","Filter"),filter,filterChip.element,cog);
+    filterRow.append(element("label","","Filter"),filter,filterChip.element);
     const status=element("div","rf-status","Choose a folder to browse."),viewport=element("div","rf-viewport"),grid=element("div","rf-grid");
     const total=element("div","rf-total","0 images");
     status.setAttribute("aria-live","polite");viewport.setAttribute("aria-label","Folder media");viewport.tabIndex=0;
@@ -62,7 +65,9 @@ export function createGallery(node) {
     loading.append(element("span","rf-spinner"),loadingText);loading.hidden=true;
     const more=element("button","rf-more","Load more");more.type="button";more.hidden=true;
     more.title="Check the next visible files without scanning the whole folder";more.onclick=()=>render();
-    controls.append(folderRow,filterRow,status);viewport.append(grid,loading);root.append(controls,viewport,more,total);
+    controls.append(header.element,folderRow,filterRow,status);
+    const media=element("div","rf-media rp-section");
+    viewport.append(grid,loading);media.append(element("div","rp-title","Media"),viewport,more,total);root.append(controls,media);
     const unregister=registerLinkTargets(node,[{name:"folder",element:folderRow},{name:"name_filter",element:filterRow}],()=>sync());
 
     function readSelection() {
@@ -403,9 +408,9 @@ export function createGallery(node) {
     function confirmDelete(item) {
         deleteClose?.();hideTooltip();
         const token=rootToken,sourceFolder=folder,key=cacheKey(item),abort=new AbortController();
-        const backdrop=element("div","rf-backdrop"),panel=element("section","rf-delete-dialog"),error=element("p","rf-delete-error");
+        const backdrop=element("div","rf-backdrop"),panel=element("section","rf-delete-dialog rp-surface"),error=element("p","rf-delete-error");
         panel.setAttribute("role","dialog");panel.setAttribute("aria-modal","true");panel.setAttribute("aria-label","Delete asset?");
-        panel.append(element("h3","","Delete asset?"),element("p","rf-delete-name",item.id),element("p","","Move this asset to the Recycle Bin / Trash. You can restore it there."),error);
+        panel.append(element("h3","rp-title","Delete asset?"),element("p","rf-delete-name",item.id),element("p","","Move this asset to the Recycle Bin / Trash. You can restore it there."),error);
         error.setAttribute("role","alert");error.hidden=true;
         const actions=element("div","rf-actions"),cancel=element("button","","Cancel"),remove=element("button","rf-danger","Delete asset");
         cancel.type=remove.type="button";
@@ -472,9 +477,6 @@ export function createGallery(node) {
         document.addEventListener("pointerdown",e=>{if(!menu.contains(e.target))close();},{capture:true,signal:abort.signal});closeOnEscape(close,abort.signal);
         try {const info=await details(item);if(menu.isConnected){buttons[1].disabled=!info.has_prompt;buttons[2].disabled=!info.workflow;}}catch{}
     }
-    browse.onclick=async()=>{if(await browseInto(node,"folder",{title:"Choose a media folder"})){resolved=null;sync(true);}};
-    refresh.onclick=()=>sync(true);
-    cog.onclick=()=>{popupClose?.();popupClose=settingsPopup(opts,value=>{change(node,"settings_json",JSON.stringify(value));sync(true);},cog);};
     path.onchange=()=>{change(node,"folder",path.value);resolved=null;sync(true);};
     filter.oninput=()=>{change(node,"name_filter",filter.value);sync();};
     root.addEventListener("keydown",e=>{e.stopPropagation();if(e.key==="Escape")hideTooltip();});
@@ -506,11 +508,25 @@ export function createGallery(node) {
         viewportWidth=width;viewportHeight=height;
         cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>render());
     });observer.observe(viewport);
+    api.addEventListener("execution_start",()=>{workflowRunning=true;pendingExecution=null;},{signal:lifecycle.signal});
+    // ComfyUI sends the terminal null only after every output node has finished.
+    // Keep linked values pending too, so polling cannot trigger an earlier scan.
+    api.addEventListener("executing",event=>{
+        if(event.detail!==null)return;
+        workflowRunning=false;
+        if(pendingExecution)resolved=pendingExecution;
+        pendingExecution=null;
+        sync(true);
+        if(resolved?.error)status.title=resolved.error;
+    },{signal:lifecycle.signal});
     const poll=setInterval(()=>{if(root.isConnected)sync();},400);
     queueMicrotask(()=>sync(true));
     return {root,sync,refresh:()=>sync(true),
-        executed(data){resolved=data;sync(true);if(data.error)status.title=data.error;},
-        destroy(){dead=true;scanRequest?.abort();cancelSearch();resetTiles();thumbnails.clear();lifecycle.abort();observer.disconnect();cancelAnimationFrame(resizeFrame);clearTimeout(filterFrame);clearTimeout(scrollTimer);clearInterval(poll);clearTimeout(debounce);hideTooltip();viewerClose?.();menuClose?.();popupClose?.();promptClose?.();deleteClose?.();unregister();},
+        executed(data){
+            if(workflowRunning){pendingExecution=data;return;}
+            resolved=data;sync(true);if(data.error)status.title=data.error;
+        },
+        destroy(){dead=true;scanRequest?.abort();cancelSearch();resetTiles();thumbnails.clear();lifecycle.abort();observer.disconnect();cancelAnimationFrame(resizeFrame);clearTimeout(filterFrame);clearTimeout(scrollTimer);clearInterval(poll);clearTimeout(debounce);hideTooltip();viewerClose?.();menuClose?.();popupClose?.();promptClose?.();deleteClose?.();unregister();header.destroy();},
     };
 }
 

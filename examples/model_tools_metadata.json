@@ -1,0 +1,305 @@
+{
+  "id": "bd3dbbcb-0df7-4edf-a53c-0046eb5eaaba",
+  "revision": 0,
+  "last_node_id": 3,
+  "last_link_id": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "RayModelMetadata",
+      "pos": [
+        40,
+        80
+      ],
+      "size": [
+        470,
+        220
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model_data",
+          "name": "model_data",
+          "shape": 7,
+          "type": "RAY_MODEL_DATA",
+          "link": null
+        },
+        {
+          "localized_name": "metadata",
+          "name": "metadata",
+          "shape": 7,
+          "type": "RAY_MODEL_METADATA",
+          "link": null
+        },
+        {
+          "localized_name": "path",
+          "name": "path",
+          "type": "STRING",
+          "widget": {
+            "name": "path"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "editor_json",
+          "name": "editor_json",
+          "type": "STRING",
+          "widget": {
+            "name": "editor_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "editor_source",
+          "name": "editor_source",
+          "type": "STRING",
+          "widget": {
+            "name": "editor_source"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "metadata",
+          "name": "metadata",
+          "type": "RAY_MODEL_METADATA",
+          "links": [
+            1
+          ]
+        },
+        {
+          "localized_name": "metadata_json",
+          "name": "metadata_json",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RayModelMetadata"
+      },
+      "widgets_values": [
+        "",
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "path": "",
+        "editor_json": "",
+        "editor_source": ""
+      },
+      "color": "#000000",
+      "bgcolor": "#000000"
+    },
+    {
+      "id": 2,
+      "type": "RayModelMetadataSave",
+      "pos": [
+        650,
+        80
+      ],
+      "size": [
+        470,
+        394
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "metadata",
+          "name": "metadata",
+          "shape": 7,
+          "type": "RAY_MODEL_METADATA",
+          "link": 1
+        },
+        {
+          "localized_name": "mode",
+          "name": "mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "mode"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "overwrite",
+          "name": "overwrite",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "overwrite"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "metadata_json",
+          "name": "metadata_json",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "metadata_json"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "source_model_path",
+          "name": "source_model_path",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "source_model_path"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "output_path",
+          "name": "output_path",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "output_path"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "saved_path",
+          "name": "saved_path",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RayModelMetadataSave"
+      },
+      "widgets_values": [
+        "json_sidecar",
+        "model_tools/Ray_Metadata",
+        false,
+        "",
+        "",
+        ""
+      ],
+      "widgets_values_named": {
+        "mode": "json_sidecar",
+        "filename_prefix": "model_tools/Ray_Metadata",
+        "overwrite": false,
+        "metadata_json": "",
+        "source_model_path": "",
+        "output_path": ""
+      },
+      "color": "#000000",
+      "bgcolor": "#000000"
+    },
+    {
+      "id": 3,
+      "type": "RayModelInspector",
+      "pos": [
+        40,
+        720
+      ],
+      "size": [
+        470,
+        254
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "shape": 7,
+          "type": "MODEL",
+          "link": null
+        },
+        {
+          "localized_name": "model_data",
+          "name": "model_data",
+          "shape": 7,
+          "type": "RAY_MODEL_DATA",
+          "link": null
+        },
+        {
+          "localized_name": "path",
+          "name": "path",
+          "type": "STRING",
+          "widget": {
+            "name": "path"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "max_rows",
+          "name": "max_rows",
+          "type": "INT",
+          "widget": {
+            "name": "max_rows"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "report",
+          "name": "report",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "metadata",
+          "name": "metadata",
+          "type": "RAY_MODEL_METADATA",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "RayModelInspector"
+      },
+      "widgets_values": [
+        "",
+        5000
+      ],
+      "widgets_values_named": {
+        "path": "",
+        "max_rows": 5000
+      },
+      "color": "#000000",
+      "bgcolor": "#000000"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "RAY_MODEL_METADATA"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.75,
+      "offset": [
+        150,
+        150
+      ]
+    }
+  },
+  "version": 0.4
+}

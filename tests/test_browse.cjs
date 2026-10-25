@@ -63,6 +63,16 @@ const failWith = (status, body) => { reply = () => ({ ok: false, status, json: a
     assert.equal(await browseInto(plain, "folder", { kind: "folder" }), true);
     assert.equal(plain.widgets[0].value, "G:/y");
 
+    // A link established while the native dialog is open wins over its result.
+    const connected = makeNode();
+    reply = () => ({ok:true,status:200,json:async () => {
+        connected.inputs.push({name:"folder",link:7});
+        return {ok:true,path:"G:/late"};
+    }});
+    assert.equal(await browseInto(connected,"folder"),false);
+    assert.equal(connected.widgets[0].value,"C:/start");
+    assert.equal(connected.graph.before,0);
+
     // a missing toast service falls back to the console instead of throwing
     context.app.extensionManager = undefined;
     failWith(500, { ok: false, error: "boom" });

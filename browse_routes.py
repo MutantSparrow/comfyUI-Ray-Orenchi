@@ -20,7 +20,7 @@ try:
 except ImportError:
     from route_security import is_local, require_local
 
-KINDS = ("folder", "file")
+KINDS = ("folder", "file", "save")
 TIMEOUT_SECONDS = 15 * 60
 MAX_FILTERS = 8
 _busy = threading.Lock()
@@ -43,7 +43,7 @@ def clean_filters(filters):
         except (TypeError, ValueError):
             continue
         exts = [e.lstrip(".").lower() for e in exts if isinstance(e, str)] if isinstance(exts, list) else []
-        exts = [e for e in exts if re.fullmatch(r"[a-z0-9]{1,8}", e)]
+        exts = [e for e in exts if re.fullmatch(r"[a-z0-9]{1,16}", e)]
         if exts:
             out.append((re.sub(r"[|\n\r]", " ", str(label))[:40] or "Files", exts))
         if len(out) >= MAX_FILTERS:
@@ -58,6 +58,10 @@ def start_location(kind, initial):
     if not text or not os.path.isabs(text):
         return "", ""
     path = os.path.normpath(text)
+    if kind == "save" and not os.path.isdir(path):
+        folder = os.path.dirname(path)
+        if os.path.isdir(folder):
+            return folder, os.path.basename(path)
     if kind == "file" and os.path.isfile(path):
         return os.path.dirname(path), os.path.basename(path)
     while path and not os.path.isdir(path):
@@ -83,9 +87,14 @@ try:
 except Exception:
     pass
 root.update()
-types = [(label, " ".join("*." + e for e in exts)) for label, exts in json.loads(filters)] + [("All files", "*.*")]
+filter_defs = json.loads(filters)
+types = [(label, " ".join("*." + e for e in exts)) for label, exts in filter_defs] + [("All files", "*.*")]
 if kind == "folder":
     path = filedialog.askdirectory(parent=root, title=title, initialdir=folder or None, mustexist=False)
+elif kind == "save":
+    extension = "." + filter_defs[0][1][0] if filter_defs else ""
+    path = filedialog.asksaveasfilename(parent=root, title=title, initialdir=folder or None, initialfile=name or None,
+                                      filetypes=types, defaultextension=extension, confirmoverwrite=False)
 else:
     path = filedialog.askopenfilename(parent=root, title=title, initialdir=folder or None, initialfile=name or None, filetypes=types)
 sys.stdout.buffer.write((path or "").encode("utf-8"))
@@ -95,7 +104,7 @@ sys.stdout.buffer.write((path or "").encode("utf-8"))
 def build_command(kind, initial, title, filters):
     """The command that shows the dialog and prints the chosen path. Pure, so it can be tested."""
     folder, name = start_location(kind, initial)
-    title = str(title or ("Choose a folder" if kind == "folder" else "Choose a file"))[:120]
+    title = str(title or {"folder": "Choose a folder", "file": "Choose a file", "save": "Choose a save file"}[kind])[:120]
     return [sys.executable, "-c", _TK, kind, folder, name, title, json.dumps(clean_filters(filters))]
 
 
@@ -119,7 +128,7 @@ def run_command(argv, timeout=TIMEOUT_SECONDS):
 
 def pick(kind, initial="", title="", filters=None):
     if kind not in KINDS:
-        raise ValueError("kind must be 'folder' or 'file'.")
+        raise ValueError("kind must be 'folder', 'file' or 'save'.")
     if not _busy.acquire(blocking=False):
         raise BrowseBusy("A file dialog is already open.")
     try:

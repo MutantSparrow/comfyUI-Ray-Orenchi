@@ -71,8 +71,11 @@ export const PANEL_SPECS = {
     RayMetaInspect: { sections: [
         { title: "Metadata", fields: [
             "mode",
-            { name: "path", label: "Image file", browse: { kind: "file", title: "Choose an image", filters: IMAGE_FILTERS }, placeholder: "Path to an image (or connect one)" },
-            { name: "metadata_json", label: "Metadata to embed (JSON)", rows: 6 },
+            { name: "path", label: "Image file / output PNG", browse: node => value(node, "mode") === "Embed"
+                ? { kind: "save", title: "Save metadata PNG as", filters: [["PNG image", ["png"]]] }
+                : { kind: "file", title: "Choose an image", filters: IMAGE_FILTERS }, placeholder: "Source image, or destination .png in Embed mode" },
+            { name: "metadata_json", label: "Metadata to embed (JSON)", rows: 6, when: node => value(node, "mode") === "Embed" },
+            { name: "overwrite", when: node => value(node, "mode") === "Embed" },
         ] },
     ] },
 
@@ -85,10 +88,12 @@ export const PANEL_SPECS = {
         ] },
         { title: "Prompt", fields: [{ name: "user_prompt", label: "Instruction", rows: 4 }, { name: "max_length", label: "Max tokens" }] },
         { title: "Sampling", fields: ["temperature", { name: "top_k", label: "Top K" }, { name: "top_p", label: "Top P" }, { name: "min_p", label: "Min P" }, { name: "repetition_penalty", label: "Repeat penalty" }, "seed", "thinking"] },
+        { title: "Output", fields: ["return_images"] },
+        { title: "Memory", fields: ["cleanup_every"] },
     ] },
     RayFastQwen3VL: { sections: [
         { title: "Prompt", fields: [{ name: "prompt", label: "Instruction", rows: 5 }, { name: "max_tokens", label: "Max tokens" }] },
-        { title: "Sampling", fields: ["temperature", { name: "top_p", label: "Top P" }, { name: "top_k", label: "Top K" }, "seed"] },
+        { title: "Sampling", fields: ["generation_preset", "temperature", { name: "top_p", label: "Top P" }, { name: "top_k", label: "Top K" }, "seed"] },
         { title: "Advanced", fields: ["mode", { name: "sync_interval", label: "Sync interval" }, "thinking", { name: "repetition_penalty", label: "Repeat penalty" }, { name: "presence_penalty", label: "Presence penalty" }, { name: "repeat_guard", label: "Repeat guard" }] },
     ] },
 };

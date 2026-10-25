@@ -3,7 +3,7 @@ import { api } from "../../scripts/api.js";
 import { findWidget, setWidgetHidden } from "./_common.js";
 import { browsePath, notify } from "./browse_common.js";
 import { installNameBuilder, openNameBuilder, resolveOnQueue } from "./save_name.js";
-import { ensurePanelStyles, linkChip, registerLinkTargets } from "./ray_panel.js";
+import { ensurePanelStyles, iconButton, inputTooltip, linkChip, registerLinkTargets } from "./ray_panel.js";
 
 const modes = ["none", "1", "2", "both"];
 const DEFAULT_PREFIX_HINT = "Ray_{date}_{counter}";
@@ -47,11 +47,12 @@ function styles() {
 .ray-save {box-sizing:border-box;width:100%;height:100%;padding:2px;display:flex;flex-direction:column;gap:2px;background:#000;color:#eee;font:12px system-ui;border-radius:8px;overflow:hidden;pointer-events:none}
 .ray-save button,.ray-save select,.ray-save input,.ray-save-handle {pointer-events:auto}
 .ray-save * {box-sizing:border-box}
-.ray-save button,.ray-save select {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:4px;padding:3px 6px;min-width:0}
+.ray-save button:not(.rp-icon),.ray-save select {font:inherit;color:inherit;background:#171717;border:1px solid #383838;border-radius:5px;padding:3px 6px;min-width:0}
 .ray-save button:disabled {opacity:.4}
 .ray-save button:hover:not(:disabled) {background:#454753}
 .ray-save :focus-visible {outline:2px solid #b9a4fa;outline-offset:2px}
-.ray-save-head {display:flex;flex-direction:column;gap:6px;padding:6px 6px 9px;border-bottom:1px solid #2b2b2b;flex-shrink:0}
+.ray-save-head {padding:6px;flex-shrink:0}
+.ray-save-preview {flex:1;min-height:0;padding:0 6px 6px}
 .ray-save-label {font-size:11px;color:#a3a3a3}
 .ray-save-row {display:flex;gap:6px;align-items:center;min-width:0;flex-wrap:wrap}
 .ray-save-group {display:flex;gap:6px;align-items:center;flex:1 1 200px;min-width:0}
@@ -59,8 +60,6 @@ function styles() {
 .ray-save-input {flex:1 1 0;width:auto;min-width:0;height:28px;padding:4px 9px;background:#141414;color:#eee;border:1px solid #3a3a3a;border-radius:5px;font:12px system-ui}
 .ray-save-input::placeholder {color:#6f6f6f}
 .ray-save-input:disabled {opacity:.55}
-.ray-save button.ray-save-icon {flex:0 0 auto;width:32px;height:28px;padding:0;display:grid;place-items:center;font:600 13px ui-monospace,monospace}
-.ray-save-icon svg {width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
 .ray-save-dir {font-size:11px;color:#a3a3a3;white-space:nowrap}
 .ray-save-path {position:relative;flex:1 1 auto;min-width:90px;display:flex}
 .ray-save-path .ray-save-input {padding-right:26px}
@@ -72,6 +71,8 @@ function styles() {
 .ray-save-stops button + button {border-left:1px solid #2f2f2f}
 .ray-save .ray-save-stops button[aria-pressed=true], .ray-save .ray-save-stops button[aria-pressed=true]:hover {background:#e2e2e2;color:#111}
 .ray-save-stage {position:relative;flex:1 1 0;min-height:0;overflow:hidden;border-radius:5px;background:#000}
+.ray-save-stage.ray-save-cycle {pointer-events:auto;cursor:pointer}
+.ray-save-panning .ray-save-stage,.ray-save-panning .ray-save-divider,.ray-save-panning .ray-save-handle {pointer-events:none}
 .ray-save-stage img {position:absolute;width:100%;height:100%;object-fit:contain;inset:0;pointer-events:none}
 .ray-save-overlay {position:absolute;inset:0;pointer-events:none;background:#000}
 .ray-save-divider {position:absolute;top:0;bottom:0;width:12px;transform:translateX(-50%);cursor:ew-resize;touch-action:none;pointer-events:auto}
@@ -93,6 +94,7 @@ function styles() {
 function textField(node, name) {
     const input = element("input", "ray-save-input");
     input.type = "text"; input.spellcheck = false; input.autocomplete = "off";
+    input.title = inputTooltip(node, name, name === "directory" ? "Destination folder on the ComfyUI server; blank uses output" : "Filename stem or token template, without the PNG extension");
     let editing = false;
     input.addEventListener("focus", () => { if (!editing) { node.graph?.beforeChange?.(); editing = true; } });
     input.addEventListener("input", () => {
@@ -118,17 +120,16 @@ function build(node) {
     styles();
     const navigation = new AbortController();
     let spaceHeld = false, panClick = false;
-    window.addEventListener("keydown", e => { if (e.code === "Space" || e.key === " ") spaceHeld = true; }, {capture: true, signal: navigation.signal});
-    window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") spaceHeld = false; }, {capture: true, signal: navigation.signal});
-    window.addEventListener("blur", () => { spaceHeld = false; }, {signal: navigation.signal});
-    const root = element("div", "ray-save"), head = element("div", "ray-save-head");
+    function panMode(held) { spaceHeld = held; root.classList.toggle("ray-save-panning", held); }
+    window.addEventListener("keydown", e => { if (e.code === "Space" || e.key === " ") panMode(true); }, {capture: true, signal: navigation.signal});
+    window.addEventListener("keyup", e => { if (e.code === "Space" || e.key === " ") panMode(false); }, {capture: true, signal: navigation.signal});
+    window.addEventListener("blur", () => panMode(false), {signal: navigation.signal});
+    const root = element("div", "ray-save"), head = element("div", "ray-save-head rp-section");
     // Filename prefix, with { } opening the filename builder.
     const prefixLabel = element("label", "ray-save-label", "Filename prefix");
     const prefix = textField(node, "filename_prefix");
     prefix.id = `ray-save-prefix-${++fieldIds}`; prefixLabel.htmlFor = prefix.id;
-    const tokens = button("{ }", () => openNameBuilder(node));
-    tokens.className = "ray-save-icon"; tokens.title = "Build the filename from tokens: date, counter, hash, widget values…";
-    tokens.setAttribute("aria-label", "Build filename");
+    const tokens = iconButton("", "Build filename", () => openNameBuilder(node), {label: "{ }"});
     const prefixRow = element("div", "ray-save-row ray-save-fixed");
     // A linked field shows where its value comes from, with a button to unlink it.
     const prefixLink = linkChip(node, "filename_prefix", () => ui.sync());
@@ -138,9 +139,7 @@ function build(node) {
     stops.setAttribute("role", "group"); stops.setAttribute("aria-label", "Save Image");
     modes.forEach(mode => stops.append(button(mode === "none" ? "None" : mode === "both" ? "Both" : mode, () => update(node, "save_image", mode))));
     const dirLabel = element("label", "ray-save-dir", "Directory");
-    const browse = button("", () => browseFolder(node));
-    browse.className = "ray-save-icon"; browse.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5h6l2 2h10v10H3z"/></svg>';
-    browse.title = "Choose the save folder"; browse.setAttribute("aria-label", "Choose the save folder");
+    const browse = iconButton("folder", "Choose the save folder", () => browseFolder(node));
     const directory = textField(node, "directory");
     directory.id = `ray-save-dir-${fieldIds}`; dirLabel.htmlFor = directory.id;
     const recent = element("select"); recent.title = "Last three save folders"; recent.setAttribute("aria-label", "Recent save folders");
@@ -160,7 +159,7 @@ function build(node) {
     group.append(dirLabel, browse, path, directoryLink.element);
     const row = element("div", "ray-save-row");
     row.append(stops, group);
-    head.append(prefixLabel, prefixRow, row);
+    head.append(element("div", "rp-title", "Output"), prefixLabel, prefixRow, row);
     const state = element("span", "ray-save-status");
     const stage = element("div", "ray-save-stage"), first = element("img"), second = element("img"), overlay = element("div", "ray-save-overlay");
     first.alt = "Image 1"; second.alt = "Image 2"; overlay.append(first);
@@ -187,6 +186,34 @@ function build(node) {
     const previous = button("‹", () => { index--; show(); }), next = button("›", () => { index++; show(); });
     previous.setAttribute("aria-label", "Previous image pair"); next.setAttribute("aria-label", "Next image pair");
     batch.append(previous, count, next);
+    let previewPress = null;
+    stage.addEventListener("pointerdown", e => {
+        // Legacy DOM widgets sit above the canvas instead of inside its event path.
+        if (e.target === stage && e.button !== 0 && !root.closest("[data-node-id]")) {
+            app.canvas?.canvas?.dispatchEvent(new PointerEvent(e.type, e));
+            e.preventDefault(); e.stopPropagation(); return;
+        }
+        if (e.target !== stage || e.button !== 0 || spaceHeld) return;
+        app.canvas?.canvas?.focus({preventScroll: true});
+        previewPress = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
+    });
+    stage.addEventListener("pointermove", e => {
+        if (previewPress?.id === e.pointerId && Math.hypot(e.clientX - previewPress.x, e.clientY - previewPress.y) > 5) previewPress.moved = true;
+    });
+    stage.addEventListener("pointercancel", () => { if (previewPress) previewPress.moved = true; });
+    stage.addEventListener("wheel", e => {
+        if (!root.closest("[data-node-id]") && app.canvas?.processMouseWheel) {
+            app.canvas.processMouseWheel(e); e.stopPropagation();
+        }
+    }, {passive: false});
+    stage.addEventListener("click", e => {
+        const moved = previewPress?.moved;
+        previewPress = null;
+        const total = Math.max(arrays[0].length, arrays[1].length);
+        if (e.target !== stage || e.button !== 0 || spaceHeld || moved || total <= 1) return;
+        index = (index + 1) % total;
+        show();
+    });
     function position(value) {
         fraction = Math.max(0, Math.min(1, value));
         overlay.style.clipPath = comparing ? `inset(0 ${(1 - fraction) * 100}% 0 0)` : "none";
@@ -197,8 +224,7 @@ function build(node) {
         const rect = stage.getBoundingClientRect();
         if (rect.width) position((e.clientX - rect.left) / rect.width);
     }
-    // The full divider takes pointer input; the rest of the preview stays
-    // transparent so the canvas keeps its menu, pan and zoom.
+    // The divider owns comparison dragging; canvas navigation still bubbles.
     divider.onpointerdown = e => { if (spaceHeld || !comparing || e.button !== 0 || activePointer !== null) return; activePointer = e.pointerId; divider.setPointerCapture(e.pointerId); handle.focus({preventScroll:true}); drag(e); e.preventDefault(); };
     divider.onpointermove = e => { if (activePointer === e.pointerId) drag(e); };
     divider.onpointerup = divider.onpointercancel = e => { if (activePointer !== e.pointerId) return; if (divider.hasPointerCapture(e.pointerId)) divider.releasePointerCapture(e.pointerId); activePointer = null; };
@@ -223,13 +249,17 @@ function build(node) {
         handle.setAttribute("aria-disabled", String(!comparing));
         empty.hidden = !!(pair[0] || pair[1]); empty.style.display = empty.hidden ? "none" : "flex";
         batch.hidden = total <= 1; batch.style.display = batch.hidden ? "none" : "flex";
+        stage.classList.toggle("ray-save-cycle", total > 1);
+        stage.title = total > 1 ? "Click to show the next image pair" : "";
         count.textContent = `${index + 1} / ${total}${!comparing && arrays[1].length ? " · Unpaired image" : ""}`;
         previous.disabled = index === 0; next.disabled = index >= total - 1;
         position(fraction);
         updateSizes();
     }
     [first, second].forEach(img => img.addEventListener("error", () => { state.textContent = "Preview expired. Queue again to refresh."; }));
-    root.append(head, stage);
+    const preview = element("div", "ray-save-preview rp-section");
+    preview.append(element("div", "rp-title", "Preview"), stage);
+    root.append(head, preview);
     // Keep canvas navigation alive over DOM widgets. Only ordinary control
     // interactions belong to this panel; wheel, Space-pan and middle-pan bubble.
     root.addEventListener("pointerdown", e => { panClick = spaceHeld || e.button === 1; }, true);
@@ -274,8 +304,23 @@ function build(node) {
     show(); ui.sync(); return ui;
 }
 
+function restoreOutput(node, message) {
+    if (message.ray_saved?.length && message.ray_directory?.[0]) node._raySavedDirectory = message.ray_directory[0];
+    node._raySave?.executed(message);
+}
+
 app.registerExtension({
     name: "Ray.SaveImage",
+    onNodeOutputsUpdated(outputs) {
+        // Workflow tabs and history restore cached outputs without onExecuted.
+        const root = app.rootGraph || app.graph;
+        for (const [id, output] of Object.entries(outputs || {})) {
+            const separator = id.lastIndexOf(":");
+            const graph = separator < 0 ? root : root?.subgraphs?.get(id.slice(0, separator));
+            const node = graph?.getNodeById(id.slice(separator + 1));
+            if (node?.comfyClass === "RaySaveImage") restoreOutput(node, output);
+        }
+    },
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (nodeData.name !== "RaySaveImage") return;
         const proto = nodeType.prototype, created = proto.onNodeCreated;
@@ -300,8 +345,7 @@ app.registerExtension({
         const executed = proto.onExecuted;
         proto.onExecuted = function (message) {
             const result = executed?.apply(this, arguments);
-            if (message.ray_saved?.length && message.ray_directory?.[0]) this._raySavedDirectory = message.ray_directory[0];
-            this._raySave?.executed(message); return result;
+            restoreOutput(this, message); return result;
         };
         const removed = proto.onRemoved;
         proto.onRemoved = function () { this._raySave?.destroy(); this._rayNameBuilder?.close(); return removed?.apply(this, arguments); };

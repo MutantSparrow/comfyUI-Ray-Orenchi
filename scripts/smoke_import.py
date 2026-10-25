@@ -25,12 +25,13 @@ spec = importlib.util.spec_from_file_location("ray_orenchi_smoke", root / "__ini
 pack = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = pack
 spec.loader.exec_module(pack)
-assert len(pack.NODE_CLASS_MAPPINGS) == 16
+assert len(pack.NODE_CLASS_MAPPINGS) == 29
 assert set(pack.NODE_CLASS_MAPPINGS) == set(pack.NODE_DISPLAY_NAME_MAPPINGS)
 for node in pack.NODE_CLASS_MAPPINGS.values():
     assert callable(getattr(node, node.FUNCTION))
     assert isinstance(node.INPUT_TYPES(), dict)
-for path in ("/ray/folders/scan", "/ray/folders/delete", "/ray/browse", "/ray/save-image/open-location"):
+for path in ("/ray/folders/scan", "/ray/folders/delete", "/ray/browse", "/ray/save-image/open-location",
+             "/ray/model-tools/preview"):
     assert any(route.path == path for route in routes), path
 assert (root / pack.WEB_DIRECTORY / "ray_folders.js").is_file()
 print(f"Startup smoke passed: {len(pack.NODE_CLASS_MAPPINGS)} stable node IDs, {len(routes)} routes, web assets present")

@@ -416,7 +416,7 @@ def _selected(value, root):
 
 
 class RayFolders:
-    DESCRIPTION = "Browse local images, videos and audio. Select files to emit native media lists, matching prompts and paths. Refreshes on every run, including with no outputs connected."
+    DESCRIPTION = "Browse local images, videos and audio. Select files to emit native media lists, matching prompts and paths. The gallery refreshes after the workflow finishes, including with no outputs connected."
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -424,8 +424,8 @@ class RayFolders:
             "folder": ("STRING", {"default": "", "tooltip": "Browse or connect an absolute folder path."}),
             "name_filter": ("STRING", {"default": "", "tooltip": "Fuzzy filename and prompt search; all words must match."}),
         }, "optional": {
-            "selected_files": ("STRING", {"default": "{}"}),
-            "settings_json": ("STRING", {"default": "{}"}),
+            "selected_files": ("STRING", {"default": "{}", "tooltip": "Media chosen in the gallery, retained with the workflow. Click to select one file; Ctrl/Cmd-click toggles additional selections."}),
+            "settings_json": ("STRING", {"default": "{}", "tooltip": "Gallery sorting, media types, recursion, color/NSFW filters, and prompt options. Change these through the top-right settings cog."}),
         }, "hidden": {"node_id": "UNIQUE_ID"}}
 
     RETURN_TYPES = ("IMAGE", "VIDEO", "AUDIO", "STRING", "STRING")
@@ -488,6 +488,6 @@ class RayFolders:
                 _LOG.warning("[RayFolders] Skipping %s: %s", item["id"], error)
                 listing.setdefault("warnings", []).append(f"Unavailable: {item['name']}")
         # Execution messages do not repeat the potentially huge file index; the browser's
-        # scan endpoint refreshes that separately, including for a disconnected output node.
+        # scan endpoint refreshes that after the workflow, including for a disconnected output node.
         ui = {key: value for key, value in listing.items() if key != "items"}
         return {"ui": {"ray_folders": [ui]}, "result": (images, videos, audio, prompts, paths or [str(root)])}

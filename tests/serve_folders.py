@@ -165,7 +165,7 @@ async def static(request):
     if tail == "scripts/app.js":
         path = ROOT / "tests/folders_fixture.js"
     elif tail == "scripts/api.js":
-        return web.Response(text='export const api={apiURL:url=>url,fetchApi:(url,options)=>fetch(url,options)};', content_type="text/javascript")
+        return web.Response(text='export const api=Object.assign(new EventTarget(),{apiURL:url=>url,fetchApi:(url,options)=>fetch(url,options)});', content_type="text/javascript")
     elif tail.startswith("extensions/ray/"):
         path = ROOT / "web" / tail[len("extensions/ray/"):]
     else:
