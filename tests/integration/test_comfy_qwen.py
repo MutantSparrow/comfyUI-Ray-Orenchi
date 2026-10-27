@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 import torch
+import comfyui_version
 import comfy.model_management as mm
 import comfy.memory_management
 from comfy.model_patcher import ModelPatcher
@@ -70,6 +71,15 @@ def clip():
         torch.set_num_threads(previous_threads)
 
 
+@pytest.fixture
+def accelerated_clip(clip):
+    # Keep exercising private acceleration APIs on the validated stable series.
+    # New minors exercise the node's native fallback until explicitly validated.
+    if not comfyui_version.__version__.startswith("0.42."):
+        pytest.skip(f"Acceleration is not enabled for ComfyUI {comfyui_version.__version__}")
+    return clip
+
+
 def accelerated(clip, transformer, embeds, **kwargs):
     patched = fast.prepare_qwen3vl_fast(clip, "qwen3vl_4b", transformer, repeat_guard=False)
     patched.patcher.patch_model(load_weights=False)
@@ -79,8 +89,8 @@ def accelerated(clip, transformer, embeds, **kwargs):
         patched.patcher.unpatch_model(unpatch_weights=False)
 
 
-def test_normal_generation_and_model_reuse(clip):
-    wrapper, transformer, embeds = clip
+def test_normal_generation_and_model_reuse(accelerated_clip):
+    wrapper, transformer, embeds = accelerated_clip
     expected = transformer.generate(embeds.clone(), do_sample=False, max_length=24)
     actual = accelerated(wrapper, transformer, embeds, max_length=24)
     assert len(actual) == len(expected) == 24
@@ -91,8 +101,8 @@ def test_normal_generation_and_model_reuse(clip):
     assert not transformer.model.graph_dynamic_vbar_blocks
 
 
-def test_long_generation_and_fresh_cache_for_different_prompts(clip):
-    wrapper, transformer, embeds = clip
+def test_long_generation_and_fresh_cache_for_different_prompts(accelerated_clip):
+    wrapper, transformer, embeds = accelerated_clip
     actual = accelerated(wrapper, transformer, embeds, max_length=320)
     assert len(actual) == 320 and all(0 <= token < 128 for token in actual)
     other = transformer.model.embed_tokens(torch.tensor([[4, 7]], device=embeds.device))
@@ -101,8 +111,8 @@ def test_long_generation_and_fresh_cache_for_different_prompts(clip):
     assert accelerated(wrapper, transformer, other, max_length=32) == first
 
 
-def test_real_interruption_and_recovery(clip):
-    wrapper, transformer, embeds = clip
+def test_real_interruption_and_recovery(accelerated_clip):
+    wrapper, transformer, embeds = accelerated_clip
     original = transformer.sample_token
     calls = []
     def sample(*args, **kwargs):
@@ -116,8 +126,8 @@ def test_real_interruption_and_recovery(clip):
     assert len(accelerated(wrapper, transformer, embeds, max_length=8)) == 8
 
 
-def test_mrope_deepstack_prefill_matches_native(clip):
-    wrapper, transformer, embeds = clip
+def test_mrope_deepstack_prefill_matches_native(accelerated_clip):
+    wrapper, transformer, embeds = accelerated_clip
     positions = torch.tensor([[0, 1, 2], [0, 1, 1], [0, 1, 2]], device=embeds.device)
     mask = torch.tensor([[False, True, False]], device=embeds.device)
     extra = dict(position_ids=positions, visual_pos_masks=mask,
@@ -130,7 +140,6 @@ def test_mrope_deepstack_prefill_matches_native(clip):
 
 
 def test_unknown_version_falls_back_before_patching(clip):
-    import comfyui_version
     wrapper, transformer, _ = clip
     with patch.object(comfyui_version, "__version__", "0.999.0"):
         with pytest.raises(fast.FastUnavailable):
@@ -138,9 +147,26 @@ def test_unknown_version_falls_back_before_patching(clip):
     assert wrapper.patcher.object_patches == {}
 
 
-@pytest.mark.skipif(os.environ.get("RAY_TEST_CUDA") != "1", reason="opt-in CUDA graph integration")
-def test_cuda_prefetch_graph_and_shared_fixed_counters(clip):
+@pytest.mark.parametrize("version", ["0.43.0", "0.999.0"])
+def test_unvalidated_version_uses_native_generation(clip, version):
     wrapper, transformer, embeds = clip
+    # Supply embeddings directly so the real decoder needs no tokenizer files.
+    wrapper.tokenize = lambda *args, **kwargs: embeds.clone()
+    wrapper.generate = transformer.generate
+    wrapper.decode = lambda ids: " ".join(map(str, ids))
+    node = fast.RayFastQwen3VL()
+    expected = node.infer(wrapper, "Describe.", mode="native", max_tokens=24)
+    with patch.object(comfyui_version, "__version__", version):
+        with patch.object(wrapper, "clone", wraps=wrapper.clone) as clone:
+            assert node.infer(wrapper, "Describe.", mode="fast", max_tokens=24) == expected
+            clone.assert_not_called()
+    assert len(expected[0].split()) == 24
+    assert wrapper.patcher.object_patches == {}
+
+
+@pytest.mark.skipif(os.environ.get("RAY_TEST_CUDA") != "1", reason="opt-in CUDA graph integration")
+def test_cuda_prefetch_graph_and_shared_fixed_counters(accelerated_clip):
+    wrapper, transformer, embeds = accelerated_clip
     if not fast.comfy_kitchen.flash_attention_decode_is_available(embeds.device):
         pytest.fail("CUDA integration requires Kitchen flash decode support")
     if not fast.prefetch.malloc_graph_enabled(embeds.device):
