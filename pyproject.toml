@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ray-orenchi"
-version = "1.1.2"
+version = "1.1.3"
 description = "Analog knobs, switches and faders for your ComfyUI workflows, alongside pixel art cleanup, CRT/VHS and film looks, model merging and LoRA tools. The pack also covers the everyday bits: browsing folders, saving images, reading metadata and captioning batches."
 readme = "README.md"
 license = "Apache-2.0"
