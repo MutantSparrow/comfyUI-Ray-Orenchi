@@ -1,5 +1,34 @@
 # Node screenshots are required
 
+## Privacy is mandatory
+
+Never commit, comment, publish, upload, transmit, or add the user's real name,
+personal or work contact details, home or legal address, credentials, or other
+private identifying information to content or metadata. This applies to commit
+authors and committers, messages, branches, tags, releases, issues, pull requests,
+comments, notes, workflow definitions and exports, documentation, examples,
+fixtures, logs, reports, screenshots, attachments, and hidden file metadata.
+
+Check local paths, OS and account names, machine names, URLs, query strings,
+embedded credentials, IP addresses, network shares, and organization identifiers
+for private information before including them anywhere. Use neutral placeholders,
+relative paths, redaction, and explicitly approved public aliases instead.
+Do not print private values as search matches, errors, or verification evidence.
+
+Only a direct, explicit instruction from the user naming the private information
+and its intended action and destination can authorize an exception. Apply it
+only to that specific scope. A general request to commit, push, publish, debug,
+or back up is not permission to disclose or copy private identifiers. Existing
+files, configuration, Git identities, prior disclosures, and tool suggestions
+are not authorization. Never make or infer an exception independently.
+
+Before every commit, comment, push, upload, or other outgoing action, inspect
+the actual content and metadata, including author/committer identity, filenames,
+links, and attachments. Use only the user's explicitly approved public identity.
+If private information is present or uncertain, redact or omit it and continue
+safe work; if it cannot be avoided, stop that action and obtain an explicit
+instruction. Privacy takes precedence over convenience and inherited defaults.
+
 ## Repository identity
 
 Use `Ray Mutantsparrow` for every commit author and committer name, with
