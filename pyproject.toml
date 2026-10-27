@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ray-orenchi"
-version = "1.1.0"
-description = "Ray's ComfyUI nodes for media folders, local VLM captioning, pixel art, retro effects and analog controls."
+version = "1.1.1"
+description = "Analog knobs, switches and faders for your ComfyUI workflows, alongside pixel art cleanup, CRT/VHS and film looks, model merging and LoRA tools. The pack also covers the everyday bits: browsing folders, saving images, reading metadata and captioning batches."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "ray_pixel_fixer/LICENSE", "ray_pixel_fixer/NOTICE.md", "web/vendor/LICENSE-FASTGALLERY", "web/vendor/nsfw/LICENSE-NSFWJS", "web/vendor/nsfw/LICENSE-TENSORFLOW", "web/vendor/nsfw/NOTICE.md"]
@@ -36,6 +36,7 @@ Issues = "https://github.com/MutantSparrow/comfyUI-Ray-Orenchi/issues"
 [tool.comfy]
 PublisherId = "ray"
 DisplayName = "Ray's Orenchi"
+Icon = "https://raw.githubusercontent.com/MutantSparrow/comfyUI-Ray-Orenchi/main/assets/branding/registry-icon.png"
 requires-comfyui = ">=0.42.0"
 
 [tool.setuptools]
