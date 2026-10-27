@@ -1,12 +1,17 @@
-<p align="center">
-  <img src="assets/branding/orenchi.png" alt="Ray's Orenchi ComfyUI Node Pack" width="560">
-</p>
+<img
+  src="assets/branding/orenchi.png"
+  alt="Ray's Orenchi ComfyUI Node Pack"
+  width="280"
+  align="left"
+/>
 
 # comfyUI-Ray-Orenchi
 
 29 ComfyUI custom nodes for retro image effects, pixel art, local vision-language
 inference, prompt tooling and analog-console controls. Find them under the
 **👑 Ray** category in the add-node menu.
+
+<br clear="left">
 
 ## Nodes
 
