@@ -2,8 +2,12 @@
 
 ## Repository identity
 
-Use the repository's configured maintainer identity for commit authors and
-committers. Name branches and commits after the actual change. Do not add tool,
+Use `Ray Mutantsparrow` for every commit author and committer name, with
+`264165241+MutantSparrow@users.noreply.github.com` as the commit email address.
+Never publish a legal name, workplace email, or inherited OS/global Git identity
+in project metadata. Verify both identities before every commit and push.
+These explicit values override any existing configured maintainer identity.
+Name branches and commits after the actual change. Do not add tool,
 vendor, or generated-work attribution to branches, commit messages, co-author
 trailers, collaborators, documentation, or other project content. Preserve this
 rule in every future change.
