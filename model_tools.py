@@ -128,10 +128,12 @@ def load_metadata(path):
     return TensorSource(path).metadata.copy()
 
 
-def rewrite_metadata(source, destination, metadata, overwrite=False):
+def rewrite_metadata(source, destination, metadata, overwrite=False, progress=None):
     source, destination = clean_path(source), clean_path(destination)
     if source == destination and not overwrite:
         raise ValueError("Replacing the source requires overwrite=true.")
+    if destination.exists() and not overwrite:
+        raise FileExistsError(f"Output already exists: {destination}")
     header, data_start = read_header(source)
     header["__metadata__"] = embedded_metadata(metadata)
     encoded = json.dumps(header, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -145,7 +147,17 @@ def rewrite_metadata(source, destination, metadata, overwrite=False):
             out.write(struct.pack("<Q", len(encoded)))
             out.write(encoded)
             inp.seek(data_start)
-            shutil.copyfileobj(inp, out, 8 * 1024 * 1024)
+            if progress is None:
+                shutil.copyfileobj(inp, out, 8 * 1024 * 1024)
+            else:
+                copied, total = 0, source.stat().st_size - data_start
+                while True:
+                    progress(copied, max(1, total))
+                    chunk = inp.read(8 * 1024 * 1024)
+                    if not chunk:
+                        break
+                    out.write(chunk)
+                    copied += len(chunk)
         read_header(tmp)
         commit_file(tmp, destination, overwrite)
     finally:
@@ -228,8 +240,16 @@ def header_reserve(source):
         4 * (len(key.encode("utf-8")) + 256) for key in source.index)
 
 
-def save_tensors(tensors, destination, metadata=None, overwrite=False):
+def save_tensors(tensors, destination, metadata=None, overwrite=False, progress=None):
     """Write RAM-backed weights once, with the final metadata, then publish."""
+    if progress is not None:
+        source = TensorSource.from_tensors(tensors, metadata)
+        with TensorWriter(destination, metadata, overwrite, header_reserve=header_reserve(source)) as writer:
+            for i, key in enumerate(source.index):
+                progress(i, len(source.index))
+                writer.add(key, source.raw(key))
+            progress(len(source.index), max(1, len(source.index)))
+        return str(destination)
     from safetensors.torch import save_file
     destination = clean_path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -246,31 +266,6 @@ def save_tensors(tensors, destination, metadata=None, overwrite=False):
     finally:
         Path(tmp).unlink(missing_ok=True)
     return str(destination)
-
-
-class MemoryTensorWriter:
-    """Own independent CPU tensors; no intermediate model or payload file."""
-    def __init__(self, metadata):
-        self.metadata = embedded_metadata(metadata)
-        self.header, self.tensors = {}, {}
-
-    def add(self, key, tensor):
-        if key in self.header:
-            raise ValueError(f"Duplicate output tensor: {key}")
-        if tensor.dtype not in DTYPE_NAMES:
-            raise ValueError(f"Unsupported output dtype {tensor.dtype}: {key}")
-        self.tensors[key] = tensor.detach().to(device="cpu").clone(memory_format=torch.contiguous_format)
-        self.header[key] = {"dtype": DTYPE_NAMES[tensor.dtype], "shape": list(tensor.shape)}
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        if exc_type is not None:
-            self.tensors.clear()
-        elif not self.tensors:
-            raise ValueError("No tensors were produced.")
-        return False
 
 
 def side_tensor(key):
@@ -305,6 +300,7 @@ def canonical(key):
 class TensorSource:
     def __init__(self, path):
         self._handles = {}
+        self._tensors = None
         self.path = clean_path(path)
         if self.path.is_dir():
             indexes = sorted(self.path.glob("*.safetensors.index.json"))
@@ -339,12 +335,36 @@ class TensorSource:
                 if key in self.index:
                     raise ValueError(f"Duplicate tensor across shards: {key}")
                 self.index[key], self.headers[key] = file, info
+        self._set_keys()
+
+    @classmethod
+    def from_tensors(cls, tensors, metadata=None):
+        """Read CPU, GPU or native lazy tensors without a checkpoint export."""
+        source = cls.__new__(cls)
+        source.path = Path("in-memory-model")
+        source._handles, source._tensors = {}, tensors
+        source.metadata = dict(metadata or {})
+        source.configs = json.loads(source.metadata.get("_quantization_metadata", "{}")).get("layers", {})
+        source.index, source.headers = {}, {}
+        for key, tensor in tensors.items():
+            if tensor.dtype not in DTYPE_NAMES:
+                raise ValueError(f"Unsupported source dtype {tensor.dtype}: {key}")
+            source.index[key] = None
+            source.headers[key] = {"dtype": DTYPE_NAMES[tensor.dtype], "shape": list(tensor.shape)}
+        source._set_keys()
+        return source
+
+    def _set_keys(self):
         self.keys = sorted(k for k in self.index if not side_tensor(k))
         self.canon = {canonical(k): k for k in self.keys}
         if len(self.canon) != len(self.keys):
             raise ValueError("Ambiguous diffusion-model prefixes in source.")
 
     def raw(self, key):
+        if self._tensors is not None:
+            # Native lazy tensors apply pending patches in .to(); detaching first
+            # would discard that materialization behavior and lose the patches.
+            return self._tensors[key].to(device="cpu")
         if self.index[key] in self._handles:
             return self._handles[self.index[key]].get_tensor(key)
         with safe_open(str(self.index[key]), framework="pt", device="cpu") as f:
@@ -353,6 +373,9 @@ class TensorSource:
     @contextmanager
     def opened(self):
         """Reuse mmap handles for weights, scales and markers throughout a merge."""
+        if self._tensors is not None:
+            yield self
+            return
         if self._handles:
             yield self
             return
@@ -535,13 +558,13 @@ class ModelAsset:
     def with_metadata(self, metadata):
         return ModelAsset(self._path, metadata, self.tensors, self.saver)
 
-    def save(self, destination, metadata, overwrite=False):
+    def save(self, destination, metadata, overwrite=False, progress=None):
         if self.saver is not None:
             self.saver(destination, metadata, overwrite)
         elif self.tensors is not None:
-            save_tensors(self.tensors, destination, metadata, overwrite)
+            save_tensors(self.tensors, destination, metadata, overwrite, progress=progress)
         else:
-            rewrite_metadata(self.path, destination, metadata, overwrite)
+            rewrite_metadata(self.path, destination, metadata, overwrite, progress=progress)
 
     @property
     def path(self):
@@ -740,15 +763,24 @@ def resize_tensor(t, shape, mode):
     raise ValueError(f"Shape mismatch: {list(t.shape)} vs {list(shape)}")
 
 
+def validate_merge_base(strategy, has_base):
+    if strategy not in STRATEGIES:
+        raise ValueError("Unknown merge strategy.")
+    if strategy not in ("LERP", "SLERP") and not has_base:
+        raise ValueError(f"Select an explicit base model for {strategy}: connect the compatible original "
+                         "training base to base_model or base_data. For a two-model blend without a base, "
+                         "choose LERP or SLERP.")
+
+
 def merge_models(a, b, destination, strategy="LERP", weight=.5, base=None, fmt="bf16",
                  scope="diffusion", mismatch="forbid", seed=0, density=.5, lam=1., top=.1,
-                 bottom=.01, block_weights=None, progress=lambda *_: None, fast_merge=False):
-    a, b = TensorSource(a), TensorSource(b)
-    base = TensorSource(base) if base else None
+                 bottom=.01, block_weights=None, progress=lambda *_: None):
     if strategy not in STRATEGIES or not 0 <= weight <= 1:
         raise ValueError("Unknown merge strategy or weight outside [0,1].")
-    if strategy not in ("LERP", "SLERP") and base is None:
-        raise ValueError(f"Select an explicit base model for {strategy}.")
+    validate_merge_base(strategy, base is not None)
+    a = a if isinstance(a, TensorSource) else TensorSource(a)
+    b = b if isinstance(b, TensorSource) else TensorSource(b)
+    base = base if base is None or isinstance(base, TensorSource) else TensorSource(base)
     if mismatch not in ("forbid", "intersect", "pad", "trim"):
         raise ValueError("Unknown mismatch policy.")
     weights = metadata_fields(block_weights)
@@ -768,13 +800,14 @@ def merge_models(a, b, destination, strategy="LERP", weight=.5, base=None, fmt="
     meta = output_metadata(a, "merge", strategy=strategy, weight_a=weight, seed=int(seed), scope=scope,
                            base=str(base.path) if base else None, density=density, lam=lam, top=top, bottom=bottom,
                            mismatch=mismatch, block_weights=weights, source_a=str(a.path), source_b=str(b.path))
+    total = len(a.keys) + (len(check["only_b"]) if mismatch != "forbid" else 0)
     with ExitStack() as stack:
         for source in (a, b, base):
             if source is not None:
                 stack.enter_context(source.opened())
-        writer = stack.enter_context(MemoryTensorWriter(meta) if fast_merge else TensorWriter(destination, meta, header_reserve=header_reserve(a) + header_reserve(b)))
+        writer = stack.enter_context(TensorWriter(destination, meta, header_reserve=header_reserve(a) + header_reserve(b)))
         for i, key in enumerate(a.keys):
-            progress(i, len(a.keys))
+            progress(i, total)
             ck = canonical(key)
             if ck not in common:
                 a.copy(writer, key)
@@ -813,7 +846,8 @@ def merge_models(a, b, destination, strategy="LERP", weight=.5, base=None, fmt="
                            torch.Generator().manual_seed(tensor_seed))
             encode(writer, key, result, fmt)
         if mismatch != "forbid":
-            for ck in check["only_b"]:
+            for i, ck in enumerate(check["only_b"]):
+                progress(len(a.keys) + i, total)
                 key = b.canon[ck]
                 output_key = ck
                 if any(k.startswith("model.diffusion_model.") for k in a.keys) and ck.startswith("diffusion_model."):
@@ -822,8 +856,8 @@ def merge_models(a, b, destination, strategy="LERP", weight=.5, base=None, fmt="
                     output_key = ck[len("diffusion_model."):]
                 b.copy(writer, key, output_key)
         finish_markers(a, writer)
-    progress(len(a.keys), len(a.keys))
-    return ModelAsset(str(destination), meta, writer.tensors if fast_merge else None), check
+    progress(total, total)
+    return ModelAsset(str(destination), meta), check
 
 
 def extract_lora(finetuned, base, destination, rank=16, alpha=0., scope="diffusion",

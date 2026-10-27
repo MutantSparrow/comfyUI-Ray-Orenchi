@@ -101,8 +101,8 @@ Models reported unsupported by the installed adapter keep native sampling.
 ## Connections and file-only processing
 
 MODEL, CLIP and VAE are normal ComfyUI connections. **model_data** is a Ray
-handle to weights held in a file, in RAM after Fast merge, or as pending native
-model patches. Use it between model operations and Save Model.
+handle to weights held in a file or as pending native model patches. Use it
+between model operations and Save Model.
 **metadata** is a structured connection shared by metadata and save nodes.
 Operation reports are available through the **report** STRING outputs.
 
@@ -123,9 +123,10 @@ with a collision error.
 
 A connected MODEL takes priority over model_data and path inputs. Compatible
 LoRA baking and diffusion-only LERP keep native model patches until a consumer
-needs the weights. Save Model uses ComfyUI's save API to apply those patches and
-write the final checkpoint directly, including its final metadata. Other
-file-based operations may first export the effective weights.
+needs the weights. Merge reads live effective weights through ComfyUI's native
+tensor access without exporting either source checkpoint. Save Model applies
+native patches and writes the final checkpoint one tensor at a time, including
+its final metadata. Other file-based operations may first export effective weights.
 Connect CLIP/VAE when those components need to travel with it. A MODEL alone
 contains the diffusion model, not the full original checkpoint.
 
@@ -133,10 +134,10 @@ For offline work, connect paths or **model_data**. The tools initialize inferenc
 models automatically when MODEL, CLIP or VAE outputs are used. Connect
 the resulting model_data to Save Model to persist it, or to Load Model As to
 load it later. File operations use CPU math one layer at a time rather than
-complete fp32 copies of all inputs. The regular merge uses temporary disk
-storage; Fast merge retains its complete output in RAM. SVD still needs memory
-for the largest individual matrix. Temporary artifacts live under
-ComfyUI's temp directory in `ray_model_tools`; save anything you want to retain.
+complete fp32 copies of all inputs. Tensor merges stream their result to
+temporary disk storage. SVD still needs memory for the largest individual matrix.
+Temporary artifacts live under ComfyUI's temp directory in `ray_model_tools`;
+save anything you want to retain.
 
 In **Load Model As**, select a registered diffusion model or checkpoint from the
 folder dropdown. Its filter searches filenames and full paths across subfolders.
@@ -203,6 +204,11 @@ is an error unless the node provides **overwrite** and it is enabled.
 Connect Model Merge's **model_a** and **model_b**, or use **data_a** and
 **data_b** for file handles. Connect **base_model** or **base_data** when the
 chosen strategy needs a base. Choose source files in the upstream loader nodes.
+TIES, DARE, DELLA and Breadcrumbs need the compatible original training base as
+a third source; neither input is selected as the base automatically. A missing
+base shows a warning and is rejected during queue validation, before loading
+the merge's models.
+For a blend using only models A and B, choose LERP or SLERP instead.
 Select the Model Merge node and open its **? Help** for a brief purpose,
 strengths and limitations of every strategy. Hover a control for its settings,
 units and applicable strategies.
@@ -228,30 +234,18 @@ size.
 Padding/trimming cannot make unrelated architectures compatible. Matching
 structure does not establish that models share a compatible training base.
 
-**Fast merge** keeps the complete merged result in system RAM instead of writing
-an intermediate model file. Connect **model_data** to Save
-Model, with the inference outputs unused, to write weights once with the final
-metadata. Using MODEL, CLIP or VAE also creates a temporary model file for
-ComfyUI's native loader. Other file-based consumers materialize a temporary file
-when needed. Fast merge uses the same CPU calculations, formats, seed and
-mismatch rules as the regular merge; it does not require additional VRAM.
-
 Compatible live MODEL inputs use ComfyUI's native patches for diffusion-only
-LERP with Forbid, no block overrides, and a preserved or matching floating-point
+LERP with matching names and shapes, no block overrides, and a preserved or matching floating-point
 format. This avoids input checkpoint exports and a merged-model reload. Both
 MODEL and model_data can go directly to Save Model. Other strategies, component
-scopes, shape policies and format changes use the tensor-processing path.
-The regular file writer streams tensors into its final temporary output once;
+scopes, actual shape/key differences and format changes use the tensor-processing path.
+The file writer streams tensors into its final temporary output once;
 it keeps source mappings open during processing.
 
-**Warning: high RAM usage.** Allow space for the whole output at its selected
-format, plus source mappings, decoded layers and calculation buffers. The result
-remains in RAM while ComfyUI caches it, including after saving. Insufficient RAM
-can cause paging that slows the merge down, or an allocation failure. Leave Fast
-merge off for lower RAM usage. Source files are kept open during either mode to
-avoid reopening them for every tensor and scale.
-Enabling Fast merge opens a compact RAM warning. **REVERT** turns the toggle
-off; **CONFIRM** keeps it on. Both close the popup. Escape also reverts it.
+Merge preparation, merging and saving check cancellation between tensors or
+file-copy chunks and report progress. A tensor calculation or filesystem write already
+in progress must finish before cancellation can take effect. Cancelled writes
+discard their partial output and preserve an existing destination.
 
 **merge_name** is a STRING output ready to connect to Save Model's
 **filename_prefix**. A live preview follows connected source selections and merge

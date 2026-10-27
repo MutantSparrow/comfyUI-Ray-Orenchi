@@ -17,7 +17,7 @@ const graph={
  '1':{class_type:'RayModelLoadAs',inputs:{model_name:'diffusion_models: '+a,weight_format:'auto',loader:'auto',load_components:true}},
  '2':{class_type:'RayModelLoadAs',inputs:{model_name:'checkpoints: '+b,weight_format:'preserve',loader:'auto',load_components:true}},
  '3':{class_type:'RayModelMerge',inputs:{strategy:'LERP',weight_a:.5,weight_format:'fp32',components:'diffusion',mismatch:'forbid',
-  seed:0,density:.5,lambda:1,top_trim:.1,bottom_trim:.01,fast_merge:true,block_weights:'{"diffusion_model.proj":0.25}',data_a:['1',3],data_b:['2',3]}},
+  seed:0,density:.5,lambda:1,top_trim:.1,bottom_trim:.01,block_weights:'{"diffusion_model.proj":0.25}',data_a:['1',3],data_b:['2',3]}},
  '4':{class_type:'RayModelSave',inputs:{model_data:['3',3],filename_prefix:['3',6],output_folder:'model_tools',metadata_mode:'merge',metadata:['5',0],overwrite:false}},
  '5':{class_type:'RayModelMetadata',inputs:{path:'',editor_json:'{"author":"Ray"}',editor_source:''}},
 };

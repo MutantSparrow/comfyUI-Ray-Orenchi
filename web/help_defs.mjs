@@ -116,7 +116,7 @@ export const RAY_HELP_DEFS = {
             "Density is a retention setting, not a drop fraction. Lambda controls DELLA's magnitude bias; Top trim and Bottom trim are the discarded fractions for Breadcrumbs. Only relevant controls are shown.",
             "Connect block_weights to a STRING containing a JSON map of tensor prefixes to A ratios. Leave it disconnected for the global Weight A ratio.",
             "merge_name updates its preview as sources or controls change. Connect the STRING output to Save Model's filename_prefix; the executed value includes the resolved source names and execution datetime.",
-            "Fast merge uses the same calculations with more system RAM to reduce disk writes. Enabling it opens a RAM warning: REVERT turns it off; CONFIRM keeps it on. A data-only connection to Save Model avoids an intermediate model file. Using an inference output loads the result automatically.",
+            "Live merge inputs are read one tensor at a time without source checkpoint exports. Progress and cancellation are checked between tensors during merging and native model saving; an active tensor calculation or write must return before cancellation takes effect.",
         ] }],
     },
     RayModelCard: {

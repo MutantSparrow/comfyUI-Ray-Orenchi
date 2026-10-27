@@ -9,7 +9,7 @@ export function sourceStem(value, fallback = "Model") {
 const settingText = value => typeof value === "number" ? Number.isInteger(value) ? value.toFixed(0) : value.toFixed(10).replace(/0+$/, "").replace(/\.$/, "") : String(value ?? "");
 export function nameSignature(settings = {}) {
     const values = [["components", "diffusion"], ["mismatch", "forbid"], ["seed", 0], ["density", .5],
-        ["lambda", 1], ["top_trim", .1], ["bottom_trim", .01], ["block_weights", "{}"], ["fast_merge", false]]
+        ["lambda", 1], ["top_trim", .1], ["bottom_trim", .01], ["block_weights", "{}"]]
         .map(([key, fallback]) => settingText(settings[key] ?? fallback));
     try {
         const block = JSON.parse(values[7]);

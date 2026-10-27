@@ -470,7 +470,7 @@ Select a registered diffusion model or checkpoint from the searchable folder dro
 
 ## 🧰 Ray's Model Tools: Model Merge (`RayModelMerge`)
 
-Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's nine strategies. Task-vector strategies require a base_model or base_data connection. Block weights accepts a connected JSON string. Inference outputs load automatically when used. merge_name combines the sources, method, ratio, precision, settings fingerprint and time for use with Save Model. Fast merge keeps the entire result in RAM; insufficient memory can cause paging or failure.
+Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's nine strategies. Task-vector strategies require a base_model or base_data connection. Block weights accepts a connected JSON string. Inference outputs load automatically when used. merge_name combines the sources, method, ratio, precision, settings fingerprint and time for use with Save Model.
 
 | Input / control | Type | Default / choices / limits | Description |
 | --- | --- | --- | --- |
@@ -484,21 +484,20 @@ Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's
 | `lambda` | FLOAT | Default: 1.0; min: 0.0; max: 5.0; step: 0.01 | DELLA importance exponent. Higher values favor larger changes from the base more strongly. Zero gives uniform keep probabilities; use with density and seed. |
 | `top_trim` | FLOAT | Default: 0.1; min: 0.0; max: 0.99; step: 0.01 | Breadcrumbs fraction of the largest absolute changes to discard as outliers, per tensor. 0.10 means 10%. Top trim plus Bottom trim must be less than 1. |
 | `bottom_trim` | FLOAT | Default: 0.01; min: 0.0; max: 0.99; step: 0.01 | Breadcrumbs fraction of the smallest absolute changes to discard, per tensor. 0.01 means 1%. Top trim plus Bottom trim must be less than 1; excessive trimming can remove learned details. |
-| `model_a` | MODEL | Connection | Live model A, including its active patches. Takes priority over data_a and legacy path_a; exporting its effective weights needs a temporary snapshot. |
+| `model_a` | MODEL | Connection | Live model A, including its active patches. Takes priority over data_a and legacy path_a. Effective weights are read one tensor at a time without a temporary source checkpoint. |
 | `model_b` | MODEL | Connection | Live model B, including its active patches. Takes priority over data_b and legacy path_b. |
 | `base_model` | MODEL | Connection | Compatible original training base for task-vector methods. Required for TIES, DARE, DELLA and Breadcrumbs; unused by LERP and SLERP. Takes priority over base_data. |
 | `clip_a` | CLIP | Connection | Text encoder belonging to live model A. Include it when merging text-encoder components or retaining a full checkpoint. |
 | `clip_b` | CLIP | Connection | Text encoder belonging to live model B when merging text-encoder components. |
 | `base_clip` | CLIP | Connection | Text encoder belonging to the live base model when merging text-encoder changes. |
-| `vae_a` | VAE | Connection | VAE to include in the snapshot of live model A. It passes through from A unless the selected components include it. |
-| `data_a` | RAY_MODEL_DATA | Connection | Model data for A, usually from Load Model As. Used when model_a is disconnected; avoids exporting a live model. |
+| `vae_a` | VAE | Connection | VAE to include with live model A. It passes through from A unless the selected components include it. |
+| `data_a` | RAY_MODEL_DATA | Connection | Model data for A, usually from Load Model As. Used when model_a is disconnected; reads file or RAM weights without initializing an inference model. |
 | `data_b` | RAY_MODEL_DATA | Connection | Model data for B, usually from Load Model As. Used when model_b is disconnected. |
 | `base_data` | RAY_MODEL_DATA | Connection | Model data for the compatible base. Used by task-vector methods when base_model is disconnected; not needed for LERP or SLERP. |
 | `path_a` | STRING | Default: "" | Legacy model A path retained for saved workflows. Connect Load Model As to data_a for normal file selection; model_a and data_a take priority. |
 | `path_b` | STRING | Default: "" | Legacy model B path retained for saved workflows. Connect Load Model As to data_b; model_b and data_b take priority. |
 | `base_path` | STRING | Default: "" | Legacy base-model path retained for saved workflows. Connect a compatible base to base_data or base_model instead. |
 | `block_weights` | STRING | Default: "{}" | Connect a STRING containing a JSON map of tensor prefixes to A ratios between 0 and 1, for example {"diffusion_model.blocks.0.": 0.7}. The longest prefix wins. Leave disconnected for the global Weight A ratio. |
-| `fast_merge` | BOOLEAN | Default: false | High RAM usage: retain the entire merged model in system RAM until ComfyUI releases its cache. A data-only connection to Save Model avoids intermediate disk writes. Insufficient RAM can cause paging or failure. |
 
 | Output | Type | Description |
 | --- | --- | --- |

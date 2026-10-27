@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { installPanel, iconButton, linkChip, linkOf, registerLinkTargets, openPanelSettings, inputTooltip, outputTooltip } from "./ray_panel.js";
+import { installPanel, iconButton, linkChip, linkOf, registerLinkTargets, inputTooltip, outputTooltip } from "./ray_panel.js";
 import { applyBucketTint, setWidgetHidden } from "./_common.js";
 import { notify } from "./browse_common.js";
 import { metadataRows, rowsToMetadata, mergeFields, filterTensors, parseMetadataJSON } from "./model_tools_ui.mjs";
@@ -242,7 +242,7 @@ const SECTIONS = {
     RayModelMerge: [
         ["Merge", "strategy", "weight_a", "components", "mismatch"],
         ["Algorithm", "density", "lambda", "top_trim", "bottom_trim", "seed"],
-        ["Output", "weight_format", "fast_merge"],
+        ["Output", "weight_format"],
     ],
     RayModelInspector: [["Source", "path"], ["Inspection", "max_rows"]],
     RayModelCompare: [["Sources", "path_a", "path_b"], ["Comparison", "components"]],
@@ -294,7 +294,14 @@ function migrateWidgets(node, id, saved) {
             const target = widget(node, name);
             if (target && index < values.length) target.value = values[index];
         }
-        if (earlierMerge) widget(node, "fast_merge").value = false;
+    }
+    if (id === "RayModelMerge" && saved?.properties?.ray_model_tools_schema === 2 && Array.isArray(values)) {
+        // The retired toggle preceded the hidden block map in schema 2.
+        const previous = [...names.slice(0, 11), "path_a", "path_b", "base_path", "fast_merge", "block_weights"];
+        previous.forEach((name, index) => {
+            const target = widget(node, name);
+            if (target && index < values.length) target.value = values[index];
+        });
     }
     if (id === "RayModelSave" && (saved?.properties?.ray_model_tools_schema || 0) < 3 && Array.isArray(values) && values.length === 6) {
         ["filename_prefix", "metadata_mode", "overwrite", "metadata_json", "path", "output_path"].forEach((name, index) => {
@@ -313,7 +320,7 @@ function migrateWidgets(node, id, saved) {
             widget(node, "output_folder").value = folder; widget(node, "filename_prefix").value = file;
         }
     }
-    node.properties ||= {}; node.properties.ray_model_tools_schema = id === "RayModelSave" ? 3 : 2;
+    node.properties ||= {}; node.properties.ray_model_tools_schema = ["RayModelSave", "RayModelMerge"].includes(id) ? 3 : 2;
 }
 
 function createLoadSource(node) {
@@ -347,7 +354,7 @@ function createMergeName(node) {
     let signature = "";
     const state = node._rayMergeName = {name: "", show(name) { state.name = name; output.textContent = name; }};
     const refresh = () => {
-        const sources = mergeSources(node), settings = Object.fromEntries(["components", "mismatch", "seed", "density", "lambda", "top_trim", "bottom_trim", "fast_merge"]
+        const sources = mergeSources(node), settings = Object.fromEntries(["components", "mismatch", "seed", "density", "lambda", "top_trim", "bottom_trim"]
             .map(name => [name, value(node, name)]));
         settings.block_weights = stringValue(node, "block_weights") || "{}";
         const args = {...sources, settings, strategy: value(node, "strategy"), weight_a: value(node, "weight_a"), weight_format: value(node, "weight_format")};
@@ -360,46 +367,13 @@ function createMergeName(node) {
     refresh(); return {root, refresh};
 }
 
-function installFastMergeConfirmation(node) {
-    const target = widget(node, "fast_merge");
-    if (!target || node._rayFastMerge) return;
-    let previous = !!target.value, popup = null;
-    const callback = target.callback;
-    const confirm = () => {
-        if (popup) return;
-        let confirmed = false;
-        popup = openPanelSettings(node, { sections: [{ title: "High RAM usage", fields: [{
-            custom: () => el("p", "Fast merge keeps the entire merged model in system RAM until ComfyUI releases its cache. Allow room for the output and working tensors; insufficient RAM can cause paging or failure. A data-only connection to Save Model avoids an intermediate model file.", "rmt-warning"),
-        }] }] }, "Fast merge", {
-            actions: [
-                { label: "REVERT" },
-                { label: "CONFIRM", onClick: () => { confirmed = true; } },
-            ],
-            onClose: () => {
-                popup = null;
-                if (!confirmed && target.value) setValue(node, "fast_merge", false);
-                node._rayPanel?.refresh();
-            },
-        });
-    };
-    target.callback = function () {
-        const enabled = !!target.value, turnedOn = enabled && !previous;
-        previous = enabled;
-        const result = callback?.apply(this, arguments);
-        if (turnedOn) confirm();
-        else if (!enabled) popup?.close();
-        return result;
-    };
-    node._rayFastMerge = { sync() { previous = !!target.value; if (!previous) popup?.close(); } };
-}
-
 export function installModelTools(node, id, nodeData = null) {
     const sourceNames = id === "RayModelLoadAs" ? ["model_name", "path"]
         : id === "RayLoraBake" ? ["lora_name", "lora_path"] : null;
     if (sourceNames) normalizeSource(node, ...sourceNames);
     if (node._rayModelTools) return;
     node._rayModelTools = true; styles(); applyBucketTint(node, "Tools");
-    node.properties ||= {}; node.properties.ray_model_tools_schema = id === "RayModelSave" ? 3 : 2;
+    node.properties ||= {}; node.properties.ray_model_tools_schema = ["RayModelSave", "RayModelMerge"].includes(id) ? 3 : 2;
     // Keep old saved per-layer ratios as a hidden native value behind the STRING socket.
     if (id === "RayModelMerge" && !widget(node, "block_weights")) node.addWidget("text", "block_weights", "{}", () => {});
     const hidden = id === "RayModelMetadata" ? ["editor_json", "editor_source"]
@@ -451,6 +425,14 @@ export function installModelTools(node, id, nodeData = null) {
         sections[0].fields = [{custom: () => { source = createLoadSource(node); return source.root; }, update: () => source?.refresh()}];
     }
     if (id === "RayModelMerge") {
+        let requirement;
+        sections[0].fields.push({
+            custom: () => { requirement = el("p", "", "rmt-warning rmt-base-required"); requirement.setAttribute("role", "status"); return requirement; },
+            when: n => !linkOf(n, "strategy") && mergeFields(String(value(n, "strategy"))).base
+                && !n.inputs?.some(input => ["base_model", "base_data"].includes(input.name) && input.link != null)
+                && !linkOf(n, "base_path") && !String(value(n, "base_path")).trim(),
+            update: () => { if (requirement) requirement.textContent = `${value(node, "strategy")} requires the compatible original training base. Connect it to base_model or base_data. For a two-model blend without a base, choose LERP or SLERP.`; },
+        });
         let name;
         sections.find(section => section.title === "Output").fields.push({
             custom: () => { name = createMergeName(node); return name.root; }, update: () => name?.refresh(),
@@ -461,7 +443,6 @@ export function installModelTools(node, id, nodeData = null) {
     if (["RayModelInspector", "RayModelCompare"].includes(id))
         sections.at(-1).fields.push({custom: () => createInspectionView(node, id)});
     installPanel(node, { skip: hidden, minWidth: 470, sections });
-    if (id === "RayModelMerge") installFastMergeConfirmation(node);
 }
 
 app.registerExtension({
@@ -476,15 +457,16 @@ app.registerExtension({
         nodeType.prototype.onConfigure = function (saved) {
             migrateWidgets(this, nodeData.name, saved);
             const result = configured?.apply(this, arguments); installModelTools(this, nodeData.name, nodeData);
-            const removedInput = this.inputs?.findIndex(input => input.name === "load_result");
-            if (removedInput >= 0) this.removeInput(removedInput);
+            for (const name of ["load_result", ...(nodeData.name === "RayModelMerge" ? ["fast_merge"] : [])]) {
+                const removedInput = this.inputs?.findIndex(input => input.name === name);
+                if (removedInput >= 0) this.removeInput(removedInput);
+            }
             if (nodeData.name === "RayModelMerge") {
                 if (!this.inputs?.some(input => input.name === "block_weights")) this.addInput("block_weights", "STRING", {shape: 7});
                 const blocks = this.inputs.find(input => input.name === "block_weights");
                 delete blocks.widget; blocks.type = "STRING";
             }
             if (nodeData.name === "RayModelMerge" && !this.outputs?.some(output => output.name === "merge_name")) this.addOutput("merge_name", "STRING");
-            this._rayFastMerge?.sync();
             this._rayMetadataEditor?.reload(); return result;
         };
         nodeType.prototype.onExecuted = function (message) {

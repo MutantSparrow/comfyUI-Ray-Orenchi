@@ -93,7 +93,7 @@ def name_signature(settings):
     values = [setting_text(settings.get(key, default)) for key, default in
               (("components", "diffusion"), ("mismatch", "forbid"), ("seed", 0),
                ("density", .5), ("lambda", 1.), ("top_trim", .1), ("bottom_trim", .01),
-               ("block_weights", "{}"), ("fast_merge", False))]
+               ("block_weights", "{}"))]
     try:
         block = json.loads(values[7])
         if isinstance(block, dict):

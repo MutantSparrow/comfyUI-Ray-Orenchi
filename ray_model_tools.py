@@ -4,8 +4,6 @@ from __future__ import annotations
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 import importlib
-import os
-import tempfile
 import uuid
 
 core = importlib.import_module(".model_tools", __package__) if __package__ else importlib.import_module("model_tools")
@@ -21,6 +19,7 @@ SCOPES = ["diffusion", "diffusion_and_text", "text_encoder", "all"]
 MODEL_IDS = ["RayModelLoadAs", "RayModelConvert", "RayModelSave", "RayModelMetadata",
              "RayModelMetadataSave", "RayModelMerge", "RayModelInspector", "RayModelCompare",
              "RayLoraBake", "RayLoraExtract"]
+_UNCONNECTED = object()
 
 # Shared descriptions for the same connections and controls across Model Tools.
 INPUT_TOOLTIPS = {
@@ -193,32 +192,49 @@ def attach_metadata(model, metadata):
 
 
 def snapshot(model, path, clip=None, vae=None, metadata=None):
-    import comfy.sd
     meta = dict(metadata if metadata is not None else model_metadata(model))
     meta.pop("_quantization_metadata", None)
-    comfy.sd.save_checkpoint(path, model, clip=clip, vae=vae, metadata=core.embedded_metadata(meta))
+    save_live(model, path, meta, clip=clip, vae=vae)
     core.read_header(path)
     return core.ModelAsset(path, meta)
 
 
-def save_live(model, destination, metadata, overwrite=False, clip=None, vae=None):
-    """Let ComfyUI apply/offload patches and write the final checkpoint once."""
-    import comfy.sd
+def live_tensor_source(model, clip=None, vae=None):
+    """Native lazy saving tensors preserve effective weights one layer at a time."""
     import comfy.model_management as mm
+    mm.throw_exception_if_processing_interrupted()
+    clip_state = clip.state_dict_for_saving() if clip is not None else None
+    vae_state = vae.get_sd() if vae is not None else None
+    try:
+        state = model.state_dict_for_saving(clip_state, vae_state)
+    except RuntimeError as error:
+        # Some native versions cannot wrap integer quantization markers in a
+        # lazy Parameter. Preparing that model uses its supported saving path.
+        if "Only Tensors of floating point and complex dtype can require gradients" not in str(error):
+            raise
+        mm.throw_exception_if_processing_interrupted()
+        mm.load_models_gpu([model])
+        mm.throw_exception_if_processing_interrupted()
+        state = model.state_dict_for_saving(clip_state, vae_state)
+    metadata = model_metadata(model)
+    metadata.pop("_quantization_metadata", None)
+    mm.throw_exception_if_processing_interrupted()
+    return core.TensorSource.from_tensors(state, metadata)
+
+
+def save_live(model, destination, metadata, overwrite=False, clip=None, vae=None):
+    """Apply native lazy patches and write once, checking cancellation per tensor."""
     destination = core.clean_path(destination)
     if destination.exists() and not overwrite:
         raise FileExistsError(f"Output already exists: {destination}")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=".ray-", suffix=".safetensors", dir=destination.parent)
-    os.close(fd)
-    try:
-        mm.throw_exception_if_processing_interrupted()
-        comfy.sd.save_checkpoint(temporary, model, clip=clip, vae=vae, metadata=core.embedded_metadata(metadata))
-        mm.throw_exception_if_processing_interrupted()
-        core.read_header(temporary)
-        core.commit_file(temporary, destination, overwrite)
-    finally:
-        Path(temporary).unlink(missing_ok=True)
+    update = progress()
+    update(0, 1)
+    source = live_tensor_source(model, clip, vae)
+    with core.TensorWriter(destination, metadata, overwrite, header_reserve=core.header_reserve(source)) as writer:
+        for i, key in enumerate(source.index):
+            update(i, len(source.index))
+            writer.add(key, source.raw(key))
+        update(len(source.index), len(source.index))
 
 
 def live_asset(model, metadata, clip=None, vae=None):
@@ -293,17 +309,28 @@ def source_path(model=None, model_data=None, path="", clip=None, vae=None):
         raise ValueError("Connect a MODEL or model_data, or enter a model path.")
 
 
+@contextmanager
+def merge_source(model=None, model_data=None, path="", clip=None, vae=None):
+    if model is not None:
+        yield live_tensor_source(model, clip, vae)
+    elif isinstance(model_data, core.ModelAsset) and model_data.tensors is not None:
+        yield core.TensorSource.from_tensors(model_data.tensors, model_data.metadata)
+    else:
+        with source_path(model_data=model_data, path=path) as source:
+            yield source
+
+
 def load_asset(asset, kind="auto", dtype="auto", components=True):
     import comfy.sd
     import folder_paths
-    source = core.TensorSource(asset.path)
+    source = core.TensorSource.from_tensors(asset.tensors, asset.metadata) if asset.tensors is not None else core.TensorSource(asset.path)
     options = {}
     if dtype in ("fp32", "fp16", "bf16"):
         options["dtype"] = {"fp32": core.torch.float32, "fp16": core.torch.float16, "bf16": core.torch.bfloat16}[dtype]
     if kind == "auto":
         kind = "checkpoint" if any(core.component(k) != "diffusion" for k in source.keys) else "diffusion"
-    if source.path.is_dir():
-        # ComfyUI's native loaders accept state dictionaries, not shard directories.
+    if asset.tensors is not None or source.path.is_dir():
+        # Native loaders accept state dictionaries without an intermediate file.
         state = {k: source.raw(k) for k in source.index}
         if kind == "checkpoint":
             loaded = comfy.sd.load_state_dict_guess_config(state, output_vae=components, output_clip=components,
@@ -457,9 +484,9 @@ class RayModelSave:
             if model is not None:
                 save_live(model, destination, meta, overwrite, clip, vae)
             elif memory is not None:
-                memory.save(destination, meta, overwrite)
+                memory.save(destination, meta, overwrite, progress=progress())
             else:
-                core.rewrite_metadata(src, destination, meta, overwrite)
+                core.rewrite_metadata(src, destination, meta, overwrite, progress=progress())
         asset = core.ModelAsset(destination, core.embedded_metadata(meta))
         return result((asset, destination), {"operation": "save", "saved_path": destination})
 
@@ -523,7 +550,7 @@ class RayModelMetadataSave:
 
 
 class RayModelMerge:
-    DESCRIPTION = "Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's nine strategies. Task-vector strategies require a base_model or base_data connection. Block weights accepts a connected JSON string. Inference outputs load automatically when used. merge_name combines the sources, method, ratio, precision, settings fingerprint and time for use with Save Model. Fast merge keeps the entire result in RAM; insufficient memory can cause paging or failure."
+    DESCRIPTION = "Merge compatible models connected to model_a/model_b or data_a/data_b with Ray's nine strategies. Task-vector strategies require a base_model or base_data connection. Block weights accepts a connected JSON string. Inference outputs load automatically when used. merge_name combines the sources, method, ratio, precision, settings fingerprint and time for use with Save Model."
     CATEGORY, FUNCTION = CATEGORY, "merge"
     RETURN_TYPES = ("MODEL", "CLIP", "VAE", "RAY_MODEL_DATA", "RAY_MODEL_METADATA", "STRING", "STRING")
     RETURN_NAMES = ("model", "clip", "vae", "model_data", "metadata", "report", "merge_name")
@@ -544,40 +571,57 @@ class RayModelMerge:
             "top_trim": number(.1, 0., .99, tooltip="Breadcrumbs fraction of the largest absolute changes to discard as outliers, per tensor. 0.10 means 10%. Top trim plus Bottom trim must be less than 1."),
             "bottom_trim": number(.01, 0., .99, tooltip="Breadcrumbs fraction of the smallest absolute changes to discard, per tensor. 0.01 means 1%. Top trim plus Bottom trim must be less than 1; excessive trimming can remove learned details.")},
             "optional": {
-                "model_a": ("MODEL", {"tooltip": "Live model A, including its active patches. Takes priority over data_a and legacy path_a; exporting its effective weights needs a temporary snapshot."}),
+                "model_a": ("MODEL", {"tooltip": "Live model A, including its active patches. Takes priority over data_a and legacy path_a. Effective weights are read one tensor at a time without a temporary source checkpoint."}),
                 "model_b": ("MODEL", {"tooltip": "Live model B, including its active patches. Takes priority over data_b and legacy path_b."}),
                 "base_model": ("MODEL", {"tooltip": "Compatible original training base for task-vector methods. Required for TIES, DARE, DELLA and Breadcrumbs; unused by LERP and SLERP. Takes priority over base_data."}),
                 "clip_a": ("CLIP", {"tooltip": "Text encoder belonging to live model A. Include it when merging text-encoder components or retaining a full checkpoint."}),
                 "clip_b": ("CLIP", {"tooltip": "Text encoder belonging to live model B when merging text-encoder components."}),
                 "base_clip": ("CLIP", {"tooltip": "Text encoder belonging to the live base model when merging text-encoder changes."}),
-                "vae_a": ("VAE", {"tooltip": "VAE to include in the snapshot of live model A. It passes through from A unless the selected components include it."}),
-                "data_a": ("RAY_MODEL_DATA", {"tooltip": "Model data for A, usually from Load Model As. Used when model_a is disconnected; avoids exporting a live model."}),
+                "vae_a": ("VAE", {"tooltip": "VAE to include with live model A. It passes through from A unless the selected components include it."}),
+                "data_a": ("RAY_MODEL_DATA", {"tooltip": "Model data for A, usually from Load Model As. Used when model_a is disconnected; reads file or RAM weights without initializing an inference model."}),
                 "data_b": ("RAY_MODEL_DATA", {"tooltip": "Model data for B, usually from Load Model As. Used when model_b is disconnected."}),
                 "base_data": ("RAY_MODEL_DATA", {"tooltip": "Model data for the compatible base. Used by task-vector methods when base_model is disconnected; not needed for LERP or SLERP."}),
                 "path_a": text(tooltip="Legacy model A path retained for saved workflows. Connect Load Model As to data_a for normal file selection; model_a and data_a take priority."),
                 "path_b": text(tooltip="Legacy model B path retained for saved workflows. Connect Load Model As to data_b; model_b and data_b take priority."),
                 "base_path": text(tooltip="Legacy base-model path retained for saved workflows. Connect a compatible base to base_data or base_model instead."),
-                "block_weights": text("{}", True, forceInput=True, tooltip='Connect a STRING containing a JSON map of tensor prefixes to A ratios between 0 and 1, for example {"diffusion_model.blocks.0.": 0.7}. The longest prefix wins. Leave disconnected for the global Weight A ratio.'),
-                "fast_merge": ("BOOLEAN", {"default": False, "tooltip": "High RAM usage: retain the entire merged model in system RAM until ComfyUI releases its cache. A data-only connection to Save Model avoids intermediate disk writes. Insufficient RAM can cause paging or failure."})},
+                "block_weights": text("{}", True, forceInput=True, tooltip='Connect a STRING containing a JSON map of tensor prefixes to A ratios between 0 and 1, for example {"diffusion_model.blocks.0.": 0.7}. The longest prefix wins. Leave disconnected for the global Weight A ratio.')},
             "hidden": {"prompt": "PROMPT", "unique_id": "UNIQUE_ID"}})
 
     @classmethod
     def IS_CHANGED(cls, path_a="", path_b="", base_path="", prompt=None, unique_id=None, **_):
         return changed_path(path_a), changed_path(path_b), changed_path(base_path), workflow.inference_requested(prompt, unique_id)
 
+    @classmethod
+    def VALIDATE_INPUTS(cls, strategy="LERP", base_model=_UNCONNECTED, base_data=_UNCONNECTED, base_path=""):
+        # Queue validation supplies None for unresolved links, and omits unconnected
+        # optional inputs. Keep those distinct without overriding native type checks.
+        if strategy is None:
+            return True
+        if strategy not in core.STRATEGIES:
+            return "Unknown merge strategy."
+        try:
+            core.validate_merge_base(strategy, base_model is not _UNCONNECTED or base_data is not _UNCONNECTED
+                                     or base_path is None or bool(base_path.strip()))
+        except ValueError as error:
+            return str(error)
+        return True
+
     def merge(self, strategy="LERP", weight_a=.5, weight_format="bf16", components="diffusion", mismatch="forbid",
               seed=0, density=.5, top_trim=.1, bottom_trim=.01,
               model_a=None, model_b=None, base_model=None, clip_a=None, clip_b=None, base_clip=None, vae_a=None,
-              data_a=None, data_b=None, base_data=None, path_a="", path_b="", base_path="", block_weights="{}", fast_merge=False, prompt=None, unique_id=None, **kwargs):
+              data_a=None, data_b=None, base_data=None, path_a="", path_b="", base_path="", block_weights="{}", prompt=None, unique_id=None, **kwargs):
+        core.validate_merge_base(strategy, base_model is not None or base_data is not None or bool(base_path.strip()))
         if model_a is None and data_a is None and not path_a.strip():
             raise ValueError("Connect Model A to model_a or data_a.")
         if model_b is None and data_b is None and not path_b.strip():
             raise ValueError("Connect Model B to model_b or data_b.")
         if not 0 <= weight_a <= 1:
             raise ValueError("Merge weight must be in [0,1].")
+        update = progress()
+        update(0, 1000)
         native = live_lerp(model_a, model_b, weight_a, weight_format) if (
             model_a is not None and model_b is not None and strategy == "LERP" and components == "diffusion"
-            and mismatch == "forbid" and not core.metadata_fields(block_weights)) else None
+            and not core.metadata_fields(block_weights)) else None
         if native is not None:
             patched, check = native
             meta = core.with_history(model_metadata(model_a), "merge", strategy=strategy, weight_a=weight_a,
@@ -586,15 +630,18 @@ class RayModelMerge:
             asset = live_asset(patched, meta, clip_a, vae_a)
         else:
             with ExitStack() as stack:
-                a = stack.enter_context(source_path(model_a, data_a, path_a, clip_a, vae_a))
-                b = stack.enter_context(source_path(model_b, data_b, path_b, clip_b))
+                a = stack.enter_context(merge_source(model_a, data_a, path_a, clip_a, vae_a))
+                update(10, 1000)
+                b = stack.enter_context(merge_source(model_b, data_b, path_b, clip_b))
+                update(20, 1000)
                 needs_base = strategy not in ("LERP", "SLERP")
-                base = stack.enter_context(source_path(base_model, base_data, base_path, base_clip)) if needs_base and (base_model or base_data or base_path.strip()) else None
+                base = stack.enter_context(merge_source(base_model, base_data, base_path, base_clip)) if needs_base and (base_model or base_data or base_path.strip()) else None
+                update(30, 1000)
                 asset, check = core.merge_models(a, b, cache_path("merged"), strategy, weight_a, base, weight_format,
                     components, mismatch, seed, density, kwargs.get("lambda", 1.), top_trim, bottom_trim,
-                    block_weights, progress(), fast_merge=fast_merge)
+                    block_weights, lambda current, total: update(30 + int(870 * current / max(1, total)), 1000))
         naming = dict(components=components, mismatch=mismatch, seed=seed, density=density,
-                      top_trim=top_trim, bottom_trim=bottom_trim, block_weights=block_weights, fast_merge=fast_merge, **{"lambda": kwargs.get("lambda", 1.)})
+                      top_trim=top_trim, bottom_trim=bottom_trim, block_weights=block_weights, **{"lambda": kwargs.get("lambda", 1.)})
         name = workflow.merge_name(
             workflow.source_name(model_a, data_a, path_a, prompt, unique_id, ("model_a", "data_a")),
             workflow.source_name(model_b, data_b, path_b, prompt, unique_id, ("model_b", "data_b")),
@@ -602,13 +649,15 @@ class RayModelMerge:
             strategy, weight_a, weight_format, naming)
         asset = asset.with_metadata({**asset.metadata, "ray_merge_name": name})
         initialize = workflow.inference_requested(prompt, unique_id)
+        update(920, 1000)
         loaded = (patched, clip_a, vae_a) if native is not None and initialize else load_asset(asset, dtype=weight_format) if initialize else (None, None, None)
         if native is not None:
             attach_metadata(patched, asset.metadata)
             patched.set_attachments("ray_model_source", name)
         report = {"operation": "merge", "strategy": strategy, "weight_a": weight_a, "seed": seed,
-                  "fast_merge": fast_merge, "comparison": check, "merge_name": name,
+                  "comparison": check, "merge_name": name,
                   "processing": "native_patches" if native is not None else "tensor_merge"}
+        update(1000, 1000)
         return result((*loaded, asset, asset.metadata, core.json_text(report), name), report)
 
 

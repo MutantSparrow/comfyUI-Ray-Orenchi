@@ -11,5 +11,9 @@ vm.runInContext('this.mergeName=mergeName',context);const{mergeName}=context;
 const script='import json,sys\nfrom datetime import datetime\nfrom model_workflow import merge_name\nprint(json.dumps([merge_name(**item,now=datetime(2026,10,24,20,30,40)) for item in json.load(sys.stdin)],ensure_ascii=False))';
 const expected=JSON.parse(execFileSync(process.env.PYTHON||'python',['-c',script],{cwd:root,input:JSON.stringify(cases),encoding:'utf8',windowsHide:true}));
 assert.deepEqual(cases.map(item=>mergeName({...item,now:new Date(2026,9,24,20,30,40)})),expected);
+for(const item of cases){
+ const name=mergeName({...item,now:new Date(2026,9,24,20,30,40)});
+ for(const retired of [false,true])assert.equal(mergeName({...item,settings:{...item.settings,fast_merge:retired},now:new Date(2026,9,24,20,30,40)}),name);
+}
 console.log('Browser preview and execution names match across source paths, strategies, Unicode, quantization, ratios and block weights');
 })().catch(error=>{console.error(error);process.exitCode=1});

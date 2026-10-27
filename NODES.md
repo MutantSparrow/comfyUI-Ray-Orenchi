@@ -866,7 +866,7 @@ replacement of existing files. Run to save; selecting a destination only fills t
 
 ![🧰 Ray's Model Tools: Model Merge](screenshots/RayModelMerge.png)
 
-**Purpose.** Merge compatible models connected to A, B and any required base, using MODEL or model-data inputs. Supports LERP, SLERP, TIES, DARE, DELLA, or Breadcrumbs variants, component selection and seeded controls. Connect block weights as a JSON STRING. Inference outputs load automatically when used. Fast merge holds the output in RAM; a data-only connection to Save Model avoids intermediate model files.
+**Purpose.** Merge compatible models connected to A, B and any required base, using MODEL or model-data inputs. Supports LERP, SLERP, TIES, DARE, DELLA, or Breadcrumbs variants, component selection and seeded controls. Connect block weights as a JSON STRING. Inference outputs load automatically when used. Live source weights are read per tensor, and tensor merges stream the result to temporary disk storage.
 
 The live **Merge name** preview follows upstream model selections and settings.
 Connect the **merge_name** STRING output to Save Model's **filename_prefix** for
@@ -874,8 +874,7 @@ a name containing the sources, strategy, percentages, precision, settings
 fingerprint and execution datetime.
 
 Open **? Help** for each strategy's purpose, strengths and limitations. Hover
-the controls for setting-specific tooltips. Enabling Fast merge opens a RAM
-warning with **REVERT** and **CONFIRM**; both close the popup and apply the choice.
+the controls for setting-specific tooltips.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
 

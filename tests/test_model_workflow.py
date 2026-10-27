@@ -62,6 +62,8 @@ def test_names_keep_settings_time_and_precisions_readable():
     assert names.merge_name("A", "B", "Base", strategy="TIES", now=now).startswith("Base-Base_A-A_B-B_TIES_")
     assert names.merge_name("A", "B", now=now, settings={"density": .25}) != names.merge_name("A", "B", now=now)
     assert names.merge_name("A", "B", now=now, settings={"block_weights": '{"x":1}'}) != names.merge_name("A", "B", now=now)
+    for retired in (False, True):
+        assert names.merge_name("A", "B", now=now, settings={"fast_merge": retired}) == names.merge_name("A", "B", now=now)
 
 
 def test_name_case_outputs_are_filesystem_safe():

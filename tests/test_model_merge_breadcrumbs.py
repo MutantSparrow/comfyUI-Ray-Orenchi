@@ -79,8 +79,7 @@ def test_breadcrumbs_merges_real_oversized_layer(strategy):
 
 
 @pytest.mark.parametrize("strategy", ["Breadcrumbs", "Breadcrumbs-TIES"])
-@pytest.mark.parametrize("fast_merge", [False, True])
-def test_breadcrumbs_file_and_ram_results_match_reference(tmp_path, strategy, fast_merge):
+def test_breadcrumbs_streamed_result_matches_reference(tmp_path, strategy):
     values = [torch.arange(24, dtype=torch.float32).reshape(6, 4) - 7,
               torch.arange(24, dtype=torch.float32).reshape(6, 4).flip(0) - 12,
               torch.ones(6, 4)]
@@ -91,10 +90,10 @@ def test_breadcrumbs_file_and_ram_results_match_reference(tmp_path, strategy, fa
         paths.append(path)
     destination = tmp_path / "merged.safetensors"
     asset, _ = tools.merge_models(*paths[:2], destination, strategy=strategy,
-                                  weight=.4, base=paths[2], fmt="fp32", fast_merge=fast_merge)
-    actual = (asset.tensors if fast_merge else load_file(asset.path))["proj.weight"]
+                                  weight=.4, base=paths[2], fmt="fp32")
+    actual = load_file(asset.path)["proj.weight"]
     torch.testing.assert_close(actual, reference(*values, .4, .1, .01, strategy.endswith("-TIES")))
-    assert destination.exists() is (not fast_merge)
+    assert destination.is_file() and asset.tensors is None
     for path, original in zip(paths, values):
         assert torch.equal(load_file(str(path))["proj.weight"], original)
 

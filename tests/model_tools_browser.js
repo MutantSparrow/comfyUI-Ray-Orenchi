@@ -122,34 +122,15 @@ try {
         check(bakeRow('lora_name').element.hidden&&!bakeRow('lora_path').element.hidden,
             'LoRA Bake preserves an existing linked adapter path without showing duplicate controls');
         baker.onRemoved();
-        const fastNode=await make('RayModelMerge',{strategy:'LERP',fast_merge:false},{strategy:['LERP','SLERP']},accessor,
-            {optional:{fast_merge:['BOOLEAN',{tooltip:'Retain merged weights in system RAM.'}]}});
-        const fastWidget=fastNode.widgets.find(w=>w.name==='fast_merge');
-        const fastToggle=fastNode._rayPanel.rows.find(r=>r.name==='fast_merge').element.querySelector('[role="switch"]');
-        const dialog=()=>document.querySelector('dialog[aria-label="Fast merge"]');
-        const fastRow=fastNode._rayPanel.rows.find(r=>r.name==='fast_merge').element;
-        check(fastRow.title==='Retain merged weights in system RAM.'&&fastRow.querySelector('label').title===fastRow.title,
+        const precision=await make('RayModelMerge',{strategy:'LERP',weight_format:'bf16'},
+            {strategy:['LERP','SLERP'],weight_format:['bf16','fp32']},accessor,
+            {required:{weight_format:[['bf16','fp32'],{tooltip:'Storage format for merged weights.'}]}});
+        const precisionRow=precision._rayPanel.rows.find(r=>r.name==='weight_format').element;
+        check(precisionRow.title==='Storage format for merged weights.'&&precisionRow.querySelector('label').title===precisionRow.title,
             'Backend tooltip text reaches the whole custom widget row and its label');
-        check(!dialog()&&!fastNode._rayPanel.root.querySelector('.rmt-warning'),
-            'Fast merge has no inline warning or popup in its default state');
-        fastToggle.click();await tick();
-        check(dialog()?.open&&fastWidget.value&&dialog().textContent.includes('High RAM usage'),
-            'Enabling Fast merge opens a modal system RAM warning');
-        const action=name=>[...dialog().querySelectorAll('button')].find(button=>button.textContent===name);
-        check(dialog().querySelectorAll('button').length===2&&action('REVERT')&&action('CONFIRM'),
-            'Fast merge warning offers exactly REVERT and CONFIRM');
-        action('REVERT').click();await tick();
-        check(!dialog()&&!fastWidget.value&&!fastNode._raySettingsPanel,
-            'REVERT closes the popup, releases its panel and switches Fast merge off');
-        fastToggle.click();await tick();action('CONFIRM').click();await tick();
-        check(!dialog()&&fastWidget.value,'CONFIRM closes the popup and keeps Fast merge on');
-        fastToggle.click();await tick();check(!dialog()&&!fastWidget.value,'Turning Fast merge off does not prompt');
-        fastToggle.click();await tick();dialog().dispatchEvent(new Event('cancel',{cancelable:true}));await tick();
-        check(!dialog()&&!fastWidget.value,'Dismissing the warning reverts Fast merge');
-        fastWidget.value=true;fastNode.onConfigure();await tick();
-        check(!dialog()&&fastWidget.value,'Restoring an enabled saved workflow does not open a new prompt');
-        fastToggle.click();fastToggle.click();await tick();fastNode.onRemoved();
-        check(!dialog()&&!fastNode._raySettingsPanel,'Removing the node closes its pending warning');
+        check(!precision.widgets.some(w=>w.name==='fast_merge')&&!document.querySelector('dialog'),
+            'Model Merge has no retired merge toggle or confirmation popup');
+        precision.onRemoved();
     }
     const inspector=await make('RayModelInspector',{path:'example.safetensors',max_rows:5000});
     check(inspector._rayModelToolsView.root.closest('.rp-section').querySelector('.rp-title').textContent==='Inspection'&&
@@ -167,11 +148,11 @@ try {
     check(inspector._rayModelToolsView.root.querySelectorAll('tbody tr').length===1,'Inspector filter finds a tensor beyond the first page');
     search.value='';search.dispatchEvent(new Event('input',{bubbles:true}));
     const merger=await make('RayModelMerge',{strategy:'LERP',weight_a:.5,density:.5,lambda:1,top_trim:.1,bottom_trim:.01,seed:0,
-        path_a:'C:\\models\\older-a.safetensors',path_b:'C:\\models\\older-b.safetensors',base_path:'',fast_merge:false},
+        path_a:'C:\\models\\older-a.safetensors',path_b:'C:\\models\\older-b.safetensors',base_path:''},
         {strategy:['LERP','DARE-TIES','DELLA','Breadcrumbs']});
     const row=name=>merger._rayPanel.rows.find(r=>r.name===name);
-    check(row('fast_merge')&&!merger._rayPanel.root.querySelector('.rmt-warning'),
-        'Model Merge retains the Fast merge toggle without a permanent warning row');
+    check(!row('fast_merge')&&!merger._raySettingsPanel,
+        'Model Merge has no retired toggle or confirmation popup');
     check(!merger._rayPanel.rows.some(r=>['path_a','path_b','base_path'].includes(r.name))&&
         ![...merger._rayPanel.root.querySelectorAll('.rp-title')].some(title=>title.textContent==='Sources'),
         'Model Merge uses its model inputs without a duplicate Sources section');

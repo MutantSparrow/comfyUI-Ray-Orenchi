@@ -210,13 +210,24 @@ node tests/test_model_workflow_names.cjs
 python -m pytest tests/test_model_workflow.py tests/test_model_tools.py
 ```
 
+The Model Tools suite checks live Pad merges without source exports, streamed
+result loading, retired-setting compatibility, pending patch preservation, and
+real interrupt handling during merging and saving. For a tiny GPU merge with
+DynamicVRAM and the queued loader's offload behavior, set `RAY_TEST_CUDA=1` and run:
+
+```shell
+python scripts/run_tests.py --device cuda -q tests/test_model_tools.py -k dynamic_cuda
+```
+
+This uses generated local weights, one merged cache file and a final test checkpoint.
+
 The browser check covers both renderers, live source/configuration names, STRING
 block weights, output slot stability and migration of earlier saved widgets.
 The shared name cases compare browser previews with Python execution strings.
 The Save Model check covers the folder dialog, cancellation, connected inputs,
 hidden legacy controls and migration of saved destinations in both renderers.
 `tests/model_workflow_api.cjs` additionally runs two tiny Alpha/Beta safetensors
-fixtures through loading, Fast merge and Save Model, including the name link.
+fixtures through loading, Model Merge and Save Model, including the name link.
 Keep those fixtures in the isolated instance; use empty model folders for default
 documentation captures.
 

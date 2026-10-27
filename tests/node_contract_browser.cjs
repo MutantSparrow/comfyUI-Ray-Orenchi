@@ -181,8 +181,10 @@ const base = process.argv[2] || 'http://127.0.0.1:8194';
             node._rayMetadataEditor.addField();window.contractNode=node;window.contractKeys=0;
             document.addEventListener('keydown',()=>window.contractKeys++);});
         await page.getByRole('textbox',{name:'Metadata key',exact:true}).fill('typed_key');
+        await page.getByRole('textbox',{name:'Metadata key',exact:true}).press('End');
         await page.getByRole('textbox',{name:'Metadata key',exact:true}).press('Delete');
         assert.equal(await page.evaluate(()=>window.contractKeys),0);
+        await page.waitForFunction(()=>JSON.parse(window.contractNode.widgets.find(w=>w.name==='editor_json').value).typed_key==='');
         assert.equal(await page.evaluate(()=>JSON.parse(window.contractNode.widgets.find(w=>w.name==='editor_json').value).typed_key),'');
         let pendingPreview;
         const receivedPreview=new Promise(resolve=>{

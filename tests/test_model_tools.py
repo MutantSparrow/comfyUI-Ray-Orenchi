@@ -304,6 +304,21 @@ def test_merge_requires_base_and_checks_shapes_before_writing(tmp_path):
     assert load_file(asset.path)["x.weight"].shape == (3, 2)
 
 
+@pytest.mark.parametrize("strategy", tools.STRATEGIES[2:])
+def test_missing_merge_base_does_not_read_or_snapshot_sources(strategy, tmp_path, monkeypatch):
+    def unexpected(*args, **kwargs):
+        pytest.fail("A missing base must be rejected before accessing model weights")
+
+    monkeypatch.setattr(tools, "TensorSource", unexpected)
+    monkeypatch.setattr(nodes, "source_path", unexpected)
+    monkeypatch.setattr(nodes, "cache_path", unexpected)
+    with pytest.raises(ValueError, match="base_model or base_data"):
+        tools.merge_models("a.safetensors", "b.safetensors", tmp_path / "out.safetensors", strategy)
+    with pytest.raises(ValueError, match="LERP or SLERP"):
+        nodes.RayModelMerge().merge(strategy=strategy, model_a=object(), model_b=object(), fast_merge=True)
+    assert not list(tmp_path.iterdir())
+
+
 @pytest.mark.parametrize("mode,expected", [
     ("pad", [[3., 1.], [4.5, 2.], [3.5, 0.]]),
     ("trim", [[3.], [4.5]]),
@@ -372,61 +387,66 @@ def test_merge_controls_have_tooltips_without_changing_defaults():
     assert required["mismatch"][1]["default"] == "forbid"
     assert "load_result" not in required
     assert optional["block_weights"][1]["forceInput"] is True
-    assert optional["fast_merge"][1]["default"] is False
+    assert "fast_merge" not in optional
 
 
 @pytest.mark.parametrize("strategy", tools.STRATEGIES)
-def test_fast_merge_matches_streaming_for_every_strategy(tmp_path, strategy):
+def test_streamed_merge_is_repeatable_for_every_strategy(tmp_path, strategy):
     generator = torch.Generator().manual_seed(123)
     state = {"proj.weight": torch.randn(4, 256, generator=generator), "counter": torch.tensor(7)}
     a = model(tmp_path, "a", state)
     b = model(tmp_path, "b", {k: v + .2 if v.is_floating_point() else v for k, v in state.items()})
     base = model(tmp_path, "base", {k: v - .1 if v.is_floating_point() else v for k, v in state.items()})
     before = [Path(p).read_bytes() for p in (a, b, base)]
-    slow, _ = tools.merge_models(a, b, tmp_path / "slow.safetensors", strategy, base=base, fmt="fp32", seed=42)
-    cache = tmp_path / "fast.safetensors"
-    fast, _ = tools.merge_models(a, b, cache, strategy, base=base, fmt="fp32", seed=42, fast_merge=True)
-    assert not cache.exists()
-    expected = load_file(slow.path)
-    assert set(fast.tensors) == set(expected)
-    assert all(torch.equal(fast.tensors[k], expected[k]) for k in expected)
+    first, _ = tools.merge_models(a, b, tmp_path / "first.safetensors", strategy, base=base, fmt="fp32", seed=42)
+    second, _ = tools.merge_models(a, b, tmp_path / "second.safetensors", strategy, base=base, fmt="fp32", seed=42)
+    assert first.tensors is None and second.tensors is None
+    expected, actual = load_file(first.path), load_file(second.path)
+    assert set(actual) == set(expected)
+    assert all(torch.equal(actual[k], expected[k]) for k in expected)
     assert before == [Path(p).read_bytes() for p in (a, b, base)]
-    # A file-based downstream consumer can still materialize the same result.
-    assert all(torch.equal(v, load_file(fast.path)[k]) for k, v in expected.items())
 
 
 @pytest.mark.parametrize("mode", ["intersect", "pad", "trim"])
 @pytest.mark.parametrize("fmt", ["bf16", "int8_convrot", "fp8_e4m3fn_scaled"])
-def test_fast_merge_keeps_quantization_unmatched_tensors_and_block_weights(tmp_path, mode, fmt):
+def test_streamed_merge_keeps_quantization_unmatched_tensors_and_block_weights(tmp_path, mode, fmt):
     a = model(tmp_path, "a", {"proj.weight": torch.arange(1024.).reshape(4, 256) / 1000,
                               "rope.bands": torch.tensor([1., .1]), "text_encoders.bias": torch.tensor([9.])})
     b = model(tmp_path, "b", {"proj.weight": torch.zeros(4 if mode == "intersect" else 5, 256),
                               "extra.weight": torch.ones(2, 2, dtype=torch.int8), "extra.scale_weight": torch.tensor(.5)})
-    params = dict(fmt=fmt, mismatch=mode, block_weights={"proj": .25})
-    slow, _ = tools.merge_models(a, b, tmp_path / "slow.safetensors", **params)
-    fast, _ = tools.merge_models(a, b, tmp_path / "fast.safetensors", fast_merge=True, **params)
-    expected = load_file(slow.path)
-    assert set(fast.tensors) == set(expected)
-    assert all(torch.equal(fast.tensors[k].reshape(-1).view(torch.uint8), expected[k].reshape(-1).view(torch.uint8)) for k in expected)
-    assert torch.equal(fast.tensors["rope.bands"], torch.tensor([1., .1]))
-    assert torch.equal(fast.tensors["text_encoders.bias"], torch.tensor([9.]))
+    asset, _ = tools.merge_models(a, b, tmp_path / "merged.safetensors", fmt=fmt, mismatch=mode, block_weights={"proj": .25})
+    source = tools.TensorSource(asset.path)
+    expected = torch.arange(1024.).reshape(4, 256) / 4000
+    dense = source.dense("proj.weight").float()
+    actual = dense[:4]
+    torch.testing.assert_close(actual, expected, atol=.01, rtol=.02)
+    assert dense.shape[0] == (5 if mode == "pad" else 4)
+    tensors = load_file(asset.path)
+    assert torch.equal(tensors["rope.bands"], torch.tensor([1., .1]))
+    assert torch.equal(tensors["text_encoders.bias"], torch.tensor([9.]))
+    assert torch.equal(tensors["extra.weight"], torch.ones(2, 2, dtype=torch.int8))
+    assert tensors["extra.scale_weight"] == .5
 
 
-def test_fast_node_saves_directly_once_with_metadata_and_retains_cached_result(tmp_path, monkeypatch):
+@pytest.mark.parametrize("legacy_flag", [None, False, True])
+def test_node_ignores_retired_flag_and_saves_streamed_result_with_metadata(tmp_path, monkeypatch, legacy_flag):
     a = model(tmp_path, "a", {"proj.weight": torch.ones(4, 4)}, {"title": "Original"})
     b = model(tmp_path, "b", {"proj.weight": torch.zeros(4, 4)})
     cache = tmp_path / "cache.safetensors"
     monkeypatch.setattr(nodes, "cache_path", lambda _: str(cache))
     monkeypatch.setattr(nodes, "progress", lambda: lambda *_: None)
-    def no_intermediate(*args, **kwargs):
-        raise AssertionError("Fast merge and direct save must not write or copy an intermediate model")
-    monkeypatch.setattr(tools, "TensorWriter", no_intermediate)
-    monkeypatch.setattr(tools, "rewrite_metadata", no_intermediate)
+    writer = tools.TensorWriter
+    writes = []
+    def tracked_writer(destination, *args, **kwargs):
+        writes.append(Path(destination))
+        return writer(destination, *args, **kwargs)
+    monkeypatch.setattr(tools, "TensorWriter", tracked_writer)
+    legacy = {} if legacy_flag is None else {"fast_merge": legacy_flag}
     output = nodes.RayModelMerge().merge(data_a=tools.ModelAsset(a, {}), data_b=tools.ModelAsset(b, {}),
-                                        fast_merge=True, prompt={}, unique_id="test")
+                                        **legacy, prompt={}, unique_id="test")
     asset = output["result"][3]
-    assert output["ui"]["model_tools"][0]["fast_merge"] is True
-    assert not cache.exists()
+    assert "fast_merge" not in output["ui"]["model_tools"][0]
+    assert cache.is_file() and asset.tensors is None and writes == [cache]
     for name in ("first", "second"):
         target = tmp_path / f"{name}.safetensors"
         nodes.RayModelSave().save(model_data=asset, output_folder=str(tmp_path), filename_prefix=name,
@@ -436,7 +456,7 @@ def test_fast_node_saves_directly_once_with_metadata_and_retains_cached_result(t
         assert meta["title"] == "Original"
         assert [entry["operation"] for entry in json.loads(meta[tools.HISTORY])] == ["merge", "save"]
         assert torch.equal(load_file(target)["proj.weight"], torch.full((4, 4), .5).bfloat16())
-    assert not cache.exists() and asset.tensors is not None
+    assert cache.is_file() and writes == [cache]
     before = target.read_bytes()
     with pytest.raises(FileExistsError):
         nodes.RayModelSave().save(model_data=asset, output_folder=str(tmp_path), filename_prefix=name)
@@ -455,8 +475,9 @@ def test_merge_reuses_handles_and_closes_them_on_cancellation(tmp_path, monkeypa
         opened.append(args[0])
         return real_open(*args, **kwargs)
     monkeypatch.setattr(tools, "safe_open", tracked)
-    tools.merge_models(a, b, tmp_path / "fast.safetensors", fast_merge=True)
-    assert len(opened) == 4  # Two header checks and two persistent handles.
+    tools.merge_models(a, b, tmp_path / "merged.safetensors")
+    assert len(opened) == 5  # Two header checks, two persistent handles, output validation.
+    assert opened.count(a) == 2 and opened.count(b) == 2
     source = tools.TensorSource(a)
     with pytest.raises(RuntimeError, match="cancel"):
         with source.opened():
@@ -467,12 +488,12 @@ def test_merge_reuses_handles_and_closes_them_on_cancellation(tmp_path, monkeypa
         if i == 2:
             raise RuntimeError("cancel")
     with pytest.raises(RuntimeError, match="cancel"):
-        tools.merge_models(a, b, tmp_path / "failed.safetensors", progress=cancel, fast_merge=True)
+        tools.merge_models(a, b, tmp_path / "failed.safetensors", progress=cancel)
     assert not (tmp_path / "failed.safetensors").exists()
     assert not list(tmp_path.glob(".ray-*"))
 
 
-def test_fast_save_failure_preserves_destination_and_cached_tensors(tmp_path, monkeypatch):
+def test_memory_save_failure_preserves_destination_and_cached_tensors(tmp_path, monkeypatch):
     import safetensors.torch
     target = tmp_path / "existing.safetensors"
     model(tmp_path, "existing", {"proj.weight": torch.ones(2, 2)})
@@ -489,18 +510,19 @@ def test_fast_save_failure_preserves_destination_and_cached_tensors(tmp_path, mo
     assert not list(tmp_path.glob(".ray-*"))
 
 
-def test_fast_merge_inference_uses_native_loader_and_remains_saveable(tmp_path, monkeypatch, native_flux):
+def test_streamed_merge_inference_uses_native_loader_and_remains_saveable(tmp_path, monkeypatch, native_flux):
     import folder_paths
     monkeypatch.setattr(folder_paths, "get_temp_directory", lambda: str(tmp_path))
     source = nodes.snapshot(native_flux, str(tmp_path / "base.safetensors"))
-    output = nodes.RayModelMerge().merge(data_a=source, data_b=source, fast_merge=True)
+    output = nodes.RayModelMerge().merge(data_a=source, data_b=source)
     loaded, _, _, asset = output["result"][:4]
-    assert loaded is not None and Path(asset.path).is_file()
+    assert loaded is not None and Path(asset.path).is_file() and asset.tensors is None
     target = tmp_path / "saved.safetensors"
     nodes.RayModelSave().save(model_data=asset, output_folder=str(tmp_path), filename_prefix="saved")
     actual = load_file(target)
-    assert set(actual) == set(asset.tensors)
-    assert all(torch.equal(actual[k], tensor) for k, tensor in asset.tensors.items())
+    expected = load_file(asset.path)
+    assert set(actual) == set(expected)
+    assert all(torch.equal(actual[k], tensor) for k, tensor in expected.items())
 
 
 def test_merge_component_selection_block_weights_and_union(tmp_path):
@@ -581,11 +603,17 @@ def native_flux():
     import comfy.ldm.flux.model
     import comfy.ops
     import comfy.sd
+    import comfy.memory_management
     params = dict(in_channels=16, out_channels=16, vec_in_dim=8, context_in_dim=16,
         hidden_size=128, mlp_ratio=4., num_heads=1, depth=1, depth_single_blocks=1,
         axes_dim=[16, 56, 56], theta=10000, patch_size=2, qkv_bias=True, guidance_embed=True, txt_ids_dims=[0])
     torch.manual_seed(30)
-    module = comfy.ldm.flux.model.Flux(**params, operations=comfy.ops.disable_weight_init, dtype=torch.float32)
+    dynamic = comfy.memory_management.aimdo_enabled
+    comfy.memory_management.aimdo_enabled = False
+    try:
+        module = comfy.ldm.flux.model.Flux(**params, operations=comfy.ops.disable_weight_init, dtype=torch.float32)
+    finally:
+        comfy.memory_management.aimdo_enabled = dynamic
     # disable_weight_init intentionally leaves storage uninitialized.
     for parameter in module.parameters():
         parameter.data.normal_(0., .02)
@@ -693,7 +721,7 @@ def test_bf16_model_bake_save_has_one_load_and_one_checkpoint_write(tmp_path, mo
     key = next(k for k in original.keys if k.endswith("img_in.weight"))
     expected = original.dense(key) + .7 * .02
     calls = {"load": 0, "save": 0}
-    load, save = nodes.load_asset, comfy.sd.save_checkpoint
+    load, save = nodes.load_asset, nodes.save_live
     def tracked_load(*args, **kwargs):
         calls["load"] += 1
         return load(*args, **kwargs)
@@ -703,7 +731,7 @@ def test_bf16_model_bake_save_has_one_load_and_one_checkpoint_write(tmp_path, mo
     def no_roundtrip(*args, **kwargs):
         raise AssertionError("An existing BF16 model must not be converted, snapshotted or copied through a file")
     monkeypatch.setattr(nodes, "load_asset", tracked_load)
-    monkeypatch.setattr(comfy.sd, "save_checkpoint", tracked_save)
+    monkeypatch.setattr(nodes, "save_live", tracked_save)
     monkeypatch.setattr(nodes, "snapshot", no_roundtrip)
     monkeypatch.setattr(tools, "convert", no_roundtrip)
     monkeypatch.setattr(tools, "rewrite_metadata", no_roundtrip)
@@ -728,7 +756,8 @@ def test_bf16_model_bake_save_has_one_load_and_one_checkpoint_write(tmp_path, mo
     assert not Path(asset._path).exists()
 
 
-def test_live_lerp_uses_native_patches_and_keeps_input_branches(tmp_path, monkeypatch, native_flux):
+@pytest.mark.parametrize("mismatch", ["forbid", "intersect", "pad", "trim"])
+def test_live_lerp_uses_native_patches_and_keeps_input_branches(tmp_path, monkeypatch, native_flux, mismatch):
     import folder_paths
     monkeypatch.setattr(folder_paths, "get_temp_directory", lambda: str(tmp_path))
     original = native_flux.model.diffusion_model.img_in.weight.detach().clone()
@@ -739,7 +768,7 @@ def test_live_lerp_uses_native_patches_and_keeps_input_branches(tmp_path, monkey
     monkeypatch.setattr(nodes, "snapshot", no_roundtrip)
     monkeypatch.setattr(nodes, "load_asset", no_roundtrip)
     monkeypatch.setattr(tools, "merge_models", no_roundtrip)
-    merged = nodes.RayModelMerge().merge(model_a=native_flux, model_b=b, weight_a=.25, weight_format="fp32")
+    merged = nodes.RayModelMerge().merge(model_a=native_flux, model_b=b, weight_a=.25, weight_format="fp32", mismatch=mismatch)
     assert merged["ui"]["model_tools"][0]["processing"] == "native_patches"
     assert not Path(merged["result"][3]._path).exists()
     saved = nodes.RayModelSave().save(model=merged["result"][0], output_folder=str(tmp_path), filename_prefix="merged")
@@ -752,17 +781,138 @@ def test_live_lerp_uses_native_patches_and_keeps_input_branches(tmp_path, monkey
 
 
 def test_live_save_failure_is_atomic_and_preserves_destination(tmp_path, monkeypatch, native_flux):
-    import comfy.sd
     target = tmp_path / "existing.safetensors"
     target.write_bytes(b"original")
-    def fail(path, *args, **kwargs):
-        Path(path).write_bytes(b"incomplete")
+    add = tools.TensorWriter.add
+    def fail(self, key, tensor):
+        add(self, key, tensor)
         raise RuntimeError("interrupted")
-    monkeypatch.setattr(comfy.sd, "save_checkpoint", fail)
+    monkeypatch.setattr(tools.TensorWriter, "add", fail)
     with pytest.raises(RuntimeError, match="interrupted"):
         nodes.RayModelSave().save(model=native_flux, output_folder=str(tmp_path), filename_prefix="existing", overwrite=True)
     assert target.read_bytes() == b"original"
     assert not list(tmp_path.glob(".ray-*"))
+
+
+def _check_live_pad_streamed_merge_and_model_save(tmp_path, monkeypatch, native_flux, force_tensor_path=False):
+    import comfy.sd
+    import folder_paths
+    monkeypatch.setattr(folder_paths, "get_temp_directory", lambda: str(tmp_path))
+    original = native_flux.model.diffusion_model.img_in.weight.detach().clone()
+    b = native_flux.clone()
+    b.add_patches({"diffusion_model.img_in.weight": ("diff", (torch.full_like(original, .02),))}, 1.)
+    def no_export(*args, **kwargs):
+        pytest.fail("Live merge must not export source checkpoints")
+    monkeypatch.setattr(nodes, "snapshot", no_export)
+    monkeypatch.setattr(nodes, "source_path", no_export)
+    monkeypatch.setattr(comfy.sd, "save_checkpoint", no_export)
+    merged = nodes.RayModelMerge().merge(model_a=native_flux, model_b=b, weight_a=.69,
+        weight_format="bf16", mismatch="pad",
+        block_weights='{"diffusion_model.img_in.":0.69}' if force_tensor_path else '{}')
+    loaded, _, _, asset = merged["result"][:4]
+    assert merged["ui"]["model_tools"][0]["processing"] == "tensor_merge"
+    assert loaded is not None and len(list(tmp_path.rglob("*.safetensors"))) == 1
+    expected = load_file(asset.path)
+    key = next(k for k in expected if k.endswith("img_in.weight"))
+    assert torch.allclose(expected[key].float(), (original + .31 * .02).bfloat16().float(), atol=.0005)
+    saved = nodes.RayModelSave().save(model=loaded, output_folder=str(tmp_path), filename_prefix="result")
+    assert len(list(tmp_path.rglob("*.safetensors"))) == 2
+    actual = load_file(saved["result"][1])
+    assert actual.keys() == expected.keys()
+    assert all(torch.equal(actual[k], tensor) for k, tensor in expected.items())
+    assert torch.equal(native_flux.model.diffusion_model.img_in.weight, original)
+    assert not native_flux.patches and len(b.patches) == 1
+
+
+def test_live_pad_streamed_merge_and_model_save_avoid_source_exports(tmp_path, monkeypatch, native_flux):
+    _check_live_pad_streamed_merge_and_model_save(tmp_path, monkeypatch, native_flux)
+
+
+@pytest.mark.skipif(tools.os.environ.get("RAY_TEST_CUDA") != "1", reason="Opt-in native DynamicVRAM integration")
+def test_live_pad_streamed_merge_on_dynamic_cuda_with_loader_offloading(tmp_path, monkeypatch, native_flux):
+    import folder_paths
+    from ray_queued_model_loader import RayQueuedModelLoader
+    assert native_flux.load_device.type == "cuda" and native_flux.is_dynamic()
+    source = tmp_path / "source.safetensors"
+    nodes.snapshot(native_flux, str(source))
+    original = folder_paths.get_full_path
+    monkeypatch.setattr(folder_paths, "get_full_path", lambda group, name: str(source)
+                        if group == "diffusion_models" and name == "Fixture.safetensors" else original(group, name))
+    loaded = RayQueuedModelLoader().load("Fixture.safetensors")[0][0]
+    assert loaded.is_dynamic() and loaded.fast_disk
+    output = tmp_path / "processing"
+    output.mkdir()
+    _check_live_pad_streamed_merge_and_model_save(output, monkeypatch, loaded, force_tensor_path=True)
+
+
+def test_live_merge_honors_real_interrupt_and_cleans_partial_output(tmp_path, monkeypatch, native_flux):
+    import comfy.model_management as mm
+    import folder_paths
+    monkeypatch.setattr(folder_paths, "get_temp_directory", lambda: str(tmp_path))
+    raw = tools.TensorSource.raw
+    reads = []
+    def cancel_after_tensor(self, key):
+        value = raw(self, key)
+        reads.append(key)
+        mm.interrupt_current_processing(True)
+        return value
+    monkeypatch.setattr(tools.TensorSource, "raw", cancel_after_tensor)
+    try:
+        with pytest.raises(mm.InterruptProcessingException):
+            nodes.RayModelMerge().merge(model_a=native_flux, model_b=native_flux,
+                weight_format="bf16", mismatch="pad", prompt={}, unique_id="merge")
+    finally:
+        mm.interrupt_current_processing(False)
+    assert reads
+    assert not list(tmp_path.rglob("*.safetensors"))
+    assert not list(tmp_path.rglob(".ray-*"))
+
+
+@pytest.mark.parametrize("source_kind", ["live", "memory", "file"])
+def test_live_save_honors_real_interrupt_and_keeps_existing_file(tmp_path, monkeypatch, native_flux, source_kind):
+    import comfy.model_management as mm
+    target = tmp_path / "existing.safetensors"
+    target.write_bytes(b"original")
+    if source_kind == "live":
+        inputs = {"model": native_flux}
+    elif source_kind == "memory":
+        inputs = {"model_data": tools.ModelAsset(str(tmp_path / "memory.safetensors"), {},
+            {"a.weight": torch.ones(2, 2), "b.weight": torch.zeros(2, 2)})}
+    else:
+        inputs = {"path": model(tmp_path, "source", {"a.weight": torch.ones(2, 2)})}
+    real_update = nodes.progress()
+    def cancel_after_progress(i, total):
+        if i > 0:
+            mm.interrupt_current_processing(True)
+        real_update(i, total)
+    monkeypatch.setattr(nodes, "progress", lambda: cancel_after_progress)
+    try:
+        with pytest.raises(mm.InterruptProcessingException):
+            nodes.RayModelSave().save(**inputs, output_folder=str(tmp_path), filename_prefix="existing", overwrite=True)
+    finally:
+        mm.interrupt_current_processing(False)
+    assert target.read_bytes() == b"original"
+    assert not list(tmp_path.glob(".ray-*"))
+
+
+def test_memory_merge_chain_never_materializes_its_input(tmp_path, monkeypatch):
+    import folder_paths
+    monkeypatch.setattr(folder_paths, "get_temp_directory", lambda: str(tmp_path))
+    a = tools.ModelAsset(str(tmp_path / "a.safetensors"), {}, {"x.weight": torch.ones(2, 2)})
+    b = tools.ModelAsset(str(tmp_path / "b.safetensors"), {}, {"x.weight": torch.zeros(2, 2)})
+    first = nodes.RayModelMerge().merge(data_a=a, data_b=b, prompt={}, unique_id="first")["result"][3]
+    second = nodes.RayModelMerge().merge(data_a=first, data_b=b, prompt={}, unique_id="second")["result"][3]
+    assert torch.equal(load_file(second.path)["x.weight"], torch.full((2, 2), .25).bfloat16())
+    assert len(list(tmp_path.rglob("*.safetensors"))) == 2
+    assert not Path(a._path).exists() and not Path(b._path).exists()
+
+
+def test_union_merge_progress_is_monotonic_through_b_only_tensors(tmp_path):
+    a = model(tmp_path, "a", {"x.weight": torch.ones(2, 2)})
+    b = model(tmp_path, "b", {"x.weight": torch.zeros(2, 2), "extra.weight": torch.ones(2, 2)})
+    values = []
+    tools.merge_models(a, b, tmp_path / "out.safetensors", mismatch="pad", progress=lambda i, total: values.append(i / total))
+    assert values == sorted(values) and values[-1] == 1
 
 
 def test_streamed_conversion_writes_payload_once_and_reuses_mmaps(tmp_path, monkeypatch):
