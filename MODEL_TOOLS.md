@@ -101,10 +101,10 @@ Models reported unsupported by the installed adapter keep native sampling.
 ## Connections and file-only processing
 
 MODEL, CLIP and VAE are normal ComfyUI connections. **model_data** is a Ray
-handle to safetensors weights, held in a file or in RAM after Fast merge; use it
-between model operations and Save Model.
+handle to weights held in a file, in RAM after Fast merge, or as pending native
+model patches. Use it between model operations and Save Model.
 **metadata** is a structured connection shared by metadata and save nodes.
-Reports are also available as STRING outputs.
+Operation reports are available through the **report** STRING outputs.
 
 Use the file icon beside a source path to choose a model or metadata file.
 **Save Model** takes its source from **model** or **model_data**. Choose an
@@ -121,8 +121,11 @@ write a file; run the node to save it. Metadata Save's **overwrite** controls
 replacement. LoRA Extract has no overwrite switch and preserves existing files
 with a collision error.
 
-A connected MODEL takes priority over model_data and path inputs. Operations on
-a live MODEL export its effective weights through ComfyUI's save API first.
+A connected MODEL takes priority over model_data and path inputs. Compatible
+LoRA baking and diffusion-only LERP keep native model patches until a consumer
+needs the weights. Save Model uses ComfyUI's save API to apply those patches and
+write the final checkpoint directly, including its final metadata. Other
+file-based operations may first export the effective weights.
 Connect CLIP/VAE when those components need to travel with it. A MODEL alone
 contains the diffusion model, not the full original checkpoint.
 
@@ -140,7 +143,8 @@ folder dropdown. Its filter searches filenames and full paths across subfolders.
 Existing saved paths and connected source inputs remain supported.
 Choose **Auto** or **Preserve** and connect only **model_data** to read the source
 headers and pass its handle to Model Merge. Set the final precision in Model
-Merge. An explicit loader precision still converts the file. Connecting an
+Merge. An explicit loader precision converts the file when its selected weights
+do not already use that format. Connecting an
 inference output loads the model automatically.
 
 ## Precision and quantization
@@ -225,12 +229,20 @@ Padding/trimming cannot make unrelated architectures compatible. Matching
 structure does not establish that models share a compatible training base.
 
 **Fast merge** keeps the complete merged result in system RAM instead of writing
-an intermediate tensor payload and model file. Connect **model_data** to Save
+an intermediate model file. Connect **model_data** to Save
 Model, with the inference outputs unused, to write weights once with the final
 metadata. Using MODEL, CLIP or VAE also creates a temporary model file for
 ComfyUI's native loader. Other file-based consumers materialize a temporary file
 when needed. Fast merge uses the same CPU calculations, formats, seed and
 mismatch rules as the regular merge; it does not require additional VRAM.
+
+Compatible live MODEL inputs use ComfyUI's native patches for diffusion-only
+LERP with Forbid, no block overrides, and a preserved or matching floating-point
+format. This avoids input checkpoint exports and a merged-model reload. Both
+MODEL and model_data can go directly to Save Model. Other strategies, component
+scopes, shape policies and format changes use the tensor-processing path.
+The regular file writer streams tensors into its final temporary output once;
+it keeps source mappings open during processing.
 
 **Warning: high RAM usage.** Allow space for the whole output at its selected
 format, plus source mappings, decoded layers and calculation buffers. The result
@@ -249,9 +261,14 @@ source names are shortened, and the settings fingerprint distinguishes changes
 to block weights and algorithm options. The execution output uses the resolved
 sources and execution time; computed upstream values may become known only then.
 
-LoRA Bake supports formats recognized by installed ComfyUI and reports matched
-layers. An explicit target format applies the new adapter in fp32 before the
-final conversion, avoiding an intermediate requantization of small LoRA deltas.
+Connect MODEL or model_data to LoRA Bake, then choose the LoRA file and adjust
+Model strength, CLIP strength, and Weight format. LoRA Bake supports formats
+recognized by installed ComfyUI and reports matched layers. Preserve and a
+floating-point format already used by the model keep a native patched clone;
+Save Model performs the checkpoint write. The model_data output saves these
+pending patches directly too, and creates a temporary file only when another
+file-based operation needs it. Changing format uses fp32 before final conversion
+to avoid an intermediate requantization of small LoRA deltas.
 LoRA Extract supports Linear and convolution weights, skips unchanged
 and 1D weights, and optionally includes embeddings. Alpha=0 uses each layer's
 actual rank. Every layer stores its own alpha, including rank-clipped layers.

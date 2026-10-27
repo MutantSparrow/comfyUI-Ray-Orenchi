@@ -7,7 +7,8 @@ const names = ['root.safetensors', 'FamilyA/Version 2/Alpha.safetensors',
     'FamilyB\\Nested\\Gamma.safetensors', '日本語/Style.safetensors'];
 
 (async () => {
-    const browser = await chromium.launch({headless: true});
+    const browser = await chromium.launch({headless: true,
+        ...(process.env.RAY_BROWSER_CHANNEL ? {channel:process.env.RAY_BROWSER_CHANNEL} : {})});
     let current;
     try {
         for (const nodes2 of [true, false]) {
@@ -45,6 +46,7 @@ const names = ['root.safetensors', 'FamilyA/Version 2/Alpha.safetensors',
             };
             await picker('Model 1').waitFor();
             await page.waitForTimeout(400);
+            assert.match(await picker('Model 1').getAttribute('title'),/Precision and supported quantization/);
             assert.equal(await page.getByRole('button', {name: /^Choose (model|LoRA).*file$/}).count(), 0);
             // Opening shows folders, rather than every descendant flattened into one list.
             await picker('Model 1').click();
@@ -73,6 +75,10 @@ const names = ['root.safetensors', 'FamilyA/Version 2/Alpha.safetensors',
             await strength(1).fill('0.5'); await strength(1).press('Tab');
             await page.getByRole('button', {name: 'Add LoRA', exact: true}).click();
             await select('LoRA 2', names[4]); await strength(2).fill('-0.25'); await strength(2).press('Tab');
+            for(const index of [1,2]) {
+                assert.match(await strength(index).getAttribute('title'),/Zero skips it; negative values reverse/);
+                assert.match(await strength(index).getAttribute('title'),/Drag left or right/);
+            }
             await page.getByRole('button', {name: 'Remove LoRA 1', exact: true}).click();
             assert.equal(await picker('LoRA 1').textContent(), names[4]); assert.equal(await strength(1).inputValue(), '-0.25');
             const saved = await page.evaluate(async () => {

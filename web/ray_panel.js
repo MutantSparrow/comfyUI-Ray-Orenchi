@@ -95,6 +95,11 @@ export function inputTooltip(node, name, fallback = "") {
     return spec?.[1]?.tooltip || fallback;
 }
 
+export function outputTooltip(node, name, fallback = "") {
+    const data = node.constructor?.nodeData;
+    return data?.output_tooltips?.[data.output_name?.indexOf(name)] || fallback;
+}
+
 export function toggleButton(title, value, onChange) {
     injectStyles();
     const button = el("button", "rp-toggle");
@@ -141,7 +146,7 @@ export const PANEL_CSS = `
 .rp-row {display:grid;grid-template-columns:minmax(64px,34%) minmax(0,1fr);gap:8px;align-items:center;min-height:28px;border-radius:5px;position:relative}
 .rp-row.rp-full {grid-template-columns:minmax(0,1fr);gap:4px}
 .rp-row.rp-bool {grid-template-columns:minmax(0,1fr) auto}
-.rp-label {font-size:11px;color:#a3a3a3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-label {font-size:11px;color:#a3a3a3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:auto}
 .rp-control {display:flex;gap:6px;align-items:center;min-width:0;pointer-events:auto}
 .rp-input, .rp-select, .rp-textarea {flex:1 1 0;width:auto;min-width:0;height:28px;padding:4px 9px;background:#141414;color:#eee;border:1px solid #3a3a3a;border-radius:5px;font:12px system-ui,sans-serif}
 .rp-input::placeholder, .rp-textarea::placeholder {color:#6f6f6f}

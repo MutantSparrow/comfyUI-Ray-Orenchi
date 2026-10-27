@@ -49,10 +49,28 @@ const base = process.argv[2] || 'http://127.0.0.1:8194';
                     if (!root) throw Error('Missing node interface');
                     const visible=element=>element.getBoundingClientRect().height>0;
                     const failures=[];
+                    const noReport=()=>![...root.querySelectorAll('.rp-title')].some(e=>e.textContent.trim()==='Report')&&
+                        !root.textContent.includes('Run the node to see its report.');
+                    if(!noReport())failures.push('Unwanted Report section or placeholder');
                     for(const row of node._rayPanel?.rows || []) if(row.widget) {
                         const schema=node.constructor.nodeData.input;
                         const tip=(schema.required?.[row.name] || schema.optional?.[row.name])?.[1]?.tooltip;
                         if(!tip || row.element.title!==tip) failures.push(`Unbound tooltip: ${row.name}`);
+                    }
+                    if(node.constructor.nodeData.category.includes('Model Tools')) {
+                        for(const label of [...root.querySelectorAll('.rp-label')].filter(visible)) {
+                            const bounds=label.getBoundingClientRect();
+                            const hit=document.elementFromPoint(bounds.x+bounds.width/2,bounds.y+bounds.height/2);
+                            if(!label.title?.trim())failures.push(`Missing label help: ${label.textContent}`);
+                            if(hit!==label&&!label.contains(hit))failures.push(`Tooltip label cannot be hovered: ${label.textContent}`);
+                        }
+                        if(node.onExecuted) {
+                            const ports=node.outputs.map(output=>[output.name,output.type]);
+                            node.onExecuted({model_tools:[{operation:'layout_check'}]});
+                            if(!noReport())failures.push('Execution restored a Report section');
+                            if(JSON.stringify(ports)!==JSON.stringify(node.outputs.map(output=>[output.name,output.type])))
+                                failures.push('Execution changed native outputs');
+                        }
                     }
                     for(const heading of [...root.querySelectorAll('.rp-title')].filter(visible)) {
                         const style=getComputedStyle(heading);

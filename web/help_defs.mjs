@@ -24,7 +24,7 @@ export const RAY_HELP_DEFS = {
         sections: [{ heading: "Converting weights", bullets: [
             "Connect model_data for file-only conversion, choose a source file, or connect MODEL to export its effective weights including active patches. A live MODEL takes priority over model_data and the file; connect its matching CLIP/VAE when those components are needed.",
             "Choose Components and the target weight format. Quantized targets encode eligible Linear weights; other converted layers remain bf16. Higher precision cannot recover details already lost in the source.",
-            "Connect model_data to Save Model to keep the converted result. MODEL, CLIP or VAE output connections initialize inference components automatically when available; the Report section describes the completed conversion.",
+            "Connect model_data to Save Model to keep the converted result. MODEL, CLIP or VAE output connections initialize inference components automatically when available; the report STRING output describes the completed conversion.",
         ] }],
     },
     RayModelSave: {
@@ -32,7 +32,7 @@ export const RAY_HELP_DEFS = {
             "Connect MODEL or model_data. A live MODEL takes priority and saves its effective weights, including merge/LoRA patches. Connect matching CLIP and VAE to include those components; MODEL alone is not a complete original checkpoint.",
             "Choose Output folder with the folder icon and enter filename_prefix without an extension. Blank uses ComfyUI output; relative folders are inside it. The default is model_tools. Saving creates <filename_prefix>.safetensors with no added counter; spaces and unsupported filename characters become underscores.",
             "Connect Model Merge's merge_name STRING to filename_prefix for its resolved merge name. A linked filename is supplied upstream; changing the folder does not change that name.",
-            "Connect structured metadata from Metadata Load / Edit. Merge preserves source fields and adds supplied values; Replace keeps supplied fields, required quantization metadata and save history. Existing files require Overwrite. The saved_path output and Report section identify a successful save.",
+            "Connect structured metadata from Metadata Load / Edit. Merge preserves source fields and adds supplied values; Replace keeps supplied fields, required quantization metadata and save history. Existing files require Overwrite. The saved_path output identifies a successful save.",
         ] }],
     },
     RayModelMetadata: {
@@ -66,7 +66,7 @@ export const RAY_HELP_DEFS = {
     },
     RayLoraBake: {
         sections: [{ heading: "Baking an adapter", bullets: [
-            "Supply MODEL, model_data or a model file and choose the LoRA file. Connect a matching CLIP to bake supported text-encoder changes; Model strength and CLIP strength are independent, zero disables that contribution, and negative strengths reverse it.",
+            "Connect MODEL or model_data and choose the LoRA file. Connect a matching CLIP to bake supported text-encoder changes; Model strength and CLIP strength are independent, zero disables that contribution, and negative strengths reverse it.",
             "Baking uses ComfyUI's supported adapter mappings and formats and leaves the input branches unchanged. An adapter with no matching layers fails instead of producing a successful-looking unchanged model.",
             "Preserve retains the working source representation. An explicit weight format uses floating-point working weights before encoding the result; it cannot recover precision lost before baking. Connect model_data to Save Model for a permanent file; inference output connections load the result automatically.",
         ] }],

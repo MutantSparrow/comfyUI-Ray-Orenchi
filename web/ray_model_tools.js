@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { installPanel, iconButton, linkChip, linkOf, registerLinkTargets, openPanelSettings } from "./ray_panel.js";
+import { installPanel, iconButton, linkChip, linkOf, registerLinkTargets, openPanelSettings, inputTooltip, outputTooltip } from "./ray_panel.js";
 import { applyBucketTint, setWidgetHidden } from "./_common.js";
 import { notify } from "./browse_common.js";
 import { metadataRows, rowsToMetadata, mergeFields, filterTensors, parseMetadataJSON } from "./model_tools_ui.mjs";
@@ -162,9 +162,9 @@ export function createMetadataEditor(node) {
     return root;
 }
 
-export function createReport(node, id) {
+export function createInspectionView(node, id) {
     const root = el("div", undefined, "rmt"), toolbar = el("div", undefined, "rmt-toolbar");
-    const summary = el("div", "Run the node to see its report.", "rmt-message");
+    const summary = el("div", undefined, "rmt-message"); summary.hidden = true;
     const content = el("div", undefined, "rmt-scroll");
     let report = null, query = "", page = 0, request = 0, dead = false, controller;
     const search = el("input"); search.placeholder = "Filter tensors…"; search.setAttribute("aria-label", "Filter tensors"); search.hidden = true;
@@ -190,6 +190,7 @@ export function createReport(node, id) {
     };
     const show = data => {
         report = data; node._rayModelToolsReport = data; page = 0;
+        summary.hidden = false;
         search.hidden = paging.hidden = !Array.isArray(data.rows);
         if (data.tensor_count !== undefined) {
             summary.textContent = `${data.architecture?.name || "Unknown architecture"} · ${data.tensor_count.toLocaleString()} tensors · ${(data.tensor_bytes / 1e9).toFixed(2)} GB\n${data.architecture?.note || ""}${data.rows_truncated ? `\n${data.rows_truncated} additional rows omitted; increase max_rows on the node.` : ""}`;
@@ -198,7 +199,7 @@ export function createReport(node, id) {
         } else summary.textContent = data.saved_path ? `Saved: ${data.saved_path}` : `${data.operation || "Operation"} complete`;
         summary.classList.remove("rmt-error"); render();
     };
-    if (["RayModelInspector", "RayModelCompare"].includes(id)) toolbar.append(button("Preview files", async () => {
+    toolbar.append(button("Preview files", async () => {
         const ticket=++request,source=previewSignature(node);
         controller?.abort();controller=new AbortController();
         try {
@@ -206,7 +207,7 @@ export function createReport(node, id) {
             if(!dead && ticket===request && source===previewSignature(node))show(data);
         } catch (error) {
             if(!dead && ticket===request && source===previewSignature(node) && error.name!=="AbortError") {
-                summary.textContent = error.message; summary.classList.add("rmt-error");
+                summary.textContent = error.message; summary.hidden = false; summary.classList.add("rmt-error");
             }
         }
     }));
@@ -246,7 +247,7 @@ const SECTIONS = {
     RayModelInspector: [["Source", "path"], ["Inspection", "max_rows"]],
     RayModelCompare: [["Sources", "path_a", "path_b"], ["Comparison", "components"]],
     RayLoraBake: [
-        ["Source", "path"], ["LoRA", "lora_name", "lora_path", "strength_model", "strength_clip"],
+        ["LoRA", "lora_name", "lora_path", "strength_model", "strength_clip"],
         ["Output", "weight_format"],
     ],
     RayLoraExtract: [
@@ -317,7 +318,10 @@ function migrateWidgets(node, id, saved) {
 
 function createLoadSource(node) {
     const root = el("div", undefined, "rp-row rp-full"), label = el("label", "Model", "rp-label"), control = el("div", undefined, "rp-control");
+    const tooltip = inputTooltip(node, "model_name", "Choose a registered checkpoint or diffusion model. Search includes every subfolder.");
+    root.title = label.title = tooltip;
     const picker = createModelPicker({ group: ["diffusion_models", "checkpoints"], label: "Model", value: value(node, "model_name"),
+        tooltip,
         accept: name => name.toLowerCase().endsWith(".safetensors"),
         placeholder: "Select a model…", disabled: () => ["model_name", "path", "model_data"].some(name => linkOf(node, name)),
         onSelect: next => setValue(node, "model_name", next) });
@@ -337,6 +341,7 @@ function createLoadSource(node) {
 
 function createMergeName(node) {
     const root = el("div", undefined, "rmt"), label = el("label", "Merge name", "rp-label"), output = el("output", "", "rmt-message");
+    root.title = label.title = output.title = outputTooltip(node, "merge_name", "Suggested merge filename containing source names, strategy, settings, and execution time. Connect merge_name to Save Model's filename_prefix.");
     output.setAttribute("aria-label", "Merge name"); output.style.overflowWrap = "anywhere"; output.style.whiteSpace = "normal";
     root.append(label, output);
     let signature = "";
@@ -400,6 +405,7 @@ export function installModelTools(node, id, nodeData = null) {
     const hidden = id === "RayModelMetadata" ? ["editor_json", "editor_source"]
         : id === "RayModelMerge" ? ["path_a", "path_b", "base_path", "block_weights"]
         : id === "RayModelLoadAs" ? ["model_name", "path"]
+        : id === "RayLoraBake" ? ["path"]
         : id === "RayModelSave" ? ["path", "metadata_json", "output_path"] : [];
     for (const name of hidden) if (widget(node, name)) setWidgetHidden(node, widget(node, name), true);
     const native = (node.widgets || []).filter(w => w.type !== "button" && w.name !== "control_after_generate" && !hidden.includes(w.name));
@@ -436,7 +442,6 @@ export function installModelTools(node, id, nodeData = null) {
         if (id === "RayModelMetadataSave" && w.name === "source_model_path") field.when = n => value(n, "mode") === "model_copy";
         return field;
     });
-    const custom = () => id === "RayModelMetadata" ? createMetadataEditor(node) : createReport(node, id);
     const byName = new Map(fields.map(field => [field.name, field]));
     const sections = SECTIONS[id].map(([title, ...names]) => ({
         title, fields: names.map(name => byName.get(name)).filter(Boolean),
@@ -451,8 +456,10 @@ export function installModelTools(node, id, nodeData = null) {
             custom: () => { name = createMergeName(node); return name.root; }, update: () => name?.refresh(),
         });
     }
-    sections.push({ title: id === "RayModelMetadata" ? "Metadata" : "Report", fields: [{ custom }],
-        ...(id === "RayModelMetadata" ? {actions: [{icon: "plus", title: "Add field", onClick: () => node._rayMetadataEditor.addField()}]} : {}) });
+    if (id === "RayModelMetadata") sections.push({ title: "Metadata", fields: [{custom: () => createMetadataEditor(node)}],
+        actions: [{icon: "plus", title: "Add field", onClick: () => node._rayMetadataEditor.addField()}] });
+    if (["RayModelInspector", "RayModelCompare"].includes(id))
+        sections.at(-1).fields.push({custom: () => createInspectionView(node, id)});
     installPanel(node, { skip: hidden, minWidth: 470, sections });
     if (id === "RayModelMerge") installFastMergeConfirmation(node);
 }

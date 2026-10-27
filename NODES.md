@@ -786,7 +786,7 @@ The dropdown filter searches full paths across all registered subfolders; clear
 it to return to the tree. **Loader** chooses automatic detection, checkpoint or
 diffusion loading. **Load components** includes available checkpoint CLIP/VAE;
 diffusion-only files need those supplied separately. Connected sources replace
-the local picker with a link chip. The **Report** section updates after execution.
+the local picker with a link chip. The **report** STRING output describes the result.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
 
@@ -822,7 +822,7 @@ characters become underscores. Choosing a folder does not save the model; run it
 **Metadata mode: Merge** retains source fields and adds connected metadata;
 **Replace** keeps supplied fields, required quantization metadata and save
 history. A live MODEL takes priority over model_data; MODEL alone does not include
-the original checkpoint's CLIP/VAE. **Report** shows the path after a successful save.
+the original checkpoint's CLIP/VAE. **saved_path** returns the path after a successful save.
 
 **Category:** `👑 Ray/🧰 Model Tools`. See [the Model Tools guide](MODEL_TOOLS.md) for supported formats, connections, controls, and examples.
 
@@ -919,8 +919,9 @@ measure weight similarity, or guarantee a useful merge.
 
 **Purpose.** Bake a supported LoRA adapter into a model or checkpoint source using ComfyUI's mappings. Returns effective components, a model-data handle, metadata, and a report.
 
-Choose the LoRA file and separate **Model strength** / **CLIP strength**. Zero
-disables that contribution and negative strength reverses it; connect matching
+Connect **model** or **model_data**, choose the LoRA file, and adjust
+**Model strength** and **CLIP strength**. Zero disables that contribution and
+negative strength reverses it; connect matching
 CLIP to include supported text-encoder changes. Input branches remain unchanged.
 **Preserve** keeps the source representation; an explicit format uses fp32
 working weights before final encoding. Connect model_data to Save Model for a

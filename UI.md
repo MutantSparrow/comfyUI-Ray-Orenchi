@@ -59,7 +59,10 @@ Use these exact category and display-title patterns:
   panels read the registered schema from `node.constructor.nodeData`; do not
   rely on ComfyUI copying tooltip text into the native widget object. Custom
   controls use the shared `inputTooltip()` helper where their meaning matches
-  a native field. Keep [NODE_REFERENCE.md](NODE_REFERENCE.md) synchronized with
+  a native field, or `outputTooltip()` for a displayed output. Labels must
+  receive pointer events so hovering them reaches their tooltip instead of
+  the canvas; verify actual label hit testing in both renderers. Keep
+  [NODE_REFERENCE.md](NODE_REFERENCE.md) synchronized with
   the registered schemas using `scripts/update_node_reference.py --check`.
 - SHOULD keep connected data as typed sockets and editable settings as native
   widgets. Use `forceInput` when a value is intentionally connection-only.
@@ -137,7 +140,7 @@ ordinary settings. Plain node layouts belong in `PANEL_SPECS` in
 call `installPanel` itself; do not mount a second panel for the same controls.
 
 - Group by the user's task: `Source` / `Images`, `Look` / `Processing`,
-  `Sampling`, `Metadata`, `Output`, `Preview` / `Report`. Include only relevant
+  `Sampling`, `Metadata`, `Output`, `Preview`. Include only relevant
   groups. Existing nodes may choose a different order for their primary task.
 - MUST give every visible group an `.rp-title` heading and `.rp-section`
   container. Use short names; CSS handles uppercase. Do not use emojis,
@@ -196,8 +199,9 @@ slider must not prevent typing an exact value.
 - MUST preserve compact analog modes, their hardware faces, styles, Dymo
   labels, readouts, menus, and native ports. Extend `registerAnalog()` and the
   analog helpers rather than replacing them with an unrelated settings card.
-- Keep gallery, preview, and report areas bounded. Empty previews and reports
-  are valid initial states; show a concise next step rather than fake content.
+- Keep gallery and inspection areas bounded. Do not add generic Report sections
+  or empty report placeholders. Operation reports use their native outputs;
+  Inspector and Compare keep their tools in Inspection and Comparison.
 
 ### Compact widget and output rows
 
@@ -575,17 +579,17 @@ modules follow `_NODE_MODULES` in `__init__.py`; Model Tools share
 | [RaySaveImage](screenshots/RaySaveImage.png) | Output, Preview | `ray_save_image.js`, `save_name.js` |
 | [RayFolders](screenshots/RayFolders.png) | Folder, Media | `ray_folders.js`, `folders_gallery.js` |
 | [RayModelCard](screenshots/RayModelCard.png) | Card, Sampling, Configuration; secondary settings | `ray_model_card.js` |
-| [RayModelLoadAs](screenshots/RayModelLoadAs.png) | Source, Loading, Report | `ray_model_tools.js` |
+| [RayModelLoadAs](screenshots/RayModelLoadAs.png) | Source, Loading | `ray_model_tools.js` |
 | [RayQueuedModelLoader](screenshots/RayQueuedModelLoader.png) | Models; Loader options / Spectrum | `ray_queued_model_loader.js`; shared panel/settings and icons |
-| [RayModelConvert](screenshots/RayModelConvert.png) | Source, Conversion, Output, Report | `ray_model_tools.js` |
-| [RayModelSave](screenshots/RayModelSave.png) | Output, Metadata, Report | `ray_model_tools.js` |
+| [RayModelConvert](screenshots/RayModelConvert.png) | Source, Conversion | `ray_model_tools.js` |
+| [RayModelSave](screenshots/RayModelSave.png) | Output, Metadata | `ray_model_tools.js` |
 | [RayModelMetadata](screenshots/RayModelMetadata.png) | Source, Metadata; table/JSON editor | `ray_model_tools.js`, `model_tools_ui.mjs` |
-| [RayModelMetadataSave](screenshots/RayModelMetadataSave.png) | Output, Source model, Metadata, Report | `ray_model_tools.js` |
-| [RayModelMerge](screenshots/RayModelMerge.png) | Merge, Algorithm, Block weights, Output, Report | `ray_model_tools.js`, `model_tools_ui.mjs` |
-| [RayModelInspector](screenshots/RayModelInspector.png) | Source, Inspection, Report | `ray_model_tools.js` |
-| [RayModelCompare](screenshots/RayModelCompare.png) | Sources, Comparison, Report | `ray_model_tools.js` |
-| [RayLoraBake](screenshots/RayLoraBake.png) | Source, LoRA, Output, Report | `ray_model_tools.js` |
-| [RayLoraExtract](screenshots/RayLoraExtract.png) | Sources, Extraction, Output, Report | `ray_model_tools.js` |
+| [RayModelMetadataSave](screenshots/RayModelMetadataSave.png) | Output, Source model, Metadata | `ray_model_tools.js` |
+| [RayModelMerge](screenshots/RayModelMerge.png) | Merge, Algorithm, Output | `ray_model_tools.js`, `model_tools_ui.mjs` |
+| [RayModelInspector](screenshots/RayModelInspector.png) | Source, Inspection | `ray_model_tools.js` |
+| [RayModelCompare](screenshots/RayModelCompare.png) | Sources, Comparison | `ray_model_tools.js` |
+| [RayLoraBake](screenshots/RayLoraBake.png) | LoRA, Output | `ray_model_tools.js` |
+| [RayLoraExtract](screenshots/RayLoraExtract.png) | Sources, Extraction, Output | `ray_model_tools.js` |
 | [RayLoraQKVLoader](screenshots/RayLoraQKVLoader.png) | LoRAs | `ray_lora_qkv_loader.js`, `ray_panel.js` |
 
 Frontend filenames in this table are relative to `web/`. New nodes MUST be

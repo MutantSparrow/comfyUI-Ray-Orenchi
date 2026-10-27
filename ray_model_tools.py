@@ -4,6 +4,8 @@ from __future__ import annotations
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 import importlib
+import os
+import tempfile
 import uuid
 
 core = importlib.import_module(".model_tools", __package__) if __package__ else importlib.import_module("model_tools")
@@ -199,6 +201,77 @@ def snapshot(model, path, clip=None, vae=None, metadata=None):
     return core.ModelAsset(path, meta)
 
 
+def save_live(model, destination, metadata, overwrite=False, clip=None, vae=None):
+    """Let ComfyUI apply/offload patches and write the final checkpoint once."""
+    import comfy.sd
+    import comfy.model_management as mm
+    destination = core.clean_path(destination)
+    if destination.exists() and not overwrite:
+        raise FileExistsError(f"Output already exists: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".ray-", suffix=".safetensors", dir=destination.parent)
+    os.close(fd)
+    try:
+        mm.throw_exception_if_processing_interrupted()
+        comfy.sd.save_checkpoint(temporary, model, clip=clip, vae=vae, metadata=core.embedded_metadata(metadata))
+        mm.throw_exception_if_processing_interrupted()
+        core.read_header(temporary)
+        core.commit_file(temporary, destination, overwrite)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def live_asset(model, metadata, clip=None, vae=None):
+    # A data consumer can request a backing file later. A Save Model consumer
+    # writes directly to its destination, including its final metadata.
+    return core.ModelAsset(cache_path("patched"), metadata, saver=lambda dest, meta, overwrite:
+                          save_live(model, dest, meta, overwrite, clip, vae))
+
+
+def matches_float_format(model, weight_format, prefix="diffusion_model."):
+    if weight_format == "preserve":
+        return True
+    dtype = {"fp32": core.torch.float32, "fp16": core.torch.float16, "bf16": core.torch.bfloat16}.get(weight_format)
+    if dtype is None:
+        return False
+    state = model.model_state_dict(prefix)
+    if any(core.side_tensor(key) for key in state):
+        return False
+    floating = [value for value in state.values() if value.is_floating_point()]
+    return bool(floating) and all(value.dtype == dtype for value in floating)
+
+
+def source_matches_format(source, weight_format, scope="diffusion"):
+    dtype = {"fp32": "F32", "fp16": "F16", "bf16": "BF16"}.get(weight_format)
+    if dtype is None:
+        return False
+    keys = [key for key in source.keys if core.selected(key, scope)]
+    return bool(keys) and all(not source.related(key) and not source.configs.get(core.layer_name(key))
+                             and (source.headers[key]["dtype"] == dtype or
+                                  source.headers[key]["dtype"] in ("BOOL", "I64", "I32", "I16", "U8")) for key in keys)
+
+
+def live_lerp(a, b, weight, weight_format):
+    """Use native model patches for a compatible diffusion-only LERP."""
+    if not matches_float_format(a, weight_format):
+        return None
+    sa, sb = a.model_state_dict("diffusion_model."), b.model_state_dict("diffusion_model.")
+    if not sa or sa.keys() != sb.keys() or any(core.side_tensor(key) for key in (*sa, *sb)):
+        return None
+    if any(sa[key].shape != sb[key].shape or not sa[key].is_floating_point() or not sb[key].is_floating_point() for key in sa):
+        return None
+    patched = a.clone()
+    for key, value in b.get_key_patches("diffusion_model.").items():
+        patched.add_patches({key: value}, 1. - weight, weight)
+    check = {"common": len(sa), "only_a": [], "only_b": [], "shape_mismatches": [],
+             "dtype_mismatches": [{"name": key, "a": core.DTYPE_NAMES.get(sa[key].dtype, str(sa[key].dtype)),
+                                    "b": core.DTYPE_NAMES.get(sb[key].dtype, str(sb[key].dtype))}
+                                   for key in sa if sa[key].dtype != sb[key].dtype],
+             "structurally_compatible": True,
+             "note": "Matching shapes are necessary but do not guarantee semantic merge compatibility."}
+    return patched, check
+
+
 @contextmanager
 def source_path(model=None, model_data=None, path="", clip=None, vae=None):
     if model is not None:
@@ -302,7 +375,7 @@ class RayModelLoadAs:
         elif initialize and target in ("auto", "preserve") and any(k.endswith(".scale_weight") for k in source.index):
             target = "fp8_e4m3fn_scaled"
             legacy = True
-        if target not in ("auto", "preserve"):
+        if target not in ("auto", "preserve") and not source_matches_format(source, target, "all" if legacy else "diffusion"):
             asset = core.convert(source, cache_path("converted"), target, scope="all" if legacy else "diffusion", progress=progress())
         asset = core.ModelAsset(asset._path, {**asset.metadata, "ray_source_name": workflow.source_stem(source.path)}, asset.tensors)
         model, clip, vae = load_asset(asset, loader, target, load_components) if initialize else (None, None, None)
@@ -366,9 +439,12 @@ class RayModelSave:
         if model is None and model_data is None and not path.strip():
             raise ValueError("Connect MODEL or model_data to Save Model.")
         with ExitStack() as stack:
-            memory = model_data if model is None and isinstance(model_data, core.ModelAsset) and model_data.tensors is not None else None
-            src = None if memory is not None else stack.enter_context(source_path(model, model_data, path, clip, vae))
-            original = memory.metadata if memory is not None else core.TensorSource(src).metadata
+            memory = model_data if model is None and isinstance(model_data, core.ModelAsset) and (model_data.tensors is not None or model_data.saver is not None) else None
+            src = None if model is not None or memory is not None else stack.enter_context(source_path(model, model_data, path, clip, vae))
+            original = model_metadata(model) if model is not None else memory.metadata if memory is not None else core.TensorSource(src).metadata
+            original = dict(original)
+            if model is not None or (memory is not None and memory.saver is not None):
+                original.pop("_quantization_metadata", None)
             supplied = core.metadata_fields(metadata)
             supplied.update(core.metadata_fields(metadata_json))
             if "_quantization_metadata" in supplied and supplied["_quantization_metadata"] != original.get("_quantization_metadata"):
@@ -378,8 +454,10 @@ class RayModelSave:
             if metadata_mode == "merge" and core.HISTORY in original:
                 meta[core.HISTORY] = original[core.HISTORY]
             meta = core.with_history(meta, "save")
-            if memory is not None:
-                core.save_tensors(memory.tensors, destination, meta, overwrite)
+            if model is not None:
+                save_live(model, destination, meta, overwrite, clip, vae)
+            elif memory is not None:
+                memory.save(destination, meta, overwrite)
             else:
                 core.rewrite_metadata(src, destination, meta, overwrite)
         asset = core.ModelAsset(destination, core.embedded_metadata(meta))
@@ -495,14 +573,26 @@ class RayModelMerge:
             raise ValueError("Connect Model A to model_a or data_a.")
         if model_b is None and data_b is None and not path_b.strip():
             raise ValueError("Connect Model B to model_b or data_b.")
-        with ExitStack() as stack:
-            a = stack.enter_context(source_path(model_a, data_a, path_a, clip_a, vae_a))
-            b = stack.enter_context(source_path(model_b, data_b, path_b, clip_b))
-            needs_base = strategy not in ("LERP", "SLERP")
-            base = stack.enter_context(source_path(base_model, base_data, base_path, base_clip)) if needs_base and (base_model or base_data or base_path.strip()) else None
-            asset, check = core.merge_models(a, b, cache_path("merged"), strategy, weight_a, base, weight_format,
-                components, mismatch, seed, density, kwargs.get("lambda", 1.), top_trim, bottom_trim,
-                block_weights, progress(), fast_merge=fast_merge)
+        if not 0 <= weight_a <= 1:
+            raise ValueError("Merge weight must be in [0,1].")
+        native = live_lerp(model_a, model_b, weight_a, weight_format) if (
+            model_a is not None and model_b is not None and strategy == "LERP" and components == "diffusion"
+            and mismatch == "forbid" and not core.metadata_fields(block_weights)) else None
+        if native is not None:
+            patched, check = native
+            meta = core.with_history(model_metadata(model_a), "merge", strategy=strategy, weight_a=weight_a,
+                                     seed=seed, scope=components, mismatch=mismatch)
+            attach_metadata(patched, meta)
+            asset = live_asset(patched, meta, clip_a, vae_a)
+        else:
+            with ExitStack() as stack:
+                a = stack.enter_context(source_path(model_a, data_a, path_a, clip_a, vae_a))
+                b = stack.enter_context(source_path(model_b, data_b, path_b, clip_b))
+                needs_base = strategy not in ("LERP", "SLERP")
+                base = stack.enter_context(source_path(base_model, base_data, base_path, base_clip)) if needs_base and (base_model or base_data or base_path.strip()) else None
+                asset, check = core.merge_models(a, b, cache_path("merged"), strategy, weight_a, base, weight_format,
+                    components, mismatch, seed, density, kwargs.get("lambda", 1.), top_trim, bottom_trim,
+                    block_weights, progress(), fast_merge=fast_merge)
         naming = dict(components=components, mismatch=mismatch, seed=seed, density=density,
                       top_trim=top_trim, bottom_trim=bottom_trim, block_weights=block_weights, fast_merge=fast_merge, **{"lambda": kwargs.get("lambda", 1.)})
         name = workflow.merge_name(
@@ -510,10 +600,15 @@ class RayModelMerge:
             workflow.source_name(model_b, data_b, path_b, prompt, unique_id, ("model_b", "data_b")),
             workflow.source_name(base_model, base_data, base_path, prompt, unique_id, ("base_model", "base_data")),
             strategy, weight_a, weight_format, naming)
-        asset = core.ModelAsset(asset._path, {**asset.metadata, "ray_merge_name": name}, asset.tensors)
-        loaded = load_asset(asset, dtype=weight_format) if workflow.inference_requested(prompt, unique_id) else (None, None, None)
+        asset = asset.with_metadata({**asset.metadata, "ray_merge_name": name})
+        initialize = workflow.inference_requested(prompt, unique_id)
+        loaded = (patched, clip_a, vae_a) if native is not None and initialize else load_asset(asset, dtype=weight_format) if initialize else (None, None, None)
+        if native is not None:
+            attach_metadata(patched, asset.metadata)
+            patched.set_attachments("ray_model_source", name)
         report = {"operation": "merge", "strategy": strategy, "weight_a": weight_a, "seed": seed,
-                  "fast_merge": fast_merge, "comparison": check, "merge_name": name}
+                  "fast_merge": fast_merge, "comparison": check, "merge_name": name,
+                  "processing": "native_patches" if native is not None else "tensor_merge"}
         return result((*loaded, asset, asset.metadata, core.json_text(report), name), report)
 
 
@@ -588,7 +683,8 @@ class RayLoraBake:
             src = model_data or core.ModelAsset(resolve_file(path=path), core.load_metadata(path))
             model, loaded_clip, loaded_vae = load_asset(src)
             clip, vae = clip or loaded_clip, vae or loaded_vae
-        if weight_format != "preserve":
+        native = matches_float_format(model, weight_format) and (clip is None or matches_float_format(clip.patcher, weight_format, ""))
+        if not native:
             # Apply the new adapter in floating point, then encode the selected
             # target once. Baking into a quantized source first would round away
             # small LoRA deltas before an explicitly requested fp16/fp32 export.
@@ -606,15 +702,21 @@ class RayLoraBake:
         meta = core.with_history(model_metadata(model), "bake_lora", adapter=adapter_path,
                                  strength_model=strength_model, strength_clip=strength_clip)
         attach_metadata(patched, meta)
-        asset = snapshot(patched, cache_path("baked"), patched_clip, vae, meta)
-        if weight_format != "preserve":
-            old = asset.path
-            asset = core.convert(asset.path, cache_path("baked-converted"), weight_format, progress=progress())
-            Path(old).unlink(missing_ok=True)
-        asset = core.ModelAsset(asset._path, {**asset.metadata, "ray_source_name": workflow.source_stem(workflow.source_name(model, model_data, path))}, asset.tensors)
-        loaded = load_asset(asset, dtype=weight_format) if workflow.inference_requested(prompt, unique_id) else (None, None, None)
+        if native:
+            asset = live_asset(patched, meta, patched_clip, vae)
+        else:
+            asset = snapshot(patched, cache_path("baked"), patched_clip, vae, meta)
+            if weight_format != "preserve":
+                old = asset.path
+                asset = core.convert(asset.path, cache_path("baked-converted"), weight_format, progress=progress())
+                Path(old).unlink(missing_ok=True)
+        asset = asset.with_metadata({**asset.metadata, "ray_source_name": workflow.source_stem(workflow.source_name(model, model_data, path))})
+        attach_metadata(patched, asset.metadata)
+        initialize = workflow.inference_requested(prompt, unique_id)
+        loaded = (patched, patched_clip, vae) if native and initialize else load_asset(asset, dtype=weight_format) if initialize else (None, None, None)
         report = {"operation": "bake_lora", "matched_layers": len(patches), "adapter": adapter_path,
-                  "strength_model": strength_model, "strength_clip": strength_clip, "weight_format": weight_format}
+                  "strength_model": strength_model, "strength_clip": strength_clip, "weight_format": weight_format,
+                  "processing": "native_patches" if native else "format_conversion"}
         return result((*loaded, asset, asset.metadata, core.json_text(report)), report)
 
 

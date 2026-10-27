@@ -154,13 +154,20 @@ def rewrite_metadata(source, destination, metadata, overwrite=False):
 
 
 class TensorWriter:
-    """Stream tensor payload to disk, then prepend its completed header."""
-    def __init__(self, destination, metadata=None, overwrite=False):
+    """Stream once into an atomic output, reserving room for its header."""
+    def __init__(self, destination, metadata=None, overwrite=False, header_reserve=65536):
         self.path = clean_path(destination)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.metadata, self.overwrite = embedded_metadata(metadata), overwrite
+        if self.path.exists() and not overwrite:
+            raise FileExistsError(f"Output already exists: {self.path}")
         self.header, self.offset = {}, 0
-        self.payload = tempfile.TemporaryFile(dir=self.path.parent)
+        self.reserve = (max(header_reserve, len(json.dumps(self.metadata).encode("utf-8")) + 256) + 7) // 8 * 8
+        if self.reserve > 100_000_000:
+            raise ValueError("Output header exceeds 100 MB.")
+        fd, self.tmp = tempfile.mkstemp(prefix=".ray-", suffix=".safetensors", dir=self.path.parent)
+        self.payload = os.fdopen(fd, "w+b")
+        self.payload.seek(8 + self.reserve)
 
     def add(self, key, tensor):
         if key in self.header:
@@ -171,7 +178,7 @@ class TensorWriter:
         size = tensor.numel() * tensor.element_size()
         self.header[key] = {"dtype": DTYPE_NAMES[tensor.dtype], "shape": list(tensor.shape),
                             "data_offsets": [self.offset, self.offset + size]}
-        self.payload.write(tensor.reshape(-1).view(torch.uint8).numpy().tobytes())
+        self.payload.write(memoryview(tensor.reshape(-1).view(torch.uint8).numpy()))
         self.offset += size
 
     def __enter__(self):
@@ -185,23 +192,40 @@ class TensorWriter:
                 raise ValueError("No tensors were produced; no file was saved.")
             header = {"__metadata__": self.metadata, **self.header}
             encoded = json.dumps(header, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-            encoded += b" " * (-len(encoded) % 8)
             if len(encoded) > 100_000_000:
                 raise ValueError("Output header exceeds 100 MB.")
-            fd, tmp = tempfile.mkstemp(prefix=".ray-", suffix=".safetensors", dir=self.path.parent)
-            try:
-                with os.fdopen(fd, "wb") as out:
-                    out.write(struct.pack("<Q", len(encoded)))
-                    out.write(encoded)
-                    self.payload.seek(0)
-                    shutil.copyfileobj(self.payload, out, 8 * 1024 * 1024)
-                read_header(tmp)
-                commit_file(tmp, self.path, self.overwrite)
-            finally:
-                Path(tmp).unlink(missing_ok=True)
+            if len(encoded) <= self.reserve:
+                self.payload.seek(0)
+                self.payload.write(struct.pack("<Q", self.reserve))
+                self.payload.write(encoded + b" " * (self.reserve - len(encoded)))
+                self.payload.close()
+                read_header(self.tmp)
+                commit_file(self.tmp, self.path, self.overwrite)
+            else:
+                # Unusually large caller-generated headers retain a bounded
+                # fallback. Conversion/merge size the reservation from keys.
+                encoded += b" " * (-len(encoded) % 8)
+                fd, tmp = tempfile.mkstemp(prefix=".ray-", suffix=".safetensors", dir=self.path.parent)
+                try:
+                    with os.fdopen(fd, "wb") as out:
+                        out.write(struct.pack("<Q", len(encoded)))
+                        out.write(encoded)
+                        self.payload.seek(8 + self.reserve)
+                        shutil.copyfileobj(self.payload, out, 8 * 1024 * 1024)
+                    read_header(tmp)
+                    commit_file(tmp, self.path, self.overwrite)
+                finally:
+                    Path(tmp).unlink(missing_ok=True)
         finally:
             self.payload.close()
+            Path(self.tmp).unlink(missing_ok=True)
         return False
+
+
+def header_reserve(source):
+    # Includes new per-layer scale/config tensors and longer canonical names.
+    return 4096 + len(json.dumps(source.metadata).encode("utf-8")) + sum(
+        4 * (len(key.encode("utf-8")) + 256) for key in source.index)
 
 
 def save_tensors(tensors, destination, metadata=None, overwrite=False):
@@ -484,7 +508,7 @@ def convert(source, destination, fmt, scope="diffusion", progress=lambda *_: Non
     if fmt == "preserve":
         raise ValueError("Conversion needs a target format; use Save Model to preserve the source.")
     meta = output_metadata(source, "convert", target=fmt, scope=scope)
-    with TensorWriter(destination, meta, overwrite) as writer:
+    with source.opened(), TensorWriter(destination, meta, overwrite, header_reserve(source)) as writer:
         for i, key in enumerate(source.keys):
             progress(i, len(source.keys))
             if selected(key, scope):
@@ -500,18 +524,31 @@ class ModelAsset:
     _path: str
     metadata: dict
     tensors: dict | None = field(default=None, repr=False, compare=False)
+    saver: object = field(default=None, repr=False, compare=False)
 
-    def __init__(self, path, metadata, tensors=None):
+    def __init__(self, path, metadata, tensors=None, saver=None):
         object.__setattr__(self, "_path", str(path))
         object.__setattr__(self, "metadata", metadata)
         object.__setattr__(self, "tensors", tensors)
+        object.__setattr__(self, "saver", saver)
+
+    def with_metadata(self, metadata):
+        return ModelAsset(self._path, metadata, self.tensors, self.saver)
+
+    def save(self, destination, metadata, overwrite=False):
+        if self.saver is not None:
+            self.saver(destination, metadata, overwrite)
+        elif self.tensors is not None:
+            save_tensors(self.tensors, destination, metadata, overwrite)
+        else:
+            rewrite_metadata(self.path, destination, metadata, overwrite)
 
     @property
     def path(self):
         # Existing file consumers continue to work. Save Model can use the RAM
         # tensors directly and never needs this temporary file.
-        if self.tensors is not None and not Path(self._path).exists():
-            save_tensors(self.tensors, self._path, self.metadata)
+        if (self.tensors is not None or self.saver is not None) and not Path(self._path).exists():
+            self.save(self._path, self.metadata)
         return self._path
 
 
@@ -735,7 +772,7 @@ def merge_models(a, b, destination, strategy="LERP", weight=.5, base=None, fmt="
         for source in (a, b, base):
             if source is not None:
                 stack.enter_context(source.opened())
-        writer = stack.enter_context(MemoryTensorWriter(meta) if fast_merge else TensorWriter(destination, meta))
+        writer = stack.enter_context(MemoryTensorWriter(meta) if fast_merge else TensorWriter(destination, meta, header_reserve=header_reserve(a) + header_reserve(b)))
         for i, key in enumerate(a.keys):
             progress(i, len(a.keys))
             ck = canonical(key)

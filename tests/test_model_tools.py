@@ -611,7 +611,11 @@ def test_native_save_load_convert_and_lora_bake_roundtrip(tmp_path, monkeypatch,
     lora, _ = tools.extract_lora(asset.path, base_asset.path, tmp_path / "delta.safetensors", rank=2, dtype="fp32")
     baked = nodes.RayLoraBake().bake("", lora_path=lora.path, model=native_flux, weight_format="fp32")
     baked_model = baked["result"][0]
-    assert torch.allclose(baked_model.model.diffusion_model.img_in.weight, original + delta, atol=2e-6)
+    # Native MODEL outputs carry pending patches until ComfyUI consumes them.
+    baked_saved = nodes.RayModelSave().save(model=baked_model, output_folder=str(tmp_path), filename_prefix="baked")
+    baked_state = tools.TensorSource(baked_saved["result"][1])
+    baked_key = next(k for k in baked_state.keys if k.endswith("img_in.weight"))
+    assert torch.allclose(baked_state.dense(baked_key), original + delta, atol=2e-6)
     assert not native_flux.patches
     # ComfyUI clones share physical storage and switch patches when loaded.
     # Re-export the original branch to test its effective state, not that cache.
@@ -675,6 +679,117 @@ def test_bake_to_float_does_not_requantize_small_lora_delta(tmp_path, monkeypatc
                                          "diffusion_model.img_in.alpha":torch.tensor(1.)})
     baked = nodes.RayLoraBake().bake("", path=quant.path, lora_path=adapter, weight_format="fp32")
     assert torch.allclose(baked["result"][0].model.diffusion_model.img_in.weight, expected, atol=1e-7, rtol=1e-6)
+
+
+def test_bf16_model_bake_save_has_one_load_and_one_checkpoint_write(tmp_path, monkeypatch, native_flux):
+    import comfy.sd
+    import folder_paths
+    monkeypatch.setattr(folder_paths, "get_temp_directory", lambda: str(tmp_path))
+    base = nodes.snapshot(native_flux, str(tmp_path / "base.safetensors"))
+    bf16 = tools.convert(base.path, tmp_path / "bf16.safetensors", "bf16")
+    adapter = model(tmp_path, "adapter", {"diffusion_model.img_in.lora_up.weight": torch.full((128, 1), .02),
+        "diffusion_model.img_in.lora_down.weight": torch.ones(1, 64), "diffusion_model.img_in.alpha": torch.tensor(1.)})
+    original = tools.TensorSource(bf16.path)
+    key = next(k for k in original.keys if k.endswith("img_in.weight"))
+    expected = original.dense(key) + .7 * .02
+    calls = {"load": 0, "save": 0}
+    load, save = nodes.load_asset, comfy.sd.save_checkpoint
+    def tracked_load(*args, **kwargs):
+        calls["load"] += 1
+        return load(*args, **kwargs)
+    def tracked_save(*args, **kwargs):
+        calls["save"] += 1
+        return save(*args, **kwargs)
+    def no_roundtrip(*args, **kwargs):
+        raise AssertionError("An existing BF16 model must not be converted, snapshotted or copied through a file")
+    monkeypatch.setattr(nodes, "load_asset", tracked_load)
+    monkeypatch.setattr(comfy.sd, "save_checkpoint", tracked_save)
+    monkeypatch.setattr(nodes, "snapshot", no_roundtrip)
+    monkeypatch.setattr(tools, "convert", no_roundtrip)
+    monkeypatch.setattr(tools, "rewrite_metadata", no_roundtrip)
+    loaded = nodes.RayModelLoadAs().load(bf16.path, weight_format="bf16")
+    baked = nodes.RayLoraBake().bake("", lora_path=adapter, model=loaded["result"][0],
+        weight_format="bf16", strength_model=.7)
+    assert calls == {"load": 1, "save": 0}
+    assert baked["ui"]["model_tools"][0]["processing"] == "native_patches"
+    asset = baked["result"][3]
+    assert not Path(asset._path).exists()
+    saved = nodes.RayModelSave().save(model=baked["result"][0], output_folder=str(tmp_path), filename_prefix="result")
+    assert calls == {"load": 1, "save": 1}
+    result = tools.TensorSource(saved["result"][1])
+    assert result.raw(key).dtype == torch.bfloat16
+    assert torch.allclose(result.dense(key), expected, atol=.001, rtol=.01)
+    assert not loaded["result"][0].patches
+    assert not Path(asset._path).exists()
+    # model_data uses the same pending native patches, and saves directly.
+    again = nodes.RayModelSave().save(model_data=asset, output_folder=str(tmp_path), filename_prefix="data", metadata={"title": "Direct"})
+    assert calls == {"load": 1, "save": 2}
+    assert tools.load_metadata(again["result"][1])["title"] == "Direct"
+    assert not Path(asset._path).exists()
+
+
+def test_live_lerp_uses_native_patches_and_keeps_input_branches(tmp_path, monkeypatch, native_flux):
+    import folder_paths
+    monkeypatch.setattr(folder_paths, "get_temp_directory", lambda: str(tmp_path))
+    original = native_flux.model.diffusion_model.img_in.weight.detach().clone()
+    b = native_flux.clone()
+    b.add_patches({"diffusion_model.img_in.weight": ("diff", (torch.full_like(original, .02),))}, 1.)
+    def no_roundtrip(*args, **kwargs):
+        raise AssertionError("A compatible native LERP must not export or reload model files")
+    monkeypatch.setattr(nodes, "snapshot", no_roundtrip)
+    monkeypatch.setattr(nodes, "load_asset", no_roundtrip)
+    monkeypatch.setattr(tools, "merge_models", no_roundtrip)
+    merged = nodes.RayModelMerge().merge(model_a=native_flux, model_b=b, weight_a=.25, weight_format="fp32")
+    assert merged["ui"]["model_tools"][0]["processing"] == "native_patches"
+    assert not Path(merged["result"][3]._path).exists()
+    saved = nodes.RayModelSave().save(model=merged["result"][0], output_folder=str(tmp_path), filename_prefix="merged")
+    state = tools.TensorSource(saved["result"][1])
+    key = next(k for k in state.keys if k.endswith("img_in.weight"))
+    assert torch.allclose(state.dense(key), original + .75 * .02, atol=1e-6)
+    assert not native_flux.patches and len(b.patches) == 1
+    untouched = nodes.RayModelSave().save(model=native_flux, output_folder=str(tmp_path), filename_prefix="untouched")
+    assert torch.equal(tools.TensorSource(untouched["result"][1]).dense(key), original)
+
+
+def test_live_save_failure_is_atomic_and_preserves_destination(tmp_path, monkeypatch, native_flux):
+    import comfy.sd
+    target = tmp_path / "existing.safetensors"
+    target.write_bytes(b"original")
+    def fail(path, *args, **kwargs):
+        Path(path).write_bytes(b"incomplete")
+        raise RuntimeError("interrupted")
+    monkeypatch.setattr(comfy.sd, "save_checkpoint", fail)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        nodes.RayModelSave().save(model=native_flux, output_folder=str(tmp_path), filename_prefix="existing", overwrite=True)
+    assert target.read_bytes() == b"original"
+    assert not list(tmp_path.glob(".ray-*"))
+
+
+def test_streamed_conversion_writes_payload_once_and_reuses_mmaps(tmp_path, monkeypatch):
+    source = model(tmp_path, "source", {f"block.{i}.weight": torch.ones(2, 2) for i in range(6)})
+    def no_payload_copy(*args, **kwargs):
+        raise AssertionError("The streamed payload must already be in the final atomic output")
+    monkeypatch.setattr(tools.shutil, "copyfileobj", no_payload_copy)
+    calls = []
+    real_open = tools.safe_open
+    def tracked(*args, **kwargs):
+        calls.append(args[0])
+        return real_open(*args, **kwargs)
+    monkeypatch.setattr(tools, "safe_open", tracked)
+    result = tools.convert(source, tmp_path / "converted.safetensors", "bf16")
+    assert len(calls) == 3  # Input header validation, one input mmap, output validation.
+    assert all(value.dtype == torch.bfloat16 for value in load_file(result.path).values())
+
+
+def test_stream_writer_large_header_fallback_preserves_payload(tmp_path):
+    target = tmp_path / "many.safetensors"
+    tensors = {"layer." + str(i) + "." + "x" * 80: torch.tensor(float(i)) for i in range(100)}
+    with tools.TensorWriter(target, header_reserve=256) as writer:
+        for key, value in tensors.items():
+            writer.add(key, value)
+    actual = load_file(target)
+    assert all(torch.equal(actual[key], value) for key, value in tensors.items())
+    assert not list(tmp_path.glob(".ray-*"))
 
 
 @pytest.mark.parametrize("fmt", ["fp8_e4m3fn", "fp8_e4m3fn_scaled", "fp8_e5m2", "int8_row", "int8_convrot"])

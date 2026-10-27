@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { applyBucketTint, setWidgetHidden } from "./_common.js";
-import { installPanel, iconButton, linkChip, linkOf, registerLinkTargets } from "./ray_panel.js";
+import { installPanel, iconButton, linkChip, linkOf, registerLinkTargets, inputTooltip } from "./ray_panel.js";
 import { createModelPicker } from "./model_picker.js";
 
 const ID = "RayLoraQKVLoader", PLACEHOLDER = "Select a LoRA…";
@@ -58,7 +58,10 @@ function installLoader(node, definition) {
             if (index && extraLinked) break;
             const row = el("div", "rp-row rp-full"), label = el("label", "rp-label", `LoRA ${index + 1}`);
             const control = el("div", "rp-control");
+            const sourceTooltip = inputTooltip(node, "lora_name");
+            row.title = label.title = sourceTooltip;
             const picker = createModelPicker({ group: "loras", label: `LoRA ${index + 1}`, value: value.name,
+                tooltip: sourceTooltip,
                 placeholder: PLACEHOLDER,
                 disabled: () => !!linkOf(node, index === 0 ? "lora_name" : "additional_loras"),
                 onSelect: selected => { const rows = read();
@@ -73,6 +76,9 @@ function installLoader(node, definition) {
             control.append(source, remove); row.append(label, control); list.append(row);
             const strengthRow = el("div", "rp-row rp-full"), strengthLabel = el("label", "rp-label", "Strength");
             const strengthControl = el("div", "rp-control"), number = el("div", "rp-number"), amount = el("input", "rp-input");
+            const rowStrengthTooltip = "Model-strength multiplier for this LoRA. Zero skips it; negative values reverse its direction. LoRAs are applied in row order.";
+            const strengthTooltip = index === 0 ? inputTooltip(node, "strength", rowStrengthTooltip) : rowStrengthTooltip;
+            strengthRow.title = strengthLabel.title = strengthTooltip;
             amount.type = "number"; amount.min = "-100"; amount.max = "100"; amount.step = "0.01"; amount.value = value.strength;
             amount.setAttribute("aria-label", `LoRA ${index + 1} strength`);
             amount.id = `${controlId}-strength-${index}`; strengthLabel.htmlFor = amount.id;
@@ -85,7 +91,7 @@ function installLoader(node, definition) {
             };
             amount.onchange = () => commit(amount.value);
             amount.style.touchAction = "none";
-            amount.title = "Drag left or right to adjust; click to type. Hold Shift for finer adjustment.";
+            amount.title = `${strengthTooltip}\nDrag left or right to adjust; click to type. Hold Shift for finer adjustment.`;
             amount.addEventListener("pointerdown", event => {
                 if (event.button !== 0 || document.activeElement === amount) return;
                 event.preventDefault(); event.stopPropagation();

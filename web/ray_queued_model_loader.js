@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { applyBucketTint, setWidgetHidden } from "./_common.js";
-import { installPanel, openPanelSettings, iconButton, linkChip, linkOf, registerLinkTargets } from "./ray_panel.js";
+import { installPanel, openPanelSettings, iconButton, linkChip, linkOf, registerLinkTargets, inputTooltip } from "./ray_panel.js";
 import { createModelPicker } from "./model_picker.js";
 
 const LOADER_ID = "RayQueuedModelLoader";
@@ -60,7 +60,10 @@ function installLoader(node, definition) {
         for (const [index, model] of models.entries()) {
             const row = element("div", "rp-row rp-full"), label = element("label", "rp-label", `Model ${index + 1}`);
             const control = element("div", "rp-control");
+            const tooltip = [inputTooltip(node, "model_name"), index ? inputTooltip(node, "queued_models") : ""].filter(Boolean).join("\n");
+            row.title = label.title = tooltip;
             const picker = createModelPicker({ group: "diffusion_models", label: `Model ${index + 1}`, value: model,
+                tooltip,
                 placeholder: PLACEHOLDER, disabled: () => index === 0 && !!linkOf(node, "model_name"),
                 onSelect: selected => { const models = read();
                     if (index < models.length && models[index] === model) { models[index] = selected; write(models); }

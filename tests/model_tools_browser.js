@@ -86,7 +86,7 @@ try {
         for (const [kind,names] of [
             ['RayModelConvert',['path']],
             ['RayModelMetadataSave',['source_model_path']], ['RayModelInspector',['path']],
-            ['RayModelCompare',['path_a','path_b']], ['RayLoraBake',['path','lora_name']],
+            ['RayModelCompare',['path_a','path_b']], ['RayLoraBake',['lora_name']],
             ['RayLoraExtract',['finetuned_path','base_path']],
         ]) {
             const defaults=Object.fromEntries(names.map(name=>[name,'']));
@@ -105,8 +105,12 @@ try {
             }
             picker.onRemoved();
         }
-        const baker=await make('RayLoraBake',{path:'',lora_name:'loras: old.safetensors',lora_path:''},{},accessor);
+        const baker=await make('RayLoraBake',{path:'C:\\models\\older-base.safetensors',lora_name:'loras: old.safetensors',lora_path:''},{},accessor);
         const bakeWidget=name=>baker.widgets.find(w=>w.name===name),bakeRow=name=>baker._rayPanel.rows.find(r=>r.name===name);
+        check(!bakeRow('path')&&
+            ![...baker._rayPanel.root.querySelectorAll('.rp-title')].some(title=>title.textContent==='Source')&&
+            bakeWidget('path').value==='C:\\models\\older-base.safetensors',
+            'LoRA Bake uses its model inputs without a duplicate Source section and preserves saved base paths');
         check(!bakeRow('lora_name').element.hidden&&bakeRow('lora_path').element.hidden&&
             !bakeRow('lora_name').element.querySelector('select')&&bakeWidget('lora_name').value==='loras: old.safetensors',
             'LoRA Bake restores a legacy dropdown selection in its single file picker');
@@ -148,6 +152,9 @@ try {
         check(!dialog()&&!fastNode._raySettingsPanel,'Removing the node closes its pending warning');
     }
     const inspector=await make('RayModelInspector',{path:'example.safetensors',max_rows:5000});
+    check(inspector._rayModelToolsView.root.closest('.rp-section').querySelector('.rp-title').textContent==='Inspection'&&
+        inspector._rayModelToolsView.root.querySelector('.rmt-message').hidden,
+        'Inspector keeps its preview tools in Inspection without an empty report placeholder');
     inspector._rayModelToolsView.root.querySelector('button').click();await tick();
     check(inspector._rayModelToolsView.root.querySelectorAll('tbody tr').length===100,'Inspector pages its tensor table');
     const previous=inspector._rayModelToolsView.root.querySelector('[aria-label="Previous tensor page"]');

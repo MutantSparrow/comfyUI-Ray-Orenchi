@@ -48,7 +48,7 @@ function styles() {
 }
 
 /** A standard ComfyUI combo menu, with registered files grouped by their folders. */
-export function createModelPicker({ group, label, value = "", placeholder, onSelect, disabled = () => false, accept = () => true }) {
+export function createModelPicker({ group, label, value = "", placeholder, tooltip, onSelect, disabled = () => false, accept = () => true }) {
     styles();
     const element = document.createElement("button"), text = document.createElement("span");
     element.type = "button"; element.className = "rp-select rp-model-picker";
@@ -60,7 +60,7 @@ export function createModelPicker({ group, label, value = "", placeholder, onSel
     const multiple = Array.isArray(group);
     const displayName = name => multiple ? name.replace(/^diffusion_models: /, "Diffusion models/").replace(/^checkpoints: /, "Checkpoints/") : name;
     const update = name => { selected = String(name ?? ""); text.textContent = displayName(selected) || placeholder;
-        const help = `Select ${group === "loras" ? "a LoRA" : multiple ? "a checkpoint or diffusion model" : "a diffusion model"}. Search includes every registered subfolder.`;
+        const help = tooltip || `Select ${group === "loras" ? "a LoRA" : multiple ? "a checkpoint or diffusion model" : "a diffusion model"}. Search includes every registered subfolder.`;
         element.title = selected ? `${help}\nSelected: ${selected}` : help; };
     update(value);
 

@@ -5,7 +5,7 @@ values, full title and default input/output ports. Nodes are unconnected and hav
 not run. The images use the dark canvas at 100% zoom, 2× pixel density, and 24 CSS
 pixels of padding on every side. A node may be widened to reveal its full title
 or port labels; its widget values and properties are unchanged. Empty previews,
-folder browsers, and reports are intentionally in their initial state.
+folder browsers, and inspection tools are intentionally in their initial state.
 
 Images are named by stable registered class ID, for example `RayCRT.png`, and
 embedded in [NODES.md](../NODES.md). Model Tools also appear in
